@@ -5,8 +5,10 @@ tray and runs faster as your CPU gets busier. Click it for a Dashboard of
 system metrics; add your own Custom Metrics from JSON files; optionally show
 up to three short values right in the tray with the Metrics Bar.
 
-AQTRunCat is a Qt 6 application for Linux, inspired by RunCat Neo for macOS
-and compatible with its runner and Custom Metrics formats. It uses the
+AQTRunCat is a Qt 6 application for Linux, inspired by
+[RunCat Neo](https://github.com/runcat-dev/RunCatNeo) for macOS and compatible
+with its runner and Custom Metrics formats. It is an independent project, not
+affiliated with RunCat Neo. It uses the
 standard StatusNotifierItem tray, so it needs no desktop-specific components;
 the primary target is KDE Plasma 6 on Wayland.
 
@@ -195,8 +197,8 @@ Details: [docs/M8-desktop-compatibility.md](docs/M8-desktop-compatibility.md).
 ## License and attribution
 
 AQTRunCat is licensed under the [Apache License 2.0](LICENSE). The bundled
-Cat and Coffee runner frames come unmodified from RunCat Neo (Apache-2.0,
-© Kyome22); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The RunCat
+Cat and Coffee runner frames come unmodified from
+[RunCat Neo](https://github.com/runcat-dev/RunCatNeo) (Apache-2.0, © Kyome22); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The RunCat
 and RunCat Neo names and icon are not used as AQTRunCat branding; the
 AQTRunCat icon is original artwork.
 
