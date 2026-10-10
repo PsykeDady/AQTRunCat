@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=AQTRunCat
+GenericName=CPU Runner
+Comment=A Cute Run Cat for Linux
+Exec=aqtruncat
+TryExec=aqtruncat
+Icon=aqtruncat
+Terminal=false
+StartupNotify=false
+Categories=System;Monitor;
+Keywords=cpu;monitor;tray;runner;cat;metrics;

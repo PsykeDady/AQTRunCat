@@ -1,0 +1,35 @@
+# Maintainer: AQTRunCat maintainers <maintainers@aqtruncat.invalid>
+#
+# In-tree PKGBUILD. Create the source tarball next to it, then build:
+#   packaging/make-source-tarball.sh packaging/arch && cd packaging/arch && makepkg -si
+# Before publishing (e.g. AUR): set the maintainer, add url=, point source= at
+# the release tarball and replace SKIP with its checksum.
+
+pkgname=aqtruncat
+pkgver=0.0.1
+pkgrel=1
+pkgdesc='A Cute Run Cat for Linux: CPU-driven tray runner with system metrics'
+arch=('x86_64' 'aarch64')
+license=('Apache-2.0')
+depends=('qt6-base>=6.5' 'libarchive' 'hicolor-icon-theme' 'gcc-libs' 'glibc')
+makedepends=('cmake>=3.21' 'ninja')
+checkdepends=('ttf-dejavu' 'desktop-file-utils')
+optdepends=('qt6-wayland: native Wayland windows instead of XWayland')
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cmake -S "$pkgname-$pkgver" -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=None \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -Wno-dev
+    cmake --build build
+}
+
+check() {
+    QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install build
+}

@@ -1,0 +1,611 @@
+#!/usr/bin/env bash
+# AQTRunCat installer: build from this source tree and install system-wide or
+# for the current user only. Run "./install.sh --help" for the full usage.
+#
+# What gets installed is decided by CMake ("cmake --install" into a staging
+# directory); this script only maps the staged bin/ and share/ trees to their
+# destinations, records an install manifest and uses the application itself
+# ("aqtruncat autostart enable|disable") for the per-user autostart entry.
+
+set -Eeuo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+readonly SCRIPT_DIR
+readonly MANIFEST_HEADER="# AQTRunCat install manifest"
+
+usage() {
+    cat <<'EOF'
+AQTRunCat installer - A Cute Run Cat for Linux
+
+Usage:
+  ./install.sh [--local] [-A | --autostart=true | -na | --autostart=false]
+  ./install.sh [--local] -U | --uninstall
+  ./install.sh -h | --help
+
+Installation (default):
+  Builds AQTRunCat from this source tree (Release, without tests) and installs
+  it. Run it as your normal user: sudo is used only for copying files into a
+  system directory that you cannot write to, never for building.
+
+  System-wide (default)  prefix /usr/local, change with --prefix=DIR:
+                           DIR/bin/aqtruncat
+                           DIR/share/applications/aqtruncat.desktop
+                           DIR/share/icons/hicolor/*/apps/aqtruncat.{png,svg}
+                           DIR/share/man/man1/aqtruncat.1
+                           DIR/share/doc/aqtruncat/ (README, licenses)
+                           DIR/share/aqtruncat/install-manifest.txt
+  --local                for the current user only, no root and no sudo:
+                           ${XDG_BIN_HOME:-~/.local/bin}/aqtruncat
+                           ${XDG_DATA_HOME:-~/.local/share}/applications, icons, man, doc
+                           ${XDG_STATE_HOME:-~/.local/state}/aqtruncat/install-manifest.txt
+                         Your shell files are never edited; if the bin directory
+                         is not in PATH you get a warning (the menu entry and
+                         autostart use the full path anyway).
+
+  Installing again over an existing installation updates it in place; files
+  that are no longer part of AQTRunCat are removed, user data is kept.
+
+Autostart (start AQTRunCat at login) - ON by default:
+  -A, --autostart=true    enable autostart (the default)
+  -na, --autostart=false  do not start at login (removes an existing entry)
+  Autostart is a per-user preference even for a system-wide installation: it
+  is the XDG entry ${XDG_CONFIG_HOME:-~/.config}/autostart/aqtruncat.desktop,
+  written by "aqtruncat autostart enable" exactly like the Settings window
+  does. With "sudo ./install.sh" it is applied to the user who ran sudo.
+  Giving both an enabling and a disabling option is an error.
+
+Uninstallation:
+  -U, --uninstall         remove the system-wide installation (prefix /usr/local
+                          or --prefix=DIR)
+  --local -U              remove the --local installation of the current user
+  Only the files listed in the install manifest are removed, and this user's
+  autostart entry if it points at the removed program. Never removed: your
+  settings (~/.config/AQTRunCat), user runners and Custom Metrics
+  (~/.local/share/AQTRunCat), or Custom Metrics producer files. Without a
+  manifest nothing is removed (no guessing).
+
+Other options:
+  --prefix=DIR            system-wide prefix (default /usr/local); not with --local
+  --dry-run               show what would be done, change nothing
+  --build-dir=DIR         reuse an existing CMake build tree instead of building
+                          in a temporary directory (development and tests)
+  -h, --help              show this help
+
+Requirements (build): CMake >= 3.21, a C++20 compiler, Qt >= 6.5 (Widgets),
+libarchive >= 3.0. The installer detects Arch, Fedora and Debian/Ubuntu (and
+derivatives through /etc/os-release ID_LIKE) and prints the exact package
+command when something is missing; it never installs packages itself.
+Ubuntu 24.04 LTS ships Qt 6.4 and is not supported.
+
+Examples:
+  ./install.sh                     system-wide, autostart on
+  ./install.sh -na                 system-wide, no autostart
+  ./install.sh --local             only for me, autostart on, no root
+  ./install.sh --local --autostart=false
+  ./install.sh --local -U          remove my --local installation
+  sudo ./install.sh --uninstall    remove the system-wide installation
+
+Exit status: 0 success, 1 failure, 2 invalid command line.
+EOF
+}
+
+say() { printf '%s\n' "$*"; }
+warn() { printf 'install.sh: warning: %s\n' "$*" >&2; }
+die() {
+    printf 'install.sh: error: %s\n' "$*" >&2
+    exit 1
+}
+usage_error() {
+    printf 'install.sh: %s\nRun "./install.sh --help" for usage.\n' "$*" >&2
+    exit 2
+}
+
+# --- command line ---------------------------------------------------------
+
+action=install
+scope=system
+autostart=""
+autostart_option=""
+prefix=/usr/local
+prefix_given=0
+build_dir=""
+dry_run=0
+
+set_autostart() {
+    if [[ -n $autostart && $autostart != "$1" ]]; then
+        usage_error "conflicting autostart options: $autostart_option and $2"
+    fi
+    autostart=$1
+    autostart_option=$2
+}
+
+for arg in "$@"; do
+    case $arg in
+        -h | --help) usage; exit 0 ;;
+        --local) scope=local ;;
+        -A | --autostart=true) set_autostart true "$arg" ;;
+        -na | --autostart=false) set_autostart false "$arg" ;;
+        --autostart=*) usage_error "invalid value in \"$arg\" (use --autostart=true or --autostart=false)" ;;
+        -U | --uninstall) action=uninstall ;;
+        --prefix=*) prefix=${arg#--prefix=}; prefix_given=1 ;;
+        --build-dir=*) build_dir=${arg#--build-dir=} ;;
+        --dry-run) dry_run=1 ;;
+        *) usage_error "unknown option \"$arg\"" ;;
+    esac
+done
+
+if [[ $action == uninstall && -n $autostart ]]; then
+    usage_error "$autostart_option only applies to installation (uninstalling always removes this installation's autostart entry)"
+fi
+if [[ $action == uninstall && -n $build_dir ]]; then
+    usage_error "--build-dir only applies to installation"
+fi
+if [[ $scope == local && $prefix_given == 1 ]]; then
+    usage_error "--prefix is for system-wide installation; --local uses the XDG directories"
+fi
+[[ -n $autostart ]] || autostart=true
+
+# --- distribution ---------------------------------------------------------
+
+os_release=${AQTRUNCAT_OS_RELEASE:-/etc/os-release}
+os_id=""
+os_like=""
+os_name="unknown Linux"
+os_version=""
+
+read_os_release() {
+    [[ -r $os_release ]] || return 0
+    local key value
+    while IFS='=' read -r key value; do
+        value=${value%\"}; value=${value#\"}; value=${value%\'}; value=${value#\'}
+        case $key in
+            ID) os_id=$value ;;
+            ID_LIKE) os_like=$value ;;
+            PRETTY_NAME) os_name=$value ;;
+            VERSION_ID) os_version=$value ;;
+        esac
+    done < "$os_release"
+}
+
+# arch | fedora | debian | unknown, from ID first, then ID_LIKE.
+distro_family() {
+    local token
+    # shellcheck disable=SC2086 # ID_LIKE is a space-separated list
+    for token in $os_id $os_like; do
+        case $token in
+            arch) echo arch; return ;;
+            fedora | rhel | centos) echo fedora; return ;;
+            debian | ubuntu) echo debian; return ;;
+        esac
+    done
+    echo unknown
+}
+
+read_os_release
+family=$(distro_family)
+
+deps_command() {
+    case $family in
+        arch) echo "sudo pacman -S --needed cmake ninja gcc qt6-base qt6-wayland libarchive" ;;
+        fedora) echo "sudo dnf install cmake ninja-build gcc-c++ qt6-qtbase-devel qt6-qtwayland libarchive-devel" ;;
+        debian) echo "sudo apt install cmake ninja-build g++ qt6-base-dev qt6-wayland libarchive-dev libgl-dev" ;;
+        *) echo "install CMake >= 3.21, a C++20 compiler, Qt >= 6.5 development files (Widgets) and libarchive >= 3.0 development files with your package manager" ;;
+    esac
+}
+
+# --- paths ----------------------------------------------------------------
+
+# XDG base directory variables must be absolute; others are ignored (spec).
+xdg_dir() {
+    local value=$1 fallback=$2
+    if [[ $value == /* ]]; then printf '%s\n' "$value"; else printf '%s\n' "$fallback"; fi
+}
+
+clean_path() { # strip trailing slashes, keep "/"
+    local p=$1
+    while [[ $p == */ && $p != / ]]; do p=${p%/}; done
+    printf '%s\n' "$p"
+}
+
+if [[ $scope == local && $EUID -eq 0 && -n ${SUDO_USER:-} && ${SUDO_USER} != root ]]; then
+    usage_error "--local installs for the current user; run it without sudo"
+fi
+if [[ $scope == local ]]; then
+    [[ ${HOME:-} == /* ]] || die "HOME is not set to an absolute path; cannot install with --local"
+    bindir=$(clean_path "$(xdg_dir "${XDG_BIN_HOME:-}" "$HOME/.local/bin")")
+    datadir=$(clean_path "$(xdg_dir "${XDG_DATA_HOME:-}" "$HOME/.local/share")")
+    manifest=$(clean_path "$(xdg_dir "${XDG_STATE_HOME:-}" "$HOME/.local/state")")/aqtruncat/install-manifest.txt
+else
+    prefix=$(clean_path "$prefix")
+    [[ $prefix == /* ]] || usage_error "--prefix must be an absolute path"
+    [[ $prefix != / ]] || usage_error "--prefix=/ is not allowed; use /usr/local (default) or /usr"
+    [[ $prefix != *$'\n'* ]] || usage_error "--prefix must not contain a newline"
+    bindir=$prefix/bin
+    datadir=$prefix/share
+    manifest=$datadir/aqtruncat/install-manifest.txt
+fi
+readonly bindir datadir manifest
+installed_bin=$bindir/aqtruncat
+# The real user's directories: with "sudo ./install.sh" that is the user who
+# ran sudo (autostart and personal data are per-user), not root.
+if [[ $EUID -eq 0 && -n ${SUDO_USER:-} && ${SUDO_USER} != root ]]; then
+    user_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    config_home=$user_home/.config
+    data_home=$user_home/.local/share
+else
+    user_home=${HOME:-}
+    config_home=$(xdg_dir "${XDG_CONFIG_HOME:-}" "$user_home/.config")
+    data_home=$(xdg_dir "${XDG_DATA_HOME:-}" "$user_home/.local/share")
+fi
+
+# A destination is allowed only under bindir or datadir (or the manifest), as
+# an absolute path without "." or ".." components.
+safe_target() {
+    local path=$1
+    [[ $path == /* && $path != *$'\n'* ]] || return 1
+    case "/$path/" in */../* | */./*) return 1 ;; esac
+    [[ $path == "$manifest" || $path == "$bindir"/?* || $path == "$datadir"/?* ]]
+}
+
+# Nearest existing ancestor of a path is writable by us.
+writable() {
+    local p=$1
+    while [[ ! -e $p ]]; do p=$(dirname -- "$p"); done
+    [[ -w $p ]]
+}
+
+SUDO=()
+need_privileges() {
+    [[ $scope == system ]] || return 1
+    local dir
+    for dir in "$bindir" "$datadir" "$(dirname -- "$manifest")"; do
+        writable "$dir" || return 0
+    done
+    return 1
+}
+
+choose_privileges() {
+    if need_privileges; then
+        if [[ $EUID -eq 0 ]]; then
+            die "cannot write to $prefix even as root"
+        fi
+        command -v sudo > /dev/null || die "writing to $prefix needs root privileges and sudo is not available; run as root or use --local"
+        SUDO=(sudo)
+        say "Root privileges are needed to write to $prefix; sudo will be used for copying files only."
+    fi
+}
+
+# Run a command as the real user (the one who invoked sudo, if any).
+as_user() {
+    if [[ $EUID -eq 0 && -n ${SUDO_USER:-} && ${SUDO_USER} != root ]]; then
+        sudo -u "$SUDO_USER" -H -- "$@"
+    else
+        "$@"
+    fi
+}
+
+desktop_exec_value() { # quote for the Exec key when needed (XDG desktop entry spec)
+    local path=$1
+    if [[ $path =~ [[:space:]\"\`\$\\] ]]; then
+        path=${path//\\/\\\\}; path=${path//\"/\\\"}; path=${path//\`/\\\`}; path=${path//\$/\\\$}
+        printf '"%s"\n' "$path"
+    else
+        printf '%s\n' "$path"
+    fi
+}
+
+# The autostart entry of this user points at the given binary.
+autostart_points_to() {
+    local entry=$config_home/autostart/aqtruncat.desktop bin=$1
+    [[ -f $entry ]] || return 1
+    grep -qxF "Exec=\"$bin\"" "$entry" || grep -qxF "Exec=$bin" "$entry"
+}
+
+# --- dependency checks ----------------------------------------------------
+
+version_at_least() { # version_at_least 6.4.2 6.5
+    [[ $(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1) == "$2" ]]
+}
+
+# Qt version from qtpaths/qmake. qtpaths takes "--query", qmake "-query";
+# each attempt is captured on its own and must look like a version (a tool
+# rejecting the other spelling may print its usage to stdout).
+qt_version_from() { # qt_version_from TOOL
+    local query value
+    for query in --query -query; do
+        value=$("$1" "$query" QT_VERSION 2> /dev/null) || continue
+        if [[ $value =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            printf '%s\n' "$value"
+            return 0
+        fi
+    done
+    return 1
+}
+
+qt_version() {
+    local tool
+    for tool in qtpaths6 qmake6 /usr/lib/qt6/bin/qtpaths /usr/lib64/qt6/bin/qtpaths /usr/lib/qt6/bin/qmake /usr/lib64/qt6/bin/qmake; do
+        command -v "$tool" > /dev/null 2>&1 || continue
+        qt_version_from "$tool" && return 0
+    done
+    return 1
+}
+
+check_build_dependencies() {
+    local missing=()
+    command -v cmake > /dev/null || missing+=("cmake")
+    if [[ -z $build_dir ]]; then
+        command -v c++ > /dev/null || command -v g++ > /dev/null || command -v clang++ > /dev/null || missing+=("a C++ compiler")
+        command -v ninja > /dev/null || command -v make > /dev/null || missing+=("ninja (or make)")
+        local qt
+        if qt=$(qt_version); then
+            if ! version_at_least "$qt" 6.5; then
+                say "Found Qt $qt, but AQTRunCat requires Qt >= 6.5."
+                [[ $os_id == ubuntu && $os_version == 24.04 ]] &&
+                    say "Ubuntu 24.04 LTS ships Qt 6.4 and is not supported; use Ubuntu 26.04 LTS or newer (see README.md)."
+                die "Qt is too old"
+            fi
+        else
+            missing+=("Qt 6 development files (>= 6.5)")
+        fi
+        if command -v pkg-config > /dev/null && ! pkg-config --exists libarchive; then
+            missing+=("libarchive development files")
+        fi
+    fi
+    if ((${#missing[@]})); then
+        local joined
+        joined=$(printf '%s, ' "${missing[@]}")
+        say "Missing build requirements: ${joined%, }"
+        say "Detected: $os_name (family: $family). Install them with:"
+        say "  $(deps_command)"
+        die "missing build requirements"
+    fi
+}
+
+# --- work directory -------------------------------------------------------
+
+work=""
+tmp_base=$(clean_path "${TMPDIR:-/tmp}")
+cleanup() {
+    if [[ -n $work && -d $work && $work == "$tmp_base"/aqtruncat-install.* ]]; then
+        rm -rf -- "$work"
+    fi
+}
+trap cleanup EXIT
+
+# --- manifest -------------------------------------------------------------
+
+# Validate in the main shell (a "die" inside a process substitution would only
+# end the subshell), then read the recorded paths.
+check_manifest() {
+    local first=""
+    IFS= read -r first < "$manifest" || true
+    [[ $first == "$MANIFEST_HEADER" ]] || die "$manifest is not an AQTRunCat install manifest; nothing changed"
+}
+
+read_manifest() { # prints the recorded paths of a checked manifest
+    grep -v '^#' "$manifest" | grep -v '^$' || true
+}
+
+remove_file() {
+    local path=$1
+    if ! safe_target "$path"; then
+        warn "refusing to remove $path: outside $bindir and $datadir"
+        return 0
+    fi
+    if [[ -d $path && ! -L $path ]]; then
+        warn "refusing to remove directory $path"
+        return 0
+    fi
+    if [[ -e $path || -L $path ]]; then
+        "${SUDO[@]}" rm -f -- "$path"
+    fi
+}
+
+remove_empty_dir() {
+    local dir=$1
+    [[ -d $dir ]] || return 0
+    "${SUDO[@]}" rmdir -- "$dir" 2> /dev/null || true
+}
+
+# The desktop entry declares no MIME types, so no desktop database needs
+# updating; only an existing hicolor icon cache is refreshed.
+refresh_desktop_caches() {
+    if command -v gtk-update-icon-cache > /dev/null && [[ -f $datadir/icons/hicolor/index.theme ]]; then
+        "${SUDO[@]}" gtk-update-icon-cache -q -t -f "$datadir/icons/hicolor" 2> /dev/null || true
+    fi
+}
+
+# --- plan -----------------------------------------------------------------
+
+print_plan() {
+    say "Action:     $action ($scope)"
+    say "Distribution: $os_name (family: $family)"
+    say "Binary:     $installed_bin"
+    say "Data:       $datadir"
+    say "Manifest:   $manifest"
+    if [[ $action == install ]]; then
+        say "Autostart:  $autostart"
+    fi
+    if need_privileges; then say "Privileges: sudo for file copies"; else say "Privileges: none"; fi
+}
+
+# --- install --------------------------------------------------------------
+
+do_install() {
+    check_build_dependencies
+    choose_privileges
+    work=$(mktemp -d "$tmp_base/aqtruncat-install.XXXXXX")
+
+    local build
+    if [[ -n $build_dir ]]; then
+        [[ -f $build_dir/CMakeCache.txt ]] || die "$build_dir is not a CMake build tree"
+        build=$build_dir
+        say "Using the existing build tree $build"
+        cmake --build "$build" --target aqtruncat > "$work/build.log" 2>&1 ||
+            { tail -n 30 "$work/build.log" >&2; die "build failed (log above)"; }
+    else
+        build=$work/build
+        local -a generator=()
+        command -v ninja > /dev/null && generator=(-G Ninja) # the suggested packages install ninja, not always make
+        say "Configuring and building AQTRunCat (Release) ..."
+        cmake -S "$SCRIPT_DIR" -B "$build" "${generator[@]}" -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF > "$work/configure.log" 2>&1 ||
+            { tail -n 30 "$work/configure.log" >&2; die "CMake configuration failed (log above). Missing packages? $(deps_command)"; }
+        cmake --build "$build" --parallel > "$work/build.log" 2>&1 ||
+            { tail -n 30 "$work/build.log" >&2; die "build failed (log above)"; }
+    fi
+
+    # Stage with the install rules of CMakeLists.txt (single source of truth).
+    local stage=$work/stage
+    DESTDIR=$stage cmake --install "$build" --prefix / > "$work/stage.log" 2>&1 ||
+        { tail -n 30 "$work/stage.log" >&2; die "staging failed"; }
+    local top
+    for top in "$stage"/*; do
+        case ${top##*/} in
+            bin | share) ;;
+            *) die "unexpected staged directory ${top##*/}; only bin/ and share/ can be installed" ;;
+        esac
+    done
+    [[ -x $stage/bin/aqtruncat ]] || die "the staged tree has no bin/aqtruncat"
+
+    # Menu entry: start the binary by its full path (bin may not be in PATH).
+    local desktop=$stage/share/applications/aqtruncat.desktop
+    if [[ -f $desktop ]]; then
+        local exec_value
+        exec_value=$(desktop_exec_value "$installed_bin")
+        local escaped=${exec_value//\\/\\\\}
+        escaped=${escaped//|/\\|}
+        escaped=${escaped//&/\\&}
+        sed -i "s|^Exec=aqtruncat\$|Exec=$escaped|" "$desktop"
+        if [[ $exec_value == "$installed_bin" ]]; then
+            sed -i "s|^TryExec=aqtruncat\$|TryExec=$escaped|" "$desktop"
+        else
+            sed -i '/^TryExec=/d' "$desktop"
+        fi
+    fi
+
+    # Destination of every staged file.
+    local -a sources=() targets=()
+    local rel target
+    while IFS= read -r -d '' rel; do
+        rel=${rel#./}
+        case $rel in
+            bin/*) target=$bindir/${rel#bin/} ;;
+            share/*) target=$datadir/${rel#share/} ;;
+            *) die "unexpected staged file $rel" ;;
+        esac
+        safe_target "$target" || die "refusing to install outside the destination: $target"
+        sources+=("$stage/$rel")
+        targets+=("$target")
+    done < <(cd "$stage" && find . \( -type f -o -type l \) -print0 | sort -z)
+
+    # Files of a previous installation that are no longer installed.
+    local -a stale=()
+    if [[ -f $manifest ]]; then
+        check_manifest
+        local old
+        while IFS= read -r old; do
+            local keep=0 t
+            for t in "${targets[@]}"; do [[ $t == "$old" ]] && { keep=1; break; }; done
+            ((keep)) || stale+=("$old")
+        done < <(read_manifest)
+        say "Updating the existing installation ($manifest)"
+    fi
+
+    say "Installing ${#targets[@]} files ..."
+    local i
+    for i in "${!targets[@]}"; do
+        if [[ -L ${sources[$i]} ]]; then
+            "${SUDO[@]}" mkdir -p -- "$(dirname -- "${targets[$i]}")"
+            "${SUDO[@]}" cp -P -f -- "${sources[$i]}" "${targets[$i]}"
+        else
+            "${SUDO[@]}" install -D -m "$(stat -c %a -- "${sources[$i]}")" -- "${sources[$i]}" "${targets[$i]}"
+        fi
+    done
+    for target in "${stale[@]}"; do remove_file "$target"; done
+
+    local list=$work/manifest
+    {
+        printf '%s\n' "$MANIFEST_HEADER"
+        printf '# version: %s\n' "$("$stage/bin/aqtruncat" --version 2> /dev/null | awk '{print $2}')"
+        printf '# scope: %s\n' "$scope"
+        printf '%s\n' "${targets[@]}"
+    } > "$list"
+    "${SUDO[@]}" install -D -m 0644 -- "$list" "$manifest"
+    refresh_desktop_caches
+
+    # Autostart is one per-user preference (also saved in AQTRunCat.ini, which
+    # the application re-applies at start-up), so it is always set through
+    # the application: enabled, or disabled with any existing entry removed.
+    if [[ $autostart == true ]]; then
+        as_user "$installed_bin" autostart enable || die "AQTRunCat is installed, but enabling autostart failed"
+    else
+        as_user "$installed_bin" autostart disable || die "AQTRunCat is installed, but disabling autostart failed"
+    fi
+
+    say "AQTRunCat is installed: $installed_bin"
+    if [[ $scope == local && ":$PATH:" != *":$bindir:"* ]]; then
+        warn "$bindir is not in your PATH. The menu entry and autostart work anyway; to run \"aqtruncat\" from a terminal, add it to PATH yourself."
+    fi
+    say "Start it from the application menu (AQTRunCat) or with: $installed_bin"
+}
+
+# --- uninstall ------------------------------------------------------------
+
+do_uninstall() {
+    local -a files=()
+    local line
+    if [[ ! -f $manifest ]]; then
+        if [[ -e $installed_bin ]]; then
+            die "$installed_bin exists but there is no install manifest at $manifest (installed by a package or by hand?); nothing removed"
+        fi
+        die "no AQTRunCat $scope installation found (no $manifest)"
+    fi
+    check_manifest
+    while IFS= read -r line; do files+=("$line"); done < <(read_manifest)
+    choose_privileges
+
+    if autostart_points_to "$installed_bin"; then
+        if [[ -x $installed_bin ]] && as_user "$installed_bin" autostart disable; then
+            :
+        else
+            rm -f -- "$config_home/autostart/aqtruncat.desktop"
+            say "Removed the autostart entry"
+        fi
+    elif [[ -f $config_home/autostart/aqtruncat.desktop ]]; then
+        say "Keeping $config_home/autostart/aqtruncat.desktop: it starts another AQTRunCat installation"
+    fi
+
+    say "Removing ${#files[@]} files ..."
+    local f
+    for f in "${files[@]}"; do remove_file "$f"; done
+    "${SUDO[@]}" rm -f -- "$manifest"
+    remove_empty_dir "$(dirname -- "$manifest")"
+    # Directories that belong to AQTRunCat alone (its documentation).
+    for f in "${files[@]}"; do
+        [[ $f == "$datadir"/doc/*/* ]] && remove_empty_dir "$(dirname -- "$f")"
+    done
+    refresh_desktop_caches
+
+    say "AQTRunCat ($scope) is uninstalled."
+    say "Kept (delete them yourself if you no longer want them):"
+    say "  settings:                    $config_home/AQTRunCat"
+    say "  user runners, Custom Metrics: $data_home/AQTRunCat"
+}
+
+# --- main -----------------------------------------------------------------
+
+if ((dry_run)); then
+    print_plan
+    if [[ $action == uninstall && -f $manifest ]]; then
+        check_manifest
+        say "Would remove:"
+        read_manifest | sed 's/^/  /'
+    fi
+    exit 0
+fi
+
+case $action in
+    install) do_install ;;
+    uninstall) do_uninstall ;;
+esac

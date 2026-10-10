@@ -1,0 +1,17 @@
+{
+  "title": "Claude Code",
+  "symbol": "staroflife",
+  "metricsBarValue": "5.4%",
+  "metrics": [
+    {
+      "title": "Model",
+      "formattedValue": "Opus 4.7"
+    },
+    {
+      "title": "Context",
+      "formattedValue": "5.4%",
+      "normalizedValue": 0.054
+    }
+  ],
+  "lastUpdatedDate": "2026-06-05T04:50:40Z"
+}

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AQTRunCat application icon. Original AQTRunCat artwork (Apache-2.0);
+     not derived from RunCat / RunCat Neo branding. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a4250"/>
+      <stop offset="1" stop-color="#232831"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#bg)"/>
+  <!-- metric bars -->
+  <rect x="40" y="186" width="44" height="14" rx="7" fill="#4fc3f7"/>
+  <rect x="94" y="186" width="68" height="14" rx="7" fill="#81c784"/>
+  <rect x="172" y="186" width="44" height="14" rx="7" fill="#ffb74d"/>
+  <!-- running cat -->
+  <g fill="#f5f5f5">
+    <!-- tail -->
+    <path d="M70 118 C46 112 34 92 40 72 C44 60 54 58 58 64 C52 76 56 94 76 104 Z"/>
+    <!-- body -->
+    <ellipse cx="116" cy="122" rx="50" ry="27" transform="rotate(-8 116 122)"/>
+    <!-- legs -->
+    <path d="M80 132 L58 160 L68 166 L94 140 Z"/>
+    <path d="M100 140 L96 170 L108 171 L114 144 Z"/>
+    <path d="M140 138 L160 166 L170 159 L152 132 Z"/>
+    <path d="M152 124 L184 140 L188 129 L160 114 Z"/>
+    <!-- head -->
+    <circle cx="170" cy="96" r="27"/>
+    <!-- ears -->
+    <path d="M150 80 L152 52 L170 72 Z"/>
+    <path d="M178 70 L196 50 L194 80 Z"/>
+  </g>
+  <!-- eye -->
+  <circle cx="180" cy="94" r="5" fill="#232831"/>
+  <!-- motion lines -->
+  <g stroke="#9aa4b2" stroke-width="7" stroke-linecap="round">
+    <line x1="24" y1="136" x2="44" y2="136"/>
+    <line x1="28" y1="154" x2="52" y2="154"/>
+  </g>
+</svg>

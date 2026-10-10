@@ -1,0 +1,13 @@
+#!/usr/bin/make -f
+# Build: copy this directory as debian/ into the extracted source tarball, then
+#        dpkg-buildpackage -us -uc -b
+export QT_QPA_PLATFORM = offscreen
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+%:
+	dh $@ --buildsystem=cmake+ninja
+
+override_dh_auto_install:
+	dh_auto_install
+	# debian/copyright covers the licenses in Debian's format.
+	rm -f debian/aqtruncat/usr/share/doc/aqtruncat/LICENSE debian/aqtruncat/usr/share/doc/aqtruncat/LICENSE.RunCatNeo

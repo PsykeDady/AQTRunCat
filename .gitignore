@@ -1,0 +1,19 @@
+# Build trees
+/build/
+/build-*/
+/cmake-build-*/
+
+# IDE / tooling
+CMakeLists.txt.user*
+CMakeUserPresets.json
+.cache/
+.vscode/
+.idea/
+compile_commands.json
+
+# Python byte code from the measurement tools
+__pycache__/
+*.pyc
+
+# M1.0 screenshots: they can show other icons from the real desktop tray
+docs/M1-tray-spike/*.png

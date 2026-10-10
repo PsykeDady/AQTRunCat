@@ -1,0 +1,104 @@
+.TH AQTRUNCAT 1 "2026-10-10" "AQTRunCat 0.0.1" "User Commands"
+.SH NAME
+aqtruncat \- A Cute Run Cat for Linux: CPU\-driven tray runner with system metrics
+.SH SYNOPSIS
+.B aqtruncat
+.RI [ run " options]"
+.br
+.B aqtruncat run
+.RB [ \-\-runner
+.IR ID ]
+.RB [ \-\-fps
+.IR N ]
+.RB [ \-\-verbose ]
+.br
+.B aqtruncat runner list
+.br
+.B aqtruncat runner import
+.I FILE.zip
+.RB [ \-\-id
+.IR ID ]
+.RB [ \-\-force ]
+.br
+.B aqtruncat runner remove
+.I ID
+.br
+.B aqtruncat metrics
+.RB [ \-\-watch ]
+.br
+.B aqtruncat autostart
+.BR enable | disable | status
+.br
+.B aqtruncat
+.BR \-h | \-\-help | \-v | \-\-version
+.SH DESCRIPTION
+.B aqtruncat
+shows an animated runner in the system tray (StatusNotifierItem) whose speed
+follows the CPU load: 10 frames per second when idle, up to 40 at full load,
+or the reverse with "Slow down under load". Left\-click the runner to show or
+hide the Dashboard with CPU, memory, swap, network, storage and disk activity;
+the context menu opens Settings and quits.
+.PP
+Custom Metrics are RunCat Neo compatible JSON snapshots written by other
+programs; AQTRunCat watches them and never runs commands. The optional Metrics
+Bar shows up to three compact values as extra tray icons next to the runner.
+.SH COMMANDS
+.TP
+.B run
+Start the tray application (the default without a command).
+.B \-\-runner
+selects a runner,
+.B \-\-fps
+sets a fixed diagnostic frame rate (1\-120, CPU load ignored),
+.B \-\-verbose
+logs CPU samples and frame rate decisions.
+.TP
+.B runner list
+List bundled and user runners, including invalid ones and why.
+.TP
+.B runner import \fIFILE.zip\fR
+Install a runner from a ZIP archive such as a Runner Gallery
+.IR name \-frames.zip ;
+nothing is installed if any check fails.
+.B \-\-id
+installs under another id,
+.B \-\-force
+replaces a user runner with the same id.
+.TP
+.B runner remove \fIID\fR
+Uninstall a user runner. Bundled runners cannot be removed.
+.TP
+.B metrics
+Print the system metrics once, or once per second with
+.BR \-\-watch .
+.TP
+.B autostart enable\fR|\fBdisable\fR|\fBstatus
+Start AQTRunCat at login: the same per\-user preference as the Settings
+window, applied as an XDG autostart entry.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/AQTRunCat/AQTRunCat.ini
+Settings (default
+.IR ~/.config ).
+.TP
+.I $XDG_DATA_HOME/AQTRunCat/runners/
+User runners (default
+.IR ~/.local/share ).
+.TP
+.I $XDG_DATA_HOME/AQTRunCat/metrics/
+Custom Metrics JSON files discovered automatically.
+.TP
+.I $XDG_CONFIG_HOME/autostart/aqtruncat.desktop
+Autostart entry.
+.SH EXIT STATUS
+0 success, 1 failure, 2 invalid command line, 3 not found, 4 invalid runner
+or archive, 5 conflict (already installed, bundled runner protected).
+.SH ENVIRONMENT
+.TP
+.B QT_LOGGING_RULES
+Qt logging categories, e.g.
+.BR aqtruncat.*.debug=true .
+Without a terminal, Qt logs go to the journal.
+.SH SEE ALSO
+The README and documentation in
+.IR /usr/share/doc/aqtruncat/ .

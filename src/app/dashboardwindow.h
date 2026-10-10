@@ -1,0 +1,72 @@
+#pragma once
+
+#include "metrics/systemmetrics.h"
+#include "custommetrics/custommetric.h"
+
+#include <QLabel>
+#include <QProgressBar>
+#include <QVBoxLayout>
+#include <QWidget>
+
+#include <string>
+
+class QCloseEvent;
+class QScrollArea;
+
+// Compact, theme-native view of SystemMetricsSnapshot. It owns no sampler:
+// hiding or closing this window never affects metrics or runner lifecycles.
+class DashboardWindow : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit DashboardWindow(std::string homePath, QWidget *parent = nullptr);
+
+    void toggleVisible();
+
+public slots:
+    void updateSnapshot(const aqtruncat::metrics::SystemMetricsSnapshot &snapshot);
+    void updateCustomMetrics(const QList<aqtruncat::custommetrics::Source> &sources);
+
+signals:
+    void visibilityChanged(bool visible);
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
+    void showEvent(QShowEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
+
+private:
+    struct StorageRow {
+        std::string path;
+        QLabel *value = nullptr;
+        QLabel *detail = nullptr;
+        QProgressBar *bar = nullptr;
+    };
+
+    static QWidget *sectionHeader(const QString &title, QWidget *parent);
+    static void setProgress(QProgressBar *bar, const std::optional<double> &percent,
+                            const QString &unavailable = QStringLiteral("N/A"));
+    static QString statusText(const aqtruncat::metrics::MetricStatus &status);
+    StorageRow &ensureStorageRow(const std::string &path);
+
+    std::string m_homePath;
+    QVBoxLayout *m_layout = nullptr;
+    QVBoxLayout *m_storageLayout = nullptr;
+    QVBoxLayout *m_customLayout = nullptr;
+    QScrollArea *m_scroll = nullptr;
+    bool m_shownOnce = false;
+
+    QLabel *m_cpuValue = nullptr;
+    QLabel *m_cpuDetail = nullptr;
+    QProgressBar *m_cpuBar = nullptr;
+    QLabel *m_memoryValue = nullptr;
+    QLabel *m_memoryDetail = nullptr;
+    QProgressBar *m_memoryBar = nullptr;
+    QLabel *m_swapValue = nullptr;
+    QLabel *m_networkDown = nullptr;
+    QLabel *m_networkUp = nullptr;
+    QLabel *m_diskRead = nullptr;
+    QLabel *m_diskWrite = nullptr;
+    QList<StorageRow> m_storageRows;
+};
