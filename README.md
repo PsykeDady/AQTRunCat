@@ -155,9 +155,10 @@ installed if anything is wrong) or put a folder of PNG frames into
 
 ### Custom Metrics
 
-AQTRunCat reads RunCat Neo compatible JSON snapshots written by other
-programs; it never runs commands itself. Register a file in Settings, or drop
-it into `~/.local/share/AQTRunCat/metrics/` to have it discovered:
+AQTRunCat currently reads RunCat Neo compatible JSON snapshots written by
+other programs; the current M6 implementation does not run commands itself.
+Register a file in Settings, or drop it into
+`~/.local/share/AQTRunCat/metrics/` to have it discovered:
 
 ```json
 {
@@ -168,6 +169,10 @@ it into `~/.local/share/AQTRunCat/metrics/` to have it discovered:
   "lastUpdatedDate": "2026-06-05T04:50:40Z"
 }
 ```
+
+The Claude Code object above is only an example snapshot. AQTRunCat does not
+currently include a Claude Code monitor; an external producer must create and
+update the file.
 
 Files are watched: updates (including atomic replace) appear immediately,
 and a broken or missing file only affects its own card.
