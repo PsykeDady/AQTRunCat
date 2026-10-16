@@ -38,6 +38,7 @@ struct Item {
     Origin origin = Origin::BuiltIn;
     QString label;       // full name ("Network download", custom title)
     QString shortLabel;  // short identity ("NET↓"); custom: symbol glyph or empty
+    std::optional<aqtruncat::custommetrics::IconReference> icon; // v2 custom symbol
     QString shortValue;  // compact value ("1.2M"); custom: metricsBarValue as given
     QString detail;      // full value ("1.2 MiB/s"); empty when there is none
     Status status = Status::Pending;
@@ -57,7 +58,7 @@ struct BuiltInMetric {
 const QList<BuiltInMetric> &builtInMetrics();
 bool isBuiltInId(const QString &id);
 
-// Custom ids derive from the M6 canonical source identity, never from the
+// Custom ids derive from the canonical source/configuration identity, never from the
 // (producer-controlled, changing) title.
 QString customId(const QString &sourceId);
 bool isCustomId(const QString &id);
@@ -67,7 +68,7 @@ bool isKnownId(const QString &id);
 
 } // namespace aqtruncat::metricsbar
 
-// Turns the shared system snapshot, the M6 custom snapshots and the user's
+// Turns the shared system snapshot, shared M6/F1 custom sources and the user's
 // selection into the ordered list of bar items. Owns no sampler and no timer
 // of its own beyond a zero-delay coalescing timer: several inputs changing in
 // one event-loop cycle produce one itemsChanged.

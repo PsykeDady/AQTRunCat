@@ -73,6 +73,8 @@ target_compile_options(aqtruncat_cli PRIVATE -Wall -Wextra -Wpedantic)
 # Desktop runtime and Widgets UI. MetricSampler is the sole metrics owner in
 # the tray process; DashboardWindow and the runner are consumers.
 add_library(aqtruncat_desktop STATIC
+    custommetrics/commandmetric.cpp
+    custommetrics/commandmetric.h
     custommetrics/custommetric.cpp
     custommetrics/custommetric.h
     app/applicationquit.cpp

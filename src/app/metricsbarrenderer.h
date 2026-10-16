@@ -8,6 +8,8 @@
 #include <QRectF>
 #include <QString>
 
+#include <utility>
+
 // Square tray-icon rendering of one Metrics Bar item for StatusNotifierItem
 // hosts. Everything about the tray slot lives here, never in the model.
 //
@@ -37,6 +39,16 @@ inline const QString OverflowText = QStringLiteral("###"); // value too wide: se
 struct IconContent {
     QString caption; // small identity line above the value; may be empty
     QString text;    // value or indicator
+    std::optional<aqtruncat::custommetrics::IconReference> icon;
+
+    IconContent() = default;
+    IconContent(QString captionText, QString valueText,
+                std::optional<aqtruncat::custommetrics::IconReference> iconReference = {})
+        : caption(std::move(captionText))
+        , text(std::move(valueText))
+        , icon(std::move(iconReference))
+    {
+    }
 
     bool operator==(const IconContent &) const = default;
 };

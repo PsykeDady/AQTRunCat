@@ -177,8 +177,12 @@ QIcon MetricsBarPresenter::iconFor(const IconContent &content)
     const QColor colour = trayForegroundColour();
     const QFont font = QApplication::font();
     const qreal dpr = qApp->devicePixelRatio();
-    const QString key = QStringLiteral("%1\x1f%2\x1f%3\x1f%4\x1f%5")
-                            .arg(content.caption, content.text, colour.name(QColor::HexArgb), font.key())
+    const QString iconKey = content.icon
+        ? QStringLiteral("%1:%2").arg(int(content.icon->type)).arg(content.icon->resolvedValue)
+        : QString();
+    const QString key = QStringLiteral("%1\x1f%2\x1f%3\x1f%4\x1f%5\x1f%6")
+                            .arg(content.caption, content.text, iconKey,
+                                 colour.name(QColor::HexArgb), font.key())
                             .arg(dpr);
     if (const QIcon *cached = m_icons.object(key))
         return *cached;

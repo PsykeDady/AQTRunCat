@@ -2,11 +2,13 @@
 #include "app/metricsampler.h"
 
 #include <QApplication>
+#include <QFile>
 #include <QLabel>
 #include <QProgressBar>
 #include <QSignalSpy>
 #include <QScrollArea>
 #include <QTest>
+#include <QTemporaryDir>
 
 using namespace aqtruncat::metrics;
 
@@ -150,6 +152,7 @@ private slots:
     void displaysCustomSnapshotsStatusesAndPreservesOrder()
     {
         DashboardWindow window("/home/alice");
+        window.show(); // a hidden Dashboard defers custom card rebuilds
         aqtruncat::custommetrics::Snapshot snapshot;
         snapshot.title = QStringLiteral("Sensors");
         snapshot.symbol = QStringLiteral("🌡");
@@ -187,6 +190,7 @@ private slots:
     void manyCustomSnapshotsStayInsideScrollableDashboard()
     {
         DashboardWindow window("/home/alice");
+        window.show(); // a hidden Dashboard defers custom card rebuilds
         QList<aqtruncat::custommetrics::Source> sources;
         for (int i = 0; i < 30; ++i) {
             aqtruncat::custommetrics::Snapshot snapshot;
@@ -202,6 +206,59 @@ private slots:
         window.updateCustomMetrics(sources);
         QVERIFY(window.findChild<QWidget *>(QStringLiteral("customSource_29")));
         QVERIFY(window.findChild<QScrollArea *>(QStringLiteral("dashboardScroll"))->widgetResizable());
+    }
+
+    void structuredIconUsesFallbackWithoutInvalidatingMetric()
+    {
+        QTemporaryDir temporary;
+        const QString brokenIcon = temporary.filePath(QStringLiteral("broken.svg"));
+        QFile broken(brokenIcon);
+        QVERIFY(broken.open(QIODevice::WriteOnly));
+        QCOMPARE(broken.write("not an image"), qint64(12));
+        broken.close();
+
+        DashboardWindow window("/home/alice");
+        window.show(); // a hidden Dashboard defers custom card rebuilds
+        aqtruncat::custommetrics::Snapshot snapshot;
+        snapshot.title = QStringLiteral("Command metric");
+        snapshot.icon = aqtruncat::custommetrics::IconReference{
+            aqtruncat::custommetrics::IconType::File,
+            QStringLiteral("./broken.svg"), brokenIcon};
+        snapshot.metrics.append({QStringLiteral("Command metric"), QStringLiteral("23.4"), std::nullopt});
+        snapshot.metricsBarValue = QStringLiteral("23.4");
+        snapshot.lastUpdatedDate = QDateTime::currentDateTimeUtc();
+        aqtruncat::custommetrics::Source source;
+        source.path = QStringLiteral("/tmp/package/metric.json");
+        source.type = aqtruncat::custommetrics::SourceType::Command;
+        source.state = aqtruncat::custommetrics::State::Available;
+        source.snapshot = snapshot;
+        window.updateCustomMetrics({source});
+        QCOMPARE(child<QLabel>(window, "customTitle_0")->text(), QStringLiteral("Command metric"));
+        QVERIFY(!child<QLabel>(window, "customIcon_0")->pixmap().isNull());
+        QCOMPARE(child<QLabel>(window, "customValue_0_0")->text(), QStringLiteral("23.4"));
+    }
+
+    void hiddenDashboardDefersCustomRebuildUntilShown()
+    {
+        DashboardWindow window("/home/alice");
+        aqtruncat::custommetrics::Snapshot snapshot;
+        snapshot.title = QStringLiteral("Deferred");
+        snapshot.metrics.append({QStringLiteral("Deferred"), QStringLiteral("1"), std::nullopt});
+        aqtruncat::custommetrics::Source source;
+        source.path = QStringLiteral("/tmp/deferred.json");
+        source.state = aqtruncat::custommetrics::State::Available;
+        source.snapshot = snapshot;
+
+        window.updateCustomMetrics({source});
+        QVERIFY(!window.findChild<QLabel *>(QStringLiteral("customValue_0_0")));
+        source.snapshot->metrics.first().formattedValue = QStringLiteral("2");
+        window.updateCustomMetrics({source});
+        window.show();
+        QCOMPARE(child<QLabel>(window, "customValue_0_0")->text(), QStringLiteral("2"));
+
+        source.snapshot->metrics.first().formattedValue = QStringLiteral("3");
+        window.updateCustomMetrics({source});
+        QCOMPARE(child<QLabel>(window, "customValue_0_0")->text(), QStringLiteral("3"));
     }
 };
 

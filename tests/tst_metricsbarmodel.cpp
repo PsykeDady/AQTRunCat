@@ -223,6 +223,25 @@ private slots:
         QTRY_COMPARE(ids(model.items()), QStringList{"cpu"});
     }
 
+    void pendingCommandIsEligibleBeforeItsFirstValueAndCarriesIcon()
+    {
+        MetricsBarModel model("/home/test");
+        cm::Source command = source(QStringLiteral("/data/package/metric.json"), std::nullopt,
+                                    cm::State::Pending);
+        command.type = cm::SourceType::Command;
+        command.snapshot->icon = cm::IconReference{cm::IconType::Theme,
+                                                   QStringLiteral("temperature"),
+                                                   QStringLiteral("temperature")};
+        const QString id = customId(command.id);
+        model.setConfiguration(true, {id});
+        model.updateCustom({command});
+        QTRY_COMPARE(model.items().size(), 1);
+        QCOMPARE(model.items().first().status, Status::Pending);
+        QVERIFY(model.items().first().shortValue.isEmpty());
+        QVERIFY(model.items().first().icon);
+        QCOMPARE(model.items().first().icon->type, cm::IconType::Theme);
+    }
+
     void customStatusesKeepLastValue()
     {
         MetricsBarModel model("/home/test");

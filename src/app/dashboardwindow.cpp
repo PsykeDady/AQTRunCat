@@ -306,6 +306,16 @@ void DashboardWindow::updateSnapshot(const SystemMetricsSnapshot &s)
 
 void DashboardWindow::updateCustomMetrics(const QList<aqtruncat::custommetrics::Source> &sources)
 {
+    m_customSources = sources;
+    m_customDirty = true;
+    if (isVisible())
+        rebuildCustomMetrics();
+}
+
+void DashboardWindow::rebuildCustomMetrics()
+{
+    m_customDirty = false;
+    const QList<aqtruncat::custommetrics::Source> &sources = m_customSources;
     while (QLayoutItem *item = m_customLayout->takeAt(0)) {
         if (QWidget *widget = item->widget())
             delete widget;
@@ -327,15 +337,29 @@ void DashboardWindow::updateCustomMetrics(const QList<aqtruncat::custommetrics::
         const QString fallbackTitle = QFileInfo(source.path).completeBaseName();
         const QString titleText = source.snapshot ? source.snapshot->title : fallbackTitle;
         QString heading = titleText;
-        const QString symbol = source.snapshot ? customSymbolText(source.snapshot->symbol) : QString();
+        const QIcon icon = source.snapshot ? customSymbolIcon(source.snapshot->icon) : QIcon();
+        const QString symbol = source.snapshot && icon.isNull()
+            ? customSymbolText(source.snapshot->symbol) : QString();
         if (!symbol.isEmpty())
             heading = symbol + QStringLiteral("  ") + heading;
+        auto *headingRow = new QWidget(card);
+        auto *headingLayout = new QHBoxLayout(headingRow);
+        headingLayout->setContentsMargins(0, 0, 0, 0);
+        headingLayout->setSpacing(6);
+        if (!icon.isNull()) {
+            auto *iconLabel = new QLabel(headingRow);
+            iconLabel->setObjectName(QStringLiteral("customIcon_%1").arg(sourceIndex));
+            iconLabel->setPixmap(icon.pixmap(16, 16));
+            headingLayout->addWidget(iconLabel);
+        }
         auto *title = label(heading, card);
         title->setObjectName(QStringLiteral("customTitle_%1").arg(sourceIndex));
         QFont font = title->font();
         font.setBold(true);
         title->setFont(font);
-        cardLayout->addWidget(title);
+        headingLayout->addWidget(title);
+        headingLayout->addStretch();
+        cardLayout->addWidget(headingRow);
 
         if (source.snapshot) {
             int itemIndex = 0;
@@ -406,6 +430,8 @@ void DashboardWindow::closeEvent(QCloseEvent *event)
 void DashboardWindow::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
+    if (m_customDirty)
+        rebuildCustomMetrics();
     if (!m_shownOnce) {
         m_scroll->verticalScrollBar()->setValue(0);
         m_shownOnce = true;

@@ -124,6 +124,20 @@ private slots:
         QCOMPARE(empty.image, pending.image);
     }
 
+    void structuredSymbolOccupiesCaptionBandWithFallback()
+    {
+        aqtruncat::custommetrics::IconReference reference;
+        reference.type = aqtruncat::custommetrics::IconType::File;
+        reference.value = QStringLiteral("./missing.svg");
+        reference.resolvedValue = QStringLiteral("/definitely/missing.svg");
+        const RenderedIcon icon = renderIcon(
+            {QString(), QStringLiteral("23.4"), reference}, QApplication::font(), Qt::black, 1.0);
+        QVERIFY(icon.captionShown);
+        QVERIFY(!icon.overflow);
+        QVERIFY(!inkBounds(icon.image).isEmpty());
+        QVERIFY(icon.captionRect.bottom() <= icon.valueRect.top() + 0.01);
+    }
+
     void squareImageScalesWithDevicePixelRatio_data()
     {
         QTest::addColumn<double>("dpr");

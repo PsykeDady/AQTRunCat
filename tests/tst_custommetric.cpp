@@ -3,7 +3,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QDir>
 #include <QFile>
+#include <QTemporaryDir>
 #include <QTest>
 
 using namespace aqtruncat::custommetrics;
@@ -77,6 +79,25 @@ private slots:
         QCOMPARE(result.snapshot->metrics.at(0).title, QStringLiteral("Temperature"));
         QCOMPARE(result.snapshot->metrics.at(1).title, QStringLiteral("Fan"));
         QCOMPARE(result.snapshot->metrics.at(2).formattedValue, QString::fromUtf8("—"));
+    }
+
+    void structuredThemeAndFileSymbolsExtendLegacySnapshots()
+    {
+        const auto theme = parseJson(R"({"title":"Theme","symbol":{"type":"theme","value":"temperature"},
+            "metrics":[],"lastUpdatedDate":"2026-06-05T04:50:40Z"})");
+        QVERIFY2(theme.snapshot, qPrintable(theme.error));
+        QVERIFY(theme.snapshot->icon);
+        QCOMPARE(theme.snapshot->icon->type, IconType::Theme);
+        QCOMPARE(theme.snapshot->icon->resolvedValue, QStringLiteral("temperature"));
+
+        QTemporaryDir temporary;
+        const auto file = parseJson(R"({"title":"File","symbol":{"type":"file","value":"./icons/value.svg"},
+            "metrics":[],"lastUpdatedDate":"2026-06-05T04:50:40Z"})",
+            temporary.filePath(QStringLiteral("package")));
+        QVERIFY2(file.snapshot, qPrintable(file.error));
+        QCOMPARE(file.snapshot->icon->type, IconType::File);
+        QCOMPARE(file.snapshot->icon->resolvedValue,
+                 QDir::cleanPath(temporary.filePath(QStringLiteral("package/icons/value.svg"))));
     }
 
     void rejectsMalformedMissingAndWrongTypes_data()

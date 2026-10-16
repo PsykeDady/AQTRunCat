@@ -365,20 +365,31 @@ void SettingsWindow::storeCheckedInterfaces()
 
 void SettingsWindow::rebuildCustomMetrics()
 {
+    // Command sources republish on every run: keep the user's selection.
+    const QString current = m_customMetricFiles->currentItem()
+        ? m_customMetricFiles->currentItem()->text(0) : QString();
     m_customMetricFiles->clear();
+    m_removeCustomMetric->setEnabled(false);
     if (!m_customMetrics)
         return;
+    QTreeWidgetItem *restored = nullptr;
     for (const aqtruncat::custommetrics::Source &source : m_customMetrics->sources()) {
         auto *item = new QTreeWidgetItem(m_customMetricFiles);
+        if (!current.isEmpty() && source.path == current)
+            restored = item;
         item->setText(0, source.path);
         item->setData(0, Qt::UserRole, source.explicitPath.isEmpty() ? source.path : source.explicitPath);
         item->setData(0, Qt::UserRole + 1, source.explicitlyRegistered);
+        QString origin;
         if (source.explicitlyRegistered && source.discovered)
-            item->setText(1, tr("Registered + discovered"));
+            origin = tr("Registered + discovered");
         else if (source.explicitlyRegistered)
-            item->setText(1, tr("Registered"));
+            origin = tr("Registered");
         else
-            item->setText(1, tr("Discovered"));
+            origin = tr("Discovered");
+        if (source.type == aqtruncat::custommetrics::SourceType::Command)
+            origin = tr("Command — %1").arg(origin);
+        item->setText(1, origin);
         switch (source.state) {
         case aqtruncat::custommetrics::State::Available: item->setText(2, tr("Available")); break;
         case aqtruncat::custommetrics::State::Pending: item->setText(2, tr("Waiting…")); break;
@@ -389,7 +400,8 @@ void SettingsWindow::rebuildCustomMetrics()
     }
     for (int column = 0; column < 3; ++column)
         m_customMetricFiles->resizeColumnToContents(column);
-    m_removeCustomMetric->setEnabled(false);
+    if (restored)
+        m_customMetricFiles->setCurrentItem(restored);
 }
 
 void SettingsWindow::rebuildMetricsBar()
@@ -438,7 +450,8 @@ void SettingsWindow::rebuildMetricsBar()
         }
         const auto &snapshot = source->snapshot;
         const QString name = snapshot ? snapshot->title : QFileInfo(source->path).completeBaseName();
-        const bool noValue = snapshot && (!snapshot->metricsBarValue || snapshot->metricsBarValue->trimmed().isEmpty());
+        const bool noValue = source->type == aqtruncat::custommetrics::SourceType::Snapshot && snapshot
+            && (!snapshot->metricsBarValue || snapshot->metricsBarValue->trimmed().isEmpty());
         addRow(id, name, noValue ? tr("Custom — provides no Metrics Bar value") : tr("Custom"), checked);
         return true;
     };

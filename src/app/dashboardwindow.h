@@ -49,6 +49,7 @@ private:
                             const QString &unavailable = QStringLiteral("N/A"));
     static QString statusText(const aqtruncat::metrics::MetricStatus &status);
     StorageRow &ensureStorageRow(const std::string &path);
+    void rebuildCustomMetrics();
 
     std::string m_homePath;
     QVBoxLayout *m_layout = nullptr;
@@ -56,6 +57,10 @@ private:
     QVBoxLayout *m_customLayout = nullptr;
     QScrollArea *m_scroll = nullptr;
     bool m_shownOnce = false;
+    // Command sources publish on every run; a hidden Dashboard keeps only the
+    // latest list and rebuilds its cards when shown.
+    QList<aqtruncat::custommetrics::Source> m_customSources;
+    bool m_customDirty = false;
 
     QLabel *m_cpuValue = nullptr;
     QLabel *m_cpuDetail = nullptr;

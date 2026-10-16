@@ -1,5 +1,7 @@
 #include "metricsbarrenderer.h"
 
+#include "customsymbol.h"
+
 #include <QFontMetricsF>
 #include <QPainter>
 
@@ -73,6 +75,7 @@ IconContent iconContentFor(const Item &item)
 {
     IconContent content;
     content.caption = item.shortLabel;
+    content.icon = item.icon;
     const bool hasValue = !item.shortValue.isEmpty();
     switch (item.status) {
     case Status::Available:
@@ -107,10 +110,12 @@ RenderedIcon renderIcon(const IconContent &content, const QFont &baseFont, const
 
     const qreal width = CanvasSide - 2.0 * Margin;
     std::optional<Fit> caption;
-    if (!content.caption.isEmpty())
+    const bool hasIcon = content.icon.has_value();
+    if (!hasIcon && !content.caption.isEmpty())
         caption = fit(content.caption, baseFont, false, CaptionMaxPixelSize, CaptionMinPixelSize, width, CaptionBand);
-    const QRectF valueBand = caption ? QRectF(0, CaptionBand, CanvasSide, CanvasSide - CaptionBand)
-                                     : QRectF(0, 0, CanvasSide, CanvasSide);
+    const bool hasCaptionBand = hasIcon || caption.has_value();
+    const QRectF valueBand = hasCaptionBand ? QRectF(0, CaptionBand, CanvasSide, CanvasSide - CaptionBand)
+                                            : QRectF(0, 0, CanvasSide, CanvasSide);
 
     QString text = content.text.isEmpty() ? PendingText : content.text;
     std::optional<Fit> value = fit(text, baseFont, true, ValueMaxPixelSize, ValueMinPixelSize,
@@ -127,7 +132,13 @@ RenderedIcon renderIcon(const IconContent &content, const QFont &baseFont, const
     painter.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing);
     painter.scale(oversample, oversample);
     painter.setPen(colour);
-    if (caption) {
+    if (hasIcon) {
+        const QIcon icon = customSymbolIcon(content.icon);
+        const QRect iconRect(qRound((CanvasSide - 7.0) / 2.0), 1, 7, 7);
+        icon.paint(&painter, iconRect);
+        result.captionShown = true;
+        result.captionRect = iconRect;
+    } else if (caption) {
         result.captionShown = true;
         result.captionPixelSize = caption->pixelSize;
         result.captionRect = drawCentred(painter, content.caption, baseFont, false, *caption,

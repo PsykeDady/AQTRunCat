@@ -1,6 +1,8 @@
 #include "custommetric.h"
 
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -47,7 +49,59 @@ bool requiredString(const QJsonObject &object, const char *name, QString &out, Q
 
 } // namespace
 
-ParseResult parseJson(const QByteArray &json)
+bool parseSymbol(const QJsonValue &value, const QString &baseDirectory,
+                 std::optional<QString> &legacySymbol, std::optional<IconReference> &icon,
+                 QString &error)
+{
+    if (value.isUndefined() || value.isNull())
+        return true;
+    if (value.isString()) {
+        const QString text = value.toString();
+        if (text.size() > MaxStringCharacters) {
+            error = QStringLiteral("field \"symbol\" exceeds the %1 character limit")
+                        .arg(MaxStringCharacters);
+            return false;
+        }
+        legacySymbol = text;
+        return true;
+    }
+    if (!value.isObject()) {
+        error = QStringLiteral("field \"symbol\" must be a string, object or null");
+        return false;
+    }
+    const QJsonObject object = value.toObject();
+    QString type;
+    QString symbolValue;
+    if (!requiredString(object, "type", type, error)
+        || !requiredString(object, "value", symbolValue, error))
+        return false;
+    if (symbolValue.trimmed().isEmpty()) {
+        error = QStringLiteral("field \"symbol.value\" must not be empty");
+        return false;
+    }
+
+    IconReference reference;
+    reference.value = symbolValue;
+    if (type == QLatin1String("theme")) {
+        reference.type = IconType::Theme;
+        reference.resolvedValue = symbolValue;
+        // Preserve the existing textual SF-symbol fallback where one exists.
+        legacySymbol = symbolValue;
+    } else if (type == QLatin1String("file")) {
+        reference.type = IconType::File;
+        const QFileInfo info(symbolValue);
+        reference.resolvedValue = QDir::cleanPath(info.isAbsolute()
+            ? info.absoluteFilePath()
+            : QDir(baseDirectory).absoluteFilePath(symbolValue));
+    } else {
+        error = QStringLiteral("field \"symbol.type\" must be \"theme\" or \"file\"");
+        return false;
+    }
+    icon = std::move(reference);
+    return true;
+}
+
+ParseResult parseJson(const QByteArray &json, const QString &baseDirectory)
 {
     ParseResult result;
     if (json.size() > MaxJsonBytes) {
@@ -70,8 +124,10 @@ ParseResult parseJson(const QByteArray &json)
     Snapshot snapshot;
     if (!requiredString(object, "title", snapshot.title, result.error))
         return result;
-    if (!stringField(object, "symbol", false, snapshot.symbol, result.error)
-        || !stringField(object, "metricsBarValue", false, snapshot.metricsBarValue, result.error))
+    if (!parseSymbol(object.value(QStringLiteral("symbol")), baseDirectory,
+                     snapshot.symbol, snapshot.icon, result.error))
+        return result;
+    if (!stringField(object, "metricsBarValue", false, snapshot.metricsBarValue, result.error))
         return result;
 
     const QJsonValue metrics = object.value(QStringLiteral("metrics"));
@@ -148,7 +204,7 @@ ParseResult parseFile(const QString &path)
         result.error = QStringLiteral("cannot read %1: %2").arg(path, file.errorString());
         return result;
     }
-    return parseJson(bytes);
+    return parseJson(bytes, QFileInfo(path).absolutePath());
 }
 
 } // namespace aqtruncat::custommetrics

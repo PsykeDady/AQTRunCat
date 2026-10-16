@@ -264,7 +264,8 @@ std::optional<Item> MetricsBarModel::custom(const QString &id) const
     const auto &snapshot = source->snapshot;
     // The producer decides what the bar shows. Without a metricsBarValue the
     // source is not eligible: no value is derived from formattedValue.
-    if (snapshot && (!snapshot->metricsBarValue || snapshot->metricsBarValue->trimmed().isEmpty()))
+    if (source->type == aqtruncat::custommetrics::SourceType::Snapshot && snapshot
+        && (!snapshot->metricsBarValue || snapshot->metricsBarValue->trimmed().isEmpty()))
         return std::nullopt;
 
     Item item;
@@ -273,8 +274,11 @@ std::optional<Item> MetricsBarModel::custom(const QString &id) const
     item.label = snapshot ? snapshot->title : QFileInfo(source->path).completeBaseName();
     if (snapshot) {
         item.shortLabel = customSymbolText(snapshot->symbol);
-        item.shortValue = *snapshot->metricsBarValue;
-        item.detail = *snapshot->metricsBarValue;
+        item.icon = snapshot->icon;
+        if (snapshot->metricsBarValue) {
+            item.shortValue = *snapshot->metricsBarValue;
+            item.detail = *snapshot->metricsBarValue;
+        }
         item.lastUpdated = snapshot->lastUpdatedDate;
     }
     item.status = statusFor(source->state);

@@ -1,5 +1,10 @@
 # AQTRunCat — M6 Custom Metrics
 
+> Nota storica: questo documento descrive il contratto snapshot completato in
+> M6, nel quale AQTRunCat non eseguiva comandi. F1 lo conserva integralmente e
+> aggiunge una sorgente Command separata; vedere
+> [F1-custom-metrics-v2.md](F1-custom-metrics-v2.md).
+
 M6 implementa AQTRunCat come consumer di snapshot JSON prodotti da software
 esterno. Non esegue comandi, script, polling HTTP, `/proc` o `/sys`; il
 producer decide quando e come aggiornare il file. La milestone non implementa

@@ -15,5 +15,5 @@ struct RunOptions {
 //   MetricSampler raw CPU → CpuMonitor (EMA) → cpuToFps →
 //   FpsStabilizer → RunnerAnimator (frame timing) → TrayPresenter.
 // The same MetricSampler snapshot independently updates DashboardWindow;
-// CustomMetricsService separately watches producer-owned JSON snapshots.
+// CustomMetricsService owns M6 snapshot watching and F1 command scheduling.
 int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runners, const RunOptions &options);

@@ -147,6 +147,10 @@ private slots:
         QTRY_COMPARE(tree->topLevelItemCount(), 1); // same canonical file, no duplicate
         QTRY_COMPARE(tree->topLevelItem(0)->text(1), QStringLiteral("Registered + discovered"));
         tree->setCurrentItem(tree->topLevelItem(0));
+        service.rescan(); // republished sources (e.g. every command run) keep the selection
+        QVERIFY(tree->currentItem());
+        QCOMPARE(tree->currentItem()->text(0), file);
+        QVERIFY(child<QPushButton>(window, "removeCustomMetric")->isEnabled());
         child<QPushButton>(window, "removeCustomMetric")->click();
         QTRY_COMPARE(tree->topLevelItemCount(), 1);
         QCOMPARE(tree->topLevelItem(0)->text(1), QStringLiteral("Discovered"));

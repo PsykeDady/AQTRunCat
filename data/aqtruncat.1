@@ -39,9 +39,11 @@ or the reverse with "Slow down under load". Left\-click the runner to show or
 hide the Dashboard with CPU, memory, swap, network, storage and disk activity;
 the context menu opens Settings and quits.
 .PP
-Custom Metrics are RunCat Neo compatible JSON snapshots written by other
-programs; AQTRunCat watches them and never runs commands. The optional Metrics
-Bar shows up to three compact values as extra tray icons next to the runner.
+Custom Metrics may be RunCat Neo compatible JSON snapshots written by other
+programs, or command configurations that periodically run an explicit
+executable plus argument list and consume one UTF\-8 scalar output line.
+Commands never use an implicit shell. The optional Metrics Bar shows up to
+three compact values as extra tray icons next to the runner.
 .SH COMMANDS
 .TP
 .B run
@@ -86,7 +88,8 @@ User runners (default
 .IR ~/.local/share ).
 .TP
 .I $XDG_DATA_HOME/AQTRunCat/metrics/
-Custom Metrics JSON files discovered automatically.
+Custom Metrics standalone JSON files and immediate package/metric.json files
+discovered automatically.
 .TP
 .I $XDG_CONFIG_HOME/autostart/aqtruncat.desktop
 Autostart entry.

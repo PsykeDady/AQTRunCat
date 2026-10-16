@@ -2,7 +2,7 @@
 
 **A Cute Run Cat for Linux.** A small animated runner lives in your system
 tray and runs faster as your CPU gets busier. Click it for a Dashboard of
-system metrics; add your own Custom Metrics from JSON files; optionally show
+system metrics; add snapshot- or command-backed Custom Metrics; optionally show
 up to three short values right in the tray with the Metrics Bar.
 
 AQTRunCat is a Qt 6 application for Linux, inspired by
@@ -25,8 +25,8 @@ the primary target is KDE Plasma 6 on Wayland.
   [RunCat Runner Gallery](https://github.com/runcat-dev/RunnerGallery) ZIP.
 - **Dashboard**: CPU, memory, swap, network, Root/Home storage and disk
   activity, read directly from `/proc`, `/sys` and `statvfs`.
-- **Custom Metrics**: show values written by other programs (for example a
-  Claude Code status line) as RunCat Neo compatible JSON snapshots.
+- **Custom Metrics**: keep using RunCat Neo-compatible JSON snapshots, or let
+  AQTRunCat periodically run an explicitly configured executable.
 - **Metrics Bar** (off by default): up to 3 compact values, built-in or
   custom, as extra tray icons next to the runner.
 - **Settings** window, start at login, and a command line (`aqtruncat --help`).
@@ -155,9 +155,8 @@ installed if anything is wrong) or put a folder of PNG frames into
 
 ### Custom Metrics
 
-AQTRunCat currently reads RunCat Neo compatible JSON snapshots written by
-other programs; the current M6 implementation does not run commands itself.
-Register a file in Settings, or drop it into
+AQTRunCat supports two source types. Existing RunCat Neo-compatible snapshot
+files remain unchanged: register one in Settings, or drop it into
 `~/.local/share/AQTRunCat/metrics/` to have it discovered:
 
 ```json
@@ -171,11 +170,37 @@ Register a file in Settings, or drop it into
 ```
 
 The Claude Code object above is only an example snapshot. AQTRunCat does not
-currently include a Claude Code monitor; an external producer must create and
-update the file.
+include a Claude Code monitor; an external producer must create and update the
+file. The future Claude feature is separate from the generic command support.
 
 Files are watched: updates (including atomic replace) appear immediately,
 and a broken or missing file only affects its own card.
+
+A command-backed metric uses an explicit executable and argument array—never
+an implicit shell—and reads one UTF-8 scalar line from standard output:
+
+```json
+{
+  "id": "example-temperature",
+  "title": "Temperature",
+  "symbol": { "type": "file", "value": "./icons/temperature.svg" },
+  "source": {
+    "type": "command",
+    "executable": "./read-temperature",
+    "arguments": [],
+    "intervalSeconds": 5,
+    "timeoutSeconds": 3
+  },
+  "display": { "suffix": " °C" }
+}
+```
+
+Put this at, for example,
+`~/.local/share/AQTRunCat/metrics/temperature/metric.json`; the relative
+executable and icon are resolved from that package directory. Commands run as
+the AQTRunCat user, without privilege escalation. See
+[docs/F1-custom-metrics-v2.md](docs/F1-custom-metrics-v2.md) for the complete
+schema, limits, states and security model.
 
 ### Metrics Bar
 
@@ -212,5 +237,5 @@ AQTRunCat icon is original artwork.
 - [requirements.md](requirements.md): specification and roadmap
 - [docs/](docs/): design and validation reports per milestone (runners,
   metrics, Dashboard, Settings, Custom Metrics, Metrics Bar, desktop
-  compatibility, packaging)
+  compatibility, packaging, executable Custom Metrics)
 - [`tools/`](tools/): diagnostic scripts for developers (not needed by users)
