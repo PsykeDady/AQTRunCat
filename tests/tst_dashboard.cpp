@@ -177,9 +177,10 @@ private slots:
         QCOMPARE(child<QLabel>(window, "customStatus_1")->text(), QStringLiteral("Error"));
         QVERIFY(window.findChild<QScrollArea *>(QStringLiteral("dashboardScroll")));
 
+        // A refresh with a valid value keeps the settled presentation.
         available.state = aqtruncat::custommetrics::State::Pending;
         window.updateCustomMetrics({available});
-        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Waiting…"));
+        QVERIFY(child<QLabel>(window, "customStatus_0")->text().startsWith(QStringLiteral("Last updated: ")));
         available.state = aqtruncat::custommetrics::State::Unavailable;
         window.updateCustomMetrics({available});
         QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Unavailable"));
@@ -236,6 +237,104 @@ private slots:
         QCOMPARE(child<QLabel>(window, "customTitle_0")->text(), QStringLiteral("Command metric"));
         QVERIFY(!child<QLabel>(window, "customIcon_0")->pixmap().isNull());
         QCOMPARE(child<QLabel>(window, "customValue_0_0")->text(), QStringLiteral("23.4"));
+    }
+
+    void commandRefreshDoesNotFlickerToWaiting()
+    {
+        namespace cm = aqtruncat::custommetrics;
+        DashboardWindow window("/home/alice");
+        window.show(); // a hidden Dashboard defers custom card rebuilds
+        cm::Snapshot skeleton;
+        skeleton.title = QStringLiteral("Temperature");
+        cm::Source source;
+        source.id = QStringLiteral("/tmp/package/metric.json");
+        source.path = source.id;
+        source.type = cm::SourceType::Command;
+
+        // First execution: no valid value yet.
+        source.state = cm::State::Pending;
+        source.message = QStringLiteral("Waiting for the first command result.");
+        source.snapshot = skeleton;
+        window.updateCustomMetrics({source});
+        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Waiting…"));
+        QVERIFY(!window.findChild<QLabel *>(QStringLiteral("customValue_0_0")));
+
+        cm::Snapshot first = skeleton;
+        first.metrics.append({QStringLiteral("Temperature"), QStringLiteral("23.4"), std::nullopt});
+        first.lastUpdatedDate = QDateTime::fromString(QStringLiteral("2026-10-16T10:00:00Z"), Qt::ISODate);
+        source.state = cm::State::Available;
+        source.message.clear();
+        source.snapshot = first;
+        window.updateCustomMetrics({source});
+        const QString firstFooter = child<QLabel>(window, "customStatus_0")->text();
+        QVERIFY(firstFooter.startsWith(QStringLiteral("Last updated: ")));
+
+        // Refresh running: internally Pending, visually unchanged.
+        source.state = cm::State::Pending;
+        source.message = QStringLiteral("Command is running.");
+        window.updateCustomMetrics({source});
+        QCOMPARE(child<QLabel>(window, "customValue_0_0")->text(), QStringLiteral("23.4"));
+        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), firstFooter);
+        QVERIFY(child<QLabel>(window, "customStatus_0")->toolTip().isEmpty());
+
+        // Successful refresh replaces the value.
+        cm::Snapshot second = first;
+        second.metrics.first().formattedValue = QStringLiteral("24.1");
+        second.lastUpdatedDate = QDateTime::fromString(QStringLiteral("2026-10-16T10:05:00Z"), Qt::ISODate);
+        source.state = cm::State::Available;
+        source.message.clear();
+        source.snapshot = second;
+        window.updateCustomMetrics({source});
+        QCOMPARE(child<QLabel>(window, "customValue_0_0")->text(), QStringLiteral("24.1"));
+        QVERIFY(child<QLabel>(window, "customStatus_0")->text() != firstFooter);
+
+        // Failed refresh exposes Error with the last valid value retained,
+        // and the next refresh keeps showing Error until it settles.
+        source.state = cm::State::Error;
+        source.message = QStringLiteral("Command exited with status 1.");
+        window.updateCustomMetrics({source});
+        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Error"));
+        QCOMPARE(child<QLabel>(window, "customValue_0_0")->text(), QStringLiteral("24.1"));
+        source.state = cm::State::Pending;
+        source.message = QStringLiteral("Command is running.");
+        window.updateCustomMetrics({source});
+        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Error"));
+        QCOMPARE(child<QLabel>(window, "customStatus_0")->toolTip(),
+                 QStringLiteral("Command exited with status 1."));
+
+        source.state = cm::State::Unavailable;
+        source.message = QStringLiteral("Executable is not available: ./missing");
+        window.updateCustomMetrics({source});
+        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Unavailable"));
+
+        // A redefinition resets to a skeleton: first execution again.
+        source.state = cm::State::Pending;
+        source.message = QStringLiteral("Waiting for the first command result.");
+        source.snapshot = skeleton;
+        window.updateCustomMetrics({source});
+        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Waiting…"));
+    }
+
+    void hiddenDashboardTracksSettledStateForDeferredRebuild()
+    {
+        namespace cm = aqtruncat::custommetrics;
+        DashboardWindow window("/home/alice");
+        cm::Snapshot snapshot;
+        snapshot.title = QStringLiteral("Hidden");
+        snapshot.metrics.append({QStringLiteral("Hidden"), QStringLiteral("1"), std::nullopt});
+        cm::Source source;
+        source.id = QStringLiteral("/tmp/hidden/metric.json");
+        source.path = source.id;
+        source.type = cm::SourceType::Command;
+        source.snapshot = snapshot;
+        source.state = cm::State::Error;
+        source.message = QStringLiteral("timeout");
+        window.updateCustomMetrics({source});
+        source.state = cm::State::Pending;
+        source.message = QStringLiteral("Command is running.");
+        window.updateCustomMetrics({source});
+        window.show();
+        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Error"));
     }
 
     void hiddenDashboardDefersCustomRebuildUntilShown()

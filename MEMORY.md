@@ -498,7 +498,7 @@ Key components:
 | Custom Metrics command contract (F1) | explicit `source.type=command`; required `id`, `title`, `executable`; direct executable + ≤256 args, no shell/elevation; scalar UTF-8 stdout; prefix/suffix and optional normalized range | invalid/malformed config is never executed or treated as snapshot |
 | Command scheduling/lifecycle (F1) | one shared monotonic timer; immediate first run; next interval (1–86400 s) starts after completion; timeout default 10 s/range 1–300 s; no overlap/catch-up; each command is its own process-group leader (`setpgid` child modifier); timeout/overflow SIGKILL the group, then re-check every 1 s (no spin); stop = SIGTERM all groups, ≤250 ms total wait, SIGKILL, final group SIGKILL; helpers left in background after a *successful* run are not killed | independent schedules without CPU-sampler coupling or idle polling; scripts' children never leak |
 | Command publish cost (F1) | service publishes at start and end of every run; hidden Dashboard stores the list and rebuilds cards only on show; Settings keeps the selected custom row across rebuilds | 5 commands cost 2.2 % → 0.87 % of a core after deferral |
-| Command output/state (F1) | stdout/stderr each ≤16 KiB; one trimmed nonempty scalar line; missing/non-executable = Unavailable; startup/exit/timeout/parse = Error; refresh = Pending retaining last value | bounded failure, diagnostic stderr, never silent zero |
+| Command output/state (F1) | stdout/stderr each ≤16 KiB; one trimmed nonempty scalar line; missing/non-executable = Unavailable; startup/exit/timeout/parse = Error; refresh = Pending retaining last value; Dashboard presents the last settled state during a refresh (no "Waiting…" flicker) | bounded failure, diagnostic stderr, never silent zero |
 | Custom Metrics XDG | non-recursive `$XDG_DATA_HOME/AQTRunCat/metrics/*.json` plus immediate `$XDG_DATA_HOME/AQTRunCat/metrics/<package>/metric.json`; explicit paths persist in INI | package level permits colocated relative executable/icon while preserving M6 standalone discovery |
 | Custom symbols (F1) | legacy string or `{type: theme|file, value}`; file/executable relative paths and command CWD resolve from config directory; invalid icon uses fallback without invalidating metric | deterministic self-contained packages, never process CWD |
 | Custom identity/order | canonical path when resolvable; explicit order first, discovered-only by stable name/path | no duplicate aliases or filesystem-order dependence |
@@ -931,6 +931,15 @@ create or switch branches, commit or push without explicit permission.
   1 s interval → starts every 3.51 s; SIGTERM exit 0 in all cases. Visual:
   M6 legacy snapshot, relative SVG file icon, theme icon, missing-icon
   fallback, normalizedRange bar; bar SNI pixmap shows icon over value.
+  **Refresh presentation (2026-10-16, final F1 adjustment):** a running
+  refresh keeps the source internally Pending (service/scheduler unchanged),
+  but once a valid value exists the Dashboard card keeps presenting the last
+  settled state (Available → "Last updated", or Error/Unavailable with its
+  message) instead of flickering to "Waiting…"; only a first execution (or
+  a redefinition back to a skeleton without items) shows "Waiting…". The
+  settled state is tracked in `DashboardWindow::updateCustomMetrics`, also
+  while hidden. Metrics Bar unchanged (it already shows the retained custom
+  value while Pending).
 - **F2 — Claude Code Metric**: first investigate reliable Claude Code sources
   and values, then use F1's generic infrastructure where practical. The Claude
   JSON fixture in current documentation is only an example external snapshot,

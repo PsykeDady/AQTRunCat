@@ -146,6 +146,15 @@ Transizioni:
 - file eseguibile mancante o non eseguibile: Unavailable;
 - avvio fallito, crash, exit non zero, timeout o output invalido: Error.
 
+Presentazione del refresh: lo stato interno resta Pending per tutta la
+durata del run, ma se esiste già un valore valido la Dashboard continua a
+mostrare l'ultimo stato concluso (Available con "Last updated", oppure
+Error/Unavailable con il relativo messaggio) senza passare a "Waiting…" a
+ogni refresh. "Waiting…" compare solo alla prima esecuzione, quando non c'è
+ancora un valore valido. Un refresh riuscito sostituisce il valore; uno
+fallito espone Error/Unavailable conservando l'ultimo valore valido. È una
+regola di sola presentazione: scheduling ed esecuzione non cambiano.
+
 Ogni comando viene avviato come leader di un proprio process group
 (`setpgid(0, 0)` nel figlio, prima di `exec`). Timeout e output oltre il limite
 inviano `SIGKILL` all'intero gruppo, quindi anche agli helper lanciati da uno
@@ -190,7 +199,9 @@ Il modello comune conserva titolo, valore formattato, valore normalizzato,
 “Command” o “Snapshot”; non introduce un editor F1. Dashboard e Metrics Bar
 consumano lo stesso elenco già usato da M6/M7. Una Command Pending prima del
 primo risultato è già eleggibile per la barra e mostra lo stato semantico;
-dopo il primo successo conserva il valore durante il refresh.
+dopo il primo successo conserva il valore durante il refresh. La Dashboard
+applica la stessa regola alla card: durante il refresh mantiene l'ultimo
+stato concluso, senza alternare Available e "Waiting…".
 
 Le suite dedicate coprono parser/schema, argomenti, percorsi assoluti e
 relativi, package discovery/CWD, scheduling, non-overlap, timeout, avvio ed

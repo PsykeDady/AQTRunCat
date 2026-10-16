@@ -304,8 +304,36 @@ void DashboardWindow::updateSnapshot(const SystemMetricsSnapshot &s)
     }
 }
 
+namespace {
+
+bool hasValidCustomValue(const aqtruncat::custommetrics::Source &source)
+{
+    // A command skeleton (title/icon before the first result) has no items.
+    return source.snapshot && !source.snapshot->metrics.isEmpty();
+}
+
+QString settledKey(const aqtruncat::custommetrics::Source &source)
+{
+    return source.id.isEmpty() ? source.path : source.id;
+}
+
+} // namespace
+
 void DashboardWindow::updateCustomMetrics(const QList<aqtruncat::custommetrics::Source> &sources)
 {
+    // Tracked on every update, also while hidden, so a deferred rebuild
+    // presents the same state a visible Dashboard would.
+    QHash<QString, SettledState> settled;
+    for (const aqtruncat::custommetrics::Source &source : sources) {
+        if (!hasValidCustomValue(source))
+            continue;
+        const QString key = settledKey(source);
+        if (source.state != aqtruncat::custommetrics::State::Pending)
+            settled.insert(key, {source.state, source.message});
+        else if (const auto previous = m_customSettled.constFind(key); previous != m_customSettled.cend())
+            settled.insert(key, *previous);
+    }
+    m_customSettled = std::move(settled);
     m_customSources = sources;
     m_customDirty = true;
     if (isVisible())
@@ -384,8 +412,20 @@ void DashboardWindow::rebuildCustomMetrics()
             }
         }
 
+        // A refresh with a previous valid value stays Pending internally but
+        // keeps presenting the last settled state; only the first execution
+        // (no valid value yet) shows "Waiting…".
+        aqtruncat::custommetrics::State shownState = source.state;
+        QString shownMessage = source.message;
+        if (source.state == aqtruncat::custommetrics::State::Pending && hasValidCustomValue(source)) {
+            const auto settled = m_customSettled.constFind(settledKey(source));
+            shownState = settled != m_customSettled.cend() ? settled->state
+                                                           : aqtruncat::custommetrics::State::Available;
+            shownMessage = settled != m_customSettled.cend() ? settled->message : QString();
+        }
+
         QString footer;
-        switch (source.state) {
+        switch (shownState) {
         case aqtruncat::custommetrics::State::Available:
             footer = source.snapshot
                 ? tr("Last updated: %1").arg(QLocale().toString(source.snapshot->lastUpdatedDate.toLocalTime(), QLocale::ShortFormat))
@@ -403,7 +443,7 @@ void DashboardWindow::rebuildCustomMetrics()
         }
         auto *status = label(footer, card);
         status->setObjectName(QStringLiteral("customStatus_%1").arg(sourceIndex));
-        status->setToolTip(source.message);
+        status->setToolTip(shownMessage);
         cardLayout->addWidget(status);
         m_customLayout->addWidget(card);
         ++sourceIndex;

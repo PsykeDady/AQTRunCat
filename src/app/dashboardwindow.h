@@ -3,6 +3,7 @@
 #include "metrics/systemmetrics.h"
 #include "custommetrics/custommetric.h"
 
+#include <QHash>
 #include <QLabel>
 #include <QProgressBar>
 #include <QVBoxLayout>
@@ -61,6 +62,14 @@ private:
     // latest list and rebuilds its cards when shown.
     QList<aqtruncat::custommetrics::Source> m_customSources;
     bool m_customDirty = false;
+    // Presentation only: the last settled (non-Pending) state of each source
+    // that holds a valid value. A refresh keeps the source Pending, but its
+    // card keeps showing this state instead of flickering to "Waiting…".
+    struct SettledState {
+        aqtruncat::custommetrics::State state = aqtruncat::custommetrics::State::Available;
+        QString message;
+    };
+    QHash<QString, SettledState> m_customSettled;
 
     QLabel *m_cpuValue = nullptr;
     QLabel *m_cpuDetail = nullptr;
