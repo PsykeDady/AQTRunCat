@@ -194,6 +194,12 @@ ParseResult parseJson(const QByteArray &json, const QString &baseDirectory)
             item.id = *id;
         }
         item.detail = detail.value_or(QString());
+        const QJsonValue warning = itemObject.value(QStringLiteral("warning"));
+        if (!warning.isUndefined() && !warning.isNull() && !warning.isBool()) {
+            result.error = QStringLiteral("metrics[%1].warning must be a boolean").arg(index);
+            return result;
+        }
+        item.warning = warning.toBool();
         item.metricsBarLabel = barLabel.value_or(QString());
         snapshot.metrics.append(std::move(item));
         ++index;

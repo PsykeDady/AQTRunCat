@@ -394,46 +394,13 @@ QString sourceName(QuotaSource source)
 QJsonObject quotaItem(const QString &id, const QString &title, const QString &barLabel, const QuotaChoice &choice,
                       const QString &missingHint, const Options &options)
 {
-    QJsonObject object{{QStringLiteral("id"), id}, {QStringLiteral("title"), title},
-                       {QStringLiteral("metricsBarLabel"), barLabel}};
-    const auto moment = [&](const QDateTime &time) { return formatMoment(time, options.now, options.timeZone); };
-    switch (choice.presence) {
-    case QuotaPresence::Current: {
-        const QuotaReading &reading = *choice.reading;
-        QString value = QStringLiteral("%1 used").arg(quotaPercentText(reading.usedPercent));
-        if (reading.usedPercent >= 100.0)
-            value += QStringLiteral(" — limit reached");
-        QString detail;
-        if (reading.resetsAt.isValid()) {
-            const QString when = moment(reading.resetsAt);
-            detail = when.contains(u',') ? QStringLiteral("Resets %1").arg(when) : QStringLiteral("Resets at %1").arg(when);
-        } else {
-            detail = QStringLiteral("Reset time not reported");
-        }
-        if (choice.stale)
-            detail += QStringLiteral(" · as of %1").arg(moment(reading.observedAt));
-        object.insert(QStringLiteral("formattedValue"), value);
-        object.insert(QStringLiteral("normalizedValue"), reading.usedPercent / 100.0);
-        object.insert(QStringLiteral("detail"), detail);
-        object.insert(QStringLiteral("metricsBarValue"), quotaCompactText(reading.usedPercent));
-        break;
-    }
-    case QuotaPresence::Expired:
-        object.insert(QStringLiteral("formattedValue"), QStringLiteral("Unknown"));
-        object.insert(QStringLiteral("detail"), QStringLiteral("The window reset at %1; no newer report yet")
-                                                    .arg(moment(choice.reading->resetsAt)));
-        break;
-    case QuotaPresence::TooOld:
-        object.insert(QStringLiteral("formattedValue"), QStringLiteral("Unknown"));
-        object.insert(QStringLiteral("detail"), QStringLiteral("The last report (%1) is too old to show")
-                                                    .arg(moment(choice.reading->observedAt)));
-        break;
-    case QuotaPresence::Missing:
-        object.insert(QStringLiteral("formattedValue"), QStringLiteral("Not reported"));
-        object.insert(QStringLiteral("detail"), missingHint);
-        break;
-    }
-    return object;
+    aqtruncat::providers::QuotaJudgement judgement;
+    judgement.presence = choice.presence;
+    judgement.stale = choice.stale;
+    if (choice.reading)
+        judgement.value = aqtruncat::providers::QuotaValue{choice.reading->usedPercent, choice.reading->resetsAt,
+                                                           choice.reading->observedAt};
+    return aqtruncat::providers::quotaItem({id, title, barLabel, missingHint}, judgement, options.now, options.timeZone);
 }
 
 } // namespace
@@ -487,8 +454,19 @@ Outcome collect(const Options &options)
     QString sourceText = sources.isEmpty() ? QStringLiteral("No current report") : sources.join(QStringLiteral(" + "));
     QJsonObject sourceItem = item(QStringLiteral("Usage data"), sourceText);
     sourceItem.insert(QStringLiteral("id"), QStringLiteral("source"));
+    QStringList sourceDetail;
+    // Without live updates an out-of-date window is expected: say why and
+    // what changes it, rather than leaving only "Out of date".
+    const bool allCurrent = fiveHour.presence == QuotaPresence::Current && sevenDay.presence == QuotaPresence::Current;
+    if (!options.liveUpdatesOn && !allCurrent) {
+        sourceItem.insert(QStringLiteral("warning"), true);
+        sourceDetail << QStringLiteral("Live updates are off: values change only when you open /usage in Claude Code. "
+                                       "Turn them on in AQTRunCat Settings › Integrations.");
+    }
     if (!sourceError.isEmpty())
-        sourceItem.insert(QStringLiteral("detail"), sourceError);
+        sourceDetail << sourceError;
+    if (!sourceDetail.isEmpty())
+        sourceItem.insert(QStringLiteral("detail"), sourceDetail.join(QStringLiteral(" · ")));
     metrics.append(sourceItem);
 
     if (options.includeContext)

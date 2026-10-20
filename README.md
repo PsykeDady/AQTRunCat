@@ -28,7 +28,8 @@ the primary target is KDE Plasma 6 on Wayland.
 - **Custom Metrics**: keep using RunCat Neo-compatible JSON snapshots, or let
   AQTRunCat periodically run an explicitly configured executable.
 - **Integrations**: Claude Code plan usage (current 5-hour session and
-  current week, as on Claude Code's `/usage` screen), switched on in Settings.
+  current week, as on Claude Code's `/usage` screen) and Codex usage limits
+  (as on Codex's `/status`), each switched on in Settings.
 - **Metrics Bar** (off by default): up to 3 compact values, built-in or
   custom, as extra tray icons next to the runner.
 - **Settings** window, start at login, and a command line (`aqtruncat --help`).
@@ -282,6 +283,40 @@ Claude Code is not required to install or run AQTRunCat. Details, sources,
 exact semantics and limitations:
 [docs/F2-claude-code-metric.md](docs/F2-claude-code-metric.md).
 
+### Codex usage (Integrations)
+
+In **Settings → Integrations** tick *Show Codex usage*: the Dashboard's
+Integrations section gets a **Codex** card with one progress bar per usage
+window Codex reports, labelled from its real length — usually **5h limit**
+and **Weekly limit** — with the percentage used, what is left and the reset
+time in your time zone (e.g. `12% used`, *88% left · Resets at 14:00*).
+
+- **Without live updates** AQTRunCat reads the limits Codex records in its
+  own session files (`~/.codex/sessions/`) while you use it: offline, no
+  Codex process, but they only change while Codex is working. Older values
+  say *as of HH:MM*; after a window's reset they are not shown at all.
+- **Live updates** (optional, asks for confirmation): every 5 minutes
+  AQTRunCat starts `codex app-server` and asks it for your current limits
+  (`account/rateLimits/read`). Codex contacts OpenAI with its own login; no
+  prompt is sent, no usage is consumed and nothing in your Codex
+  configuration is changed. The newer of the two sources wins per window.
+
+AQTRunCat never reads Codex credentials or conversation contents and never
+shows missing data as 0%. Pick *Codex — 5h limit* / *Codex — Weekly limit*
+in the Metrics Bar list if wanted (shown as `cx5h` / `cx7d`, distinct from
+Claude Code's `5h` / `7d`). The same switches on the command line:
+
+```bash
+aqtruncat-codex-metric enable [--live]
+aqtruncat-codex-metric live-updates on|off
+aqtruncat-codex-metric status
+aqtruncat-codex-metric disable
+aqtruncat-codex-metric upgrade      # done by install.sh after an update
+```
+
+Codex is not required to install or run AQTRunCat. Details:
+[docs/F3-codex-metric.md](docs/F3-codex-metric.md).
+
 ### Metrics Bar
 
 Enable it in Settings and choose up to **three** metrics (CPU, memory, swap,
@@ -319,5 +354,6 @@ AQTRunCat icon is original artwork.
 - [requirements.md](requirements.md): specification and roadmap
 - [docs/](docs/): design and validation reports per milestone (runners,
   metrics, Dashboard, Settings, Custom Metrics, Metrics Bar, desktop
-  compatibility, packaging, executable Custom Metrics, Claude Code metric)
+  compatibility, packaging, executable Custom Metrics, Claude Code and Codex
+  integrations)
 - [`tools/`](tools/): diagnostic scripts for developers (not needed by users)

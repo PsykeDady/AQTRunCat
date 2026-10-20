@@ -120,9 +120,10 @@ struct Fixture {
         QVERIFY2(captureStatusLine(input, state, config, utc(at), &reason), qPrintable(reason));
     }
 
-    Outcome run(const char *now) const
+    Outcome run(const char *now, bool liveUpdatesOn = false) const
     {
         Options options;
+        options.liveUpdatesOn = liveUpdatesOn;
         options.configDirectory = config;
         options.globalConfigFile = global;
         options.bridgeStateFile = state;
@@ -220,12 +221,28 @@ private slots:
         f.cache(typicalConfig());
         const QJsonObject snapshot = snapshotOf(f.run("2026-10-20T11:31:00Z"));
         const QJsonObject session = itemById(snapshot, QStringLiteral("five_hour"));
-        QCOMPARE(text(session, "formattedValue"), QStringLiteral("Unknown"));
+        QCOMPARE(text(session, "formattedValue"), QStringLiteral("Out of date"));
         QCOMPARE(text(session, "detail"), QStringLiteral("The window reset at 13:30; no newer report yet"));
+        QVERIFY(session.value(QStringLiteral("warning")).toBool());
         QVERIFY(!session.contains(QStringLiteral("normalizedValue")));
         QVERIFY(!session.contains(QStringLiteral("metricsBarValue")));
         QCOMPARE(snapshot.value(QStringLiteral("metricsBarValue")).toString(), QStringLiteral("—"));
-        QCOMPARE(text(itemById(snapshot, QStringLiteral("seven_day")), "formattedValue"), QStringLiteral("7% used"));
+        const QJsonObject week = itemById(snapshot, QStringLiteral("seven_day"));
+        QCOMPARE(text(week, "formattedValue"), QStringLiteral("7% used"));
+        QVERIFY(!week.value(QStringLiteral("warning")).toBool());
+        // Live updates off: the card says why and what to do.
+        const QJsonObject source = itemById(snapshot, QStringLiteral("source"));
+        QVERIFY(source.value(QStringLiteral("warning")).toBool());
+        QVERIFY(text(source, "detail").startsWith(QStringLiteral("Live updates are off: values change only when you open /usage")));
+        QVERIFY(text(source, "detail").contains(QStringLiteral("Settings › Integrations")));
+        // With live updates on, only the window itself warns.
+        const QJsonObject live = itemById(snapshotOf(f.run("2026-10-20T11:31:00Z", true)), QStringLiteral("source"));
+        QVERIFY(!live.value(QStringLiteral("warning")).toBool());
+        QVERIFY(!text(live, "detail").contains(QStringLiteral("Live updates are off")));
+        // Everything current: no warning at all.
+        const QJsonObject fresh = snapshotOf(f.run("2026-10-20T08:30:00Z"));
+        for (const QJsonValue &value : fresh.value(QStringLiteral("metrics")).toArray())
+            QVERIFY(!value.toObject().value(QStringLiteral("warning")).toBool());
     }
 
     void weeklyReportExpiresAfterADay()
@@ -234,7 +251,8 @@ private slots:
         f.cache(typicalConfig());
         const QJsonObject snapshot = snapshotOf(f.run("2026-10-21T08:29:00Z")); // 24 h and 20 s later
         const QJsonObject week = itemById(snapshot, QStringLiteral("seven_day"));
-        QCOMPARE(text(week, "formattedValue"), QStringLiteral("Unknown"));
+        QCOMPARE(text(week, "formattedValue"), QStringLiteral("Out of date"));
+        QVERIFY(week.value(QStringLiteral("warning")).toBool());
         QCOMPARE(text(week, "detail"), QStringLiteral("The last report (Oct 20, 10:28) is too old to show"));
         QVERIFY(!week.contains(QStringLiteral("metricsBarValue")));
     }

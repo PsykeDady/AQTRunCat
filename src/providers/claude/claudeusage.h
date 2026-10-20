@@ -5,6 +5,8 @@
 #include <QString>
 #include <QTimeZone>
 
+#include "common/quota.h"
+
 #include <optional>
 
 // Claude Code plan usage quotas: the rolling 5-hour window ("Current
@@ -83,12 +85,11 @@ QuotaSourceResult readBridgeState(const QString &stateFile, const QString &confi
 bool captureStatusLine(const QByteArray &statusLineJson, const QString &stateFile,
                        const QString &configDirectory, const QDateTime &now, QString *reason = nullptr);
 
-enum class QuotaPresence {
-    Current,  // a value to show
-    Expired,  // the newest report predates the window's reset
-    TooOld,   // older than MaximumReportAgeSeconds
-    Missing,  // no source reported this window
-};
+// Judgement and formatting are shared with the other providers.
+using aqtruncat::providers::QuotaPresence;
+using aqtruncat::providers::formatMoment;
+using aqtruncat::providers::quotaCompactText;
+using aqtruncat::providers::quotaPercentText;
 
 struct QuotaChoice {
     QuotaPresence presence = QuotaPresence::Missing;
@@ -99,12 +100,5 @@ struct QuotaChoice {
 // The most recent report of a window among the sources, judged at "now".
 QuotaChoice chooseQuota(QuotaWindow window, const QuotaSourceResult &cache, const QuotaSourceResult &bridge,
                         const QDateTime &now);
-
-// "3%", "23.5%", "100%": what /usage shows, one decimal only when reported.
-QString quotaPercentText(double percent);
-// Metrics Bar: rounded, "<1%" between 0 and 1.
-QString quotaCompactText(double percent);
-// "13:30" today, otherwise "Oct 23, 13:30", in the given time zone.
-QString formatMoment(const QDateTime &moment, const QDateTime &now, const QTimeZone &zone);
 
 } // namespace aqtruncat::claude

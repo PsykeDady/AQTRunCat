@@ -134,6 +134,9 @@ private slots:
         QTest::newRow("item-detail-type")
             << QByteArray(R"({"title":"x","metrics":[{"title":"y","formattedValue":"1","detail":5}],"lastUpdatedDate":"2026-01-01T00:00:00Z"})")
             << QStringLiteral("detail");
+        QTest::newRow("item-warning-type")
+            << QByteArray(R"({"title":"x","metrics":[{"title":"y","formattedValue":"1","warning":"yes"}],"lastUpdatedDate":"2026-01-01T00:00:00Z"})")
+            << QStringLiteral("warning");
         QTest::newRow("item-bar-value-type")
             << QByteArray(R"({"title":"x","metrics":[{"title":"y","formattedValue":"1","metricsBarValue":[]}],"lastUpdatedDate":"2026-01-01T00:00:00Z"})")
             << QStringLiteral("metricsBarValue");
@@ -145,7 +148,8 @@ private slots:
         const ParseResult result = parseJson(R"({"title":"Usage","metrics":[
             {"title":"Current session","formattedValue":"3% used","normalizedValue":0.03,
              "id":"five_hour","detail":"Resets at 13:30","metricsBarValue":"3%","metricsBarLabel":"5h"},
-            {"title":"Plain","formattedValue":"x","detail":null}],
+            {"title":"Plain","formattedValue":"x","detail":null},
+            {"title":"Stale","formattedValue":"Out of date","warning":true}],
             "lastUpdatedDate":"2026-01-01T00:00:00Z"})");
         QVERIFY2(result.snapshot, qPrintable(result.error));
         const Item &quota = result.snapshot->metrics.at(0);
@@ -155,6 +159,8 @@ private slots:
         QCOMPARE(quota.metricsBarLabel, QStringLiteral("5h"));
         const Item &plain = result.snapshot->metrics.at(1);
         QVERIFY(plain.id.isEmpty() && plain.detail.isEmpty() && !plain.metricsBarValue && plain.metricsBarLabel.isEmpty());
+        QVERIFY(!plain.warning && !quota.warning);
+        QVERIFY(result.snapshot->metrics.at(2).warning);
         QVERIFY(isValidItemId(QStringLiteral("seven_day.v2-x")));
         QVERIFY(!isValidItemId(QStringLiteral("-x")));
         QVERIFY(!isValidItemId(QString(65, u'a')));

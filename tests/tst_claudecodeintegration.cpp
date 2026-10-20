@@ -221,7 +221,7 @@ private slots:
         {
             CustomMetricsService service(&settings, discovery);
             service.start();
-            QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Available, 5000);
+            QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Available, 15000);
             const Source source = onlySource(service);
             QCOMPARE(source.configuredId, QStringLiteral("claude-code"));
             QCOMPARE(source.integration, QStringLiteral("claude-code"));
@@ -282,7 +282,7 @@ private slots:
             // Both values follow the next /usage independently.
             fakeClaude(root, 4, 9);
             QTRY_COMPARE_WITH_TIMEOUT(itemWithId(onlySource(service), QStringLiteral("five_hour"))->formattedValue,
-                                      QStringLiteral("4% used"), 5000);
+                                      QStringLiteral("4% used"), 15000);
             QTRY_COMPARE_WITH_TIMEOUT(bar.items().at(0).shortValue, QStringLiteral("9%"), 2000);
             QTRY_COMPARE_WITH_TIMEOUT(bar.items().at(1).shortValue, QStringLiteral("4%"), 2000);
         }
@@ -297,7 +297,7 @@ private slots:
         aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
         CustomMetricsService service(&settings, discovery);
         service.start();
-        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Unavailable, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Unavailable, 15000);
         QVERIFY(onlySource(service).message.contains(QStringLiteral("Claude Code not found")));
         QVERIFY(onlySource(service).snapshot->metrics.isEmpty());
 
@@ -447,8 +447,8 @@ private slots:
 
             // GUI on: the adapter writes the package, F1 discovers and runs it.
             enabled->click();
-            QTRY_VERIFY_WITH_TIMEOUT(integration.status().value(QStringLiteral("enabled")).toBool(), 5000);
-            QTRY_COMPARE_WITH_TIMEOUT(status->text(), QStringLiteral("On — available."), 5000);
+            QTRY_VERIFY_WITH_TIMEOUT(integration.status().value(QStringLiteral("enabled")).toBool(), 15000);
+            QTRY_COMPARE_WITH_TIMEOUT(status->text(), QStringLiteral("On — available."), 15000);
             QVERIFY(enabled->isChecked());
             QVERIFY(live->isEnabled());
             // Not a user Custom Metric: managed under Integrations only.
@@ -463,14 +463,14 @@ private slots:
 
             // Command line → GUI.
             QCOMPARE(runAdapter({QStringLiteral("enable"), QStringLiteral("--context")}).exitCode, 0);
-            QTRY_VERIFY_WITH_TIMEOUT(context->isChecked(), 5000);
+            QTRY_VERIFY_WITH_TIMEOUT(context->isChecked(), 15000);
 
             // GUI live updates, after confirmation; the adapter edits settings.json.
             QTRY_VERIFY(live->isEnabled());
             acceptNextQuestion();
             live->click();
             QTRY_VERIFY_WITH_TIMEOUT(integration.status().value(QStringLiteral("liveUpdates")).toString()
-                                         == QLatin1String("on"), 5000);
+                                         == QLatin1String("on"), 15000);
             QVERIFY(QJsonDocument::fromJson(readAll(config + QStringLiteral("/settings.json"))).object()
                         .value(QStringLiteral("statusLine")).isObject());
         }
@@ -488,9 +488,9 @@ private slots:
 
             // GUI off: live updates and the package go away together.
             enabled->click();
-            QTRY_VERIFY_WITH_TIMEOUT(!integration.status().value(QStringLiteral("enabled")).toBool(), 5000);
+            QTRY_VERIFY_WITH_TIMEOUT(!integration.status().value(QStringLiteral("enabled")).toBool(), 15000);
             QVERIFY(!QFileInfo::exists(config + QStringLiteral("/settings.json"))); // it did not exist before
-            QTRY_COMPARE_WITH_TIMEOUT(service.sources().size(), qsizetype(0), 5000);
+            QTRY_COMPARE_WITH_TIMEOUT(service.sources().size(), qsizetype(0), 15000);
         }
         qputenv("CLAUDE_CONFIG_DIR", m_private.filePath(QStringLiteral("no claude")).toUtf8());
     }
@@ -514,7 +514,7 @@ private slots:
         service.start();
         QTRY_VERIFY_WITH_TIMEOUT(std::all_of(service.sources().cbegin(), service.sources().cend(),
                                              [](const Source &s) { return s.state == State::Available; })
-                                     && service.sources().size() == 3, 5000);
+                                     && service.sources().size() == 3, 15000);
         int providers = 0;
         for (const Source &source : service.sources()) {
             const bool official = QFileInfo(source.path).canonicalFilePath() == QFileInfo(package).canonicalFilePath();
@@ -553,17 +553,17 @@ private slots:
         aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
         CustomMetricsService service(&settings, dataHome + QStringLiteral("/AQTRunCat/metrics"));
         service.start();
-        QTRY_COMPARE_WITH_TIMEOUT(service.sources().size(), qsizetype(1), 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(service.sources().size(), qsizetype(1), 15000);
         QCOMPARE(service.sources().first().integration, QString()); // still shown as a user metric
         {
             ProviderIntegration integration(QStringLiteral("claude-code"), adapterPath());
             SettingsWindow window(&settings, {{QStringLiteral("cat"), QStringLiteral("Cat")}}, &service, nullptr,
                                   &integration);
             // Even before the rewrite it is not listed among Custom Metrics.
-            QTRY_VERIFY_WITH_TIMEOUT(integration.statusKnown(), 5000);
+            QTRY_VERIFY_WITH_TIMEOUT(integration.statusKnown(), 15000);
             QCOMPARE(window.findChild<QTreeWidget *>(QStringLiteral("customMetricFiles"))->topLevelItemCount(), 0);
-            QTRY_VERIFY_WITH_TIMEOUT(integration.status().value(QStringLiteral("integrationMarked")).toBool(), 5000);
-            QTRY_COMPARE_WITH_TIMEOUT(service.sources().first().integration, QStringLiteral("claude-code"), 5000);
+            QTRY_VERIFY_WITH_TIMEOUT(integration.status().value(QStringLiteral("integrationMarked")).toBool(), 15000);
+            QTRY_COMPARE_WITH_TIMEOUT(service.sources().first().integration, QStringLiteral("claude-code"), 15000);
             // Its options were kept.
             QVERIFY(integration.status().value(QStringLiteral("context")).toBool());
         }

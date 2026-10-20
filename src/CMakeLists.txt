@@ -170,6 +170,17 @@ endif()
 # F2 Claude Code adapter: provider acquisition kept out of the core. It feeds
 # F1 command-backed Custom Metrics ("output": "snapshot") as a separate,
 # QtCore-only executable; nothing in aqtruncat_desktop links it.
+# Provider adapters (F2 Claude Code, F3 Codex): shared QtCore quota
+# judgement/formatting, never linked by the core.
+add_library(aqtruncat_provider_common STATIC
+    providers/common/package.cpp
+    providers/common/package.h
+    providers/common/quota.cpp
+    providers/common/quota.h)
+target_include_directories(aqtruncat_provider_common PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/providers")
+target_link_libraries(aqtruncat_provider_common PUBLIC Qt6::Core)
+target_compile_options(aqtruncat_provider_common PRIVATE -Wall -Wextra -Wpedantic)
+
 add_library(aqtruncat_claude STATIC
     providers/claude/claudecode.cpp
     providers/claude/claudecode.h
@@ -178,7 +189,7 @@ add_library(aqtruncat_claude STATIC
     providers/claude/statuslinebridge.cpp
     providers/claude/statuslinebridge.h)
 target_include_directories(aqtruncat_claude PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/providers")
-target_link_libraries(aqtruncat_claude PUBLIC Qt6::Core)
+target_link_libraries(aqtruncat_claude PUBLIC aqtruncat_provider_common Qt6::Core)
 target_compile_options(aqtruncat_claude PRIVATE -Wall -Wextra -Wpedantic)
 
 qt_add_executable(aqtruncat-claude-metric
@@ -188,3 +199,21 @@ target_link_libraries(aqtruncat-claude-metric PRIVATE aqtruncat_claude Qt6::Core
 target_compile_options(aqtruncat-claude-metric PRIVATE -Wall -Wextra -Wpedantic)
 target_compile_definitions(aqtruncat-claude-metric PRIVATE AQTRUNCAT_VERSION="${PROJECT_VERSION}")
 install(TARGETS aqtruncat-claude-metric RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# F3 Codex adapter: like the Claude Code one, a separate QtCore executable
+# feeding F1 command-backed metrics ("output": "snapshot"); not linked by
+# the core.
+add_library(aqtruncat_codex STATIC
+    providers/codex/codexusage.cpp
+    providers/codex/codexusage.h)
+target_include_directories(aqtruncat_codex PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/providers")
+target_link_libraries(aqtruncat_codex PUBLIC aqtruncat_provider_common Qt6::Core)
+target_compile_options(aqtruncat_codex PRIVATE -Wall -Wextra -Wpedantic)
+
+qt_add_executable(aqtruncat-codex-metric
+    providers/codex/codexicon.h
+    providers/codex/main.cpp)
+target_link_libraries(aqtruncat-codex-metric PRIVATE aqtruncat_codex Qt6::Core)
+target_compile_options(aqtruncat-codex-metric PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(aqtruncat-codex-metric PRIVATE AQTRUNCAT_VERSION="${PROJECT_VERSION}")
+install(TARGETS aqtruncat-codex-metric RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

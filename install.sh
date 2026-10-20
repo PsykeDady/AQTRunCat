@@ -41,15 +41,17 @@ Installation (default):
 
   System-wide (default)  prefix /usr/local, change with --prefix=DIR:
                            DIR/bin/aqtruncat
-                           DIR/bin/aqtruncat-claude-metric (optional Claude
-                             Code metric, off until you run its "enable")
+                           DIR/bin/aqtruncat-claude-metric, aqtruncat-codex-metric
+                             (optional Claude Code / Codex integrations, off
+                             until enabled in Settings > Integrations)
                            DIR/share/applications/aqtruncat.desktop
                            DIR/share/icons/hicolor/*/apps/aqtruncat.{png,svg}
                            DIR/share/man/man1/aqtruncat.1
                            DIR/share/doc/aqtruncat/ (README, licenses)
                            DIR/share/aqtruncat/install-manifest.txt
   --local                for the current user only, no root and no sudo:
-                           ${XDG_BIN_HOME:-~/.local/bin}/aqtruncat, aqtruncat-claude-metric
+                           ${XDG_BIN_HOME:-~/.local/bin}/aqtruncat, aqtruncat-claude-metric,
+                             aqtruncat-codex-metric
                            ${XDG_DATA_HOME:-~/.local/share}/applications, icons, man, doc
                            ${XDG_STATE_HOME:-~/.local/state}/aqtruncat/install-manifest.txt
                          Your shell files are never edited; if the bin directory
@@ -70,9 +72,10 @@ Running AQTRunCat:
   with an error and changes nothing, and is never killed forcibly. Everything
   that can fail first (build, staging, checks, sudo) happens before closing it.
   AQTRunCat is not restarted afterwards: start it again from the menu.
-  An enabled Claude Code integration from an earlier version is then updated
-  by "aqtruncat-claude-metric upgrade" (run as you; keeps its options, does
-  nothing when it is off, never removes your data).
+  Enabled Claude Code and Codex integrations from an earlier version are then
+  updated by "aqtruncat-claude-metric upgrade" / "aqtruncat-codex-metric
+  upgrade" (run as you; keep their options, do nothing when off, never remove
+  your data).
   With "sudo" for a system-wide prefix, instances of other users are reported
   but not stopped; they keep running the version they started.
 
@@ -796,14 +799,16 @@ do_install() {
         as_user "$installed_bin" autostart disable || die "AQTRunCat is installed, but disabling autostart failed"
     fi
 
-    # An enabled Claude Code integration written by an earlier version is
-    # rewritten by its own adapter, with its options; the adapter never
-    # creates one, never touches a user-managed package, and this never
-    # deletes anything in the user's data directory.
-    local adapter=$bindir/aqtruncat-claude-metric
-    if [[ -x $adapter ]] && ! as_user "$adapter" upgrade; then
-        warn "the Claude Code integration could not be upgraded; open Settings > Integrations or run: $adapter upgrade"
-    fi
+    # An enabled integration written by an earlier version is rewritten by
+    # its own adapter, with its options; an adapter never creates one, never
+    # touches a user-managed package, and this never deletes anything in the
+    # user's data directory. Each integration is independent.
+    local adapter
+    for adapter in "$bindir/aqtruncat-claude-metric" "$bindir/aqtruncat-codex-metric"; do
+        if [[ -x $adapter ]] && ! as_user "$adapter" upgrade; then
+            warn "the ${adapter##*/aqtruncat-} integration could not be upgraded; open Settings > Integrations or run: $adapter upgrade"
+        fi
+    done
 
     say "AQTRunCat is installed: $installed_bin"
     if [[ $scope == local && ":$PATH:" != *":$bindir:"* ]]; then

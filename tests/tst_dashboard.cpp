@@ -233,6 +233,18 @@ private slots:
         QCOMPARE(integrations->findChildren<QWidget *>(QRegularExpression(QStringLiteral("^customSource_"))).size(), 1);
         QCOMPARE(custom->findChildren<QWidget *>(QRegularExpression(QStringLiteral("^customSource_"))).size(), 2);
 
+        // A warning item gets the warning icon; the others do not.
+        auto warned = claude;
+        aqtruncat::custommetrics::Item stale{QStringLiteral("Current session (5h)"), QStringLiteral("Out of date"), std::nullopt};
+        stale.warning = true;
+        stale.detail = QStringLiteral("The window reset at 13:29; no newer report yet");
+        warned.snapshot->metrics = {stale, {QStringLiteral("Week"), QStringLiteral("7% used"), 0.07}};
+        window.updateCustomMetrics({warned});
+        auto *icon = child<QLabel>(window, "customWarning_0_0");
+        QVERIFY(!icon->pixmap().isNull());
+        QCOMPARE(icon->toolTip(), stale.detail);
+        QVERIFY(!window.findChild<QLabel *>(QStringLiteral("customWarning_0_1")));
+
         // Only the provider: the Custom Metrics heading disappears.
         window.updateCustomMetrics({claude});
         QVERIFY(!child<QWidget>(window, "integrationsHeader")->isHidden());

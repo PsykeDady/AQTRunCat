@@ -182,7 +182,15 @@ check "the refusal is explained" grep -qF "was not created by the AQTRunCat inst
 check "its content is kept" test -f "$cache_build/not-ours.txt"
 rm -rf "$cache_build"
 
-# An up-to-date build tree is installed without compiling.
+# An up-to-date build tree is installed without compiling. Bring it to "no
+# work to do" first: right after an incremental rebuild ninja (1.13 here)
+# can need more than one pass before its dry run is empty.
+capture --local --build-dir="$build_dir" -na
+check "--build-dir brings the build up to date" test "$rc" -eq 0
+for _ in 1 2 3 4 5 6 7 8; do
+    [[ $(cmake --build "$build_dir" -- -n 2> /dev/null) == *"no work to do"* ]] && break
+    cmake --build "$build_dir" > /dev/null 2>&1
+done
 capture --local --no-build --build-dir="$build_dir" -na
 check "--no-build with an up-to-date build succeeds" test "$rc" -eq 0
 check "--no-build compiles nothing" grep -qF "nothing is compiled" <<< "$out"
@@ -207,6 +215,10 @@ old_package=$home/.local/share/AQTRunCat/metrics/claude-code
 mkdir -p "$old_package"
 printf '%s' '{"id":"claude-code","title":"Claude Code","source":{"type":"command","executable":"/old/bin/aqtruncat-claude-metric","arguments":["snapshot","--context"],"output":"snapshot"}}' > "$old_package/metric.json"
 echo mine > "$old_package/notes.txt"
+# The same for Codex (live updates on), independently.
+old_codex=$home/.local/share/AQTRunCat/metrics/codex
+mkdir -p "$old_codex"
+printf '%s' '{"id":"codex","title":"Codex","source":{"type":"command","executable":"/old/bin/aqtruncat-codex-metric","arguments":["snapshot","--live"],"output":"snapshot"}}' > "$old_codex/metric.json"
 
 capture --local --build-dir="$build_dir"
 check "local install succeeds" test "$rc" -eq 0
@@ -216,6 +228,10 @@ check "old Claude Code package gets its provenance" grep -qF '"integration": "cl
 check "old Claude Code package runs the installed adapter" grep -qF "\"executable\": \"$home/.local/bin/aqtruncat-claude-metric\"" "$old_package/metric.json"
 check "old Claude Code package keeps its options" grep -qF '"--context"' "$old_package/metric.json"
 check "nothing else in the package is removed" test -f "$old_package/notes.txt"
+check "Codex adapter installed" test -x "$home/.local/bin/aqtruncat-codex-metric"
+check "old Codex package gets its provenance" grep -qF '"integration": "codex"' "$old_codex/metric.json"
+check "old Codex package runs the installed adapter" grep -qF "\"executable\": \"$home/.local/bin/aqtruncat-codex-metric\"" "$old_codex/metric.json"
+check "old Codex package keeps live updates" grep -qF '"--live"' "$old_codex/metric.json"
 check "other Custom Metrics untouched by the upgrade" test "$(cat "$home/.local/share/AQTRunCat/metrics/producer.json")" = "{}"
 check "binary installed" test -x "$bin"
 check "desktop entry installed" test -f "$home/.local/share/applications/aqtruncat.desktop"
@@ -287,6 +303,24 @@ alive() { # a running (not zombie) process with this PID
     stat=${stat##*) }
     [[ ${stat%% *} != Z ]]
 }
+running_from() { # running_from PID EXE: wait (≤ 5 s, also on a loaded machine) until PID runs EXE
+    local i
+    for ((i = 0; i < 50; i++)); do
+        [[ $(readlink "/proc/$1/exe" 2> /dev/null) == "$2" ]] && return 0
+        sleep 0.1
+    done
+    return 1
+}
+catches_term() { # catches_term PID: wait (≤ 5 s) until PID handles SIGTERM (its clean-exit handler is set)
+    local i key mask
+    for ((i = 0; i < 50; i++)); do
+        while read -r key mask; do
+            [[ $key == SigCgt: ]] && (((16#$mask >> 14) & 1)) && return 0
+        done < "/proc/$1/status" 2> /dev/null
+        sleep 0.1
+    done
+    return 1
+}
 start() { # start "$@" in the background and record its PID in $last
     "$@" > /dev/null 2>&1 &
     last=$!
@@ -302,8 +336,8 @@ start "$work/decoy/aqtruncat" 300; decoy=$last
 start bash -c 'exec -a aqtruncat sleep 300'; decoy_args=$last
 # A real AQTRunCat of this installation (the metrics monitor needs no display).
 start env HOME="$home" "$bin" metrics --watch; app=$last
-sleep 0.5
-check "the test instance runs" alive "$app"
+check "the test instance runs" running_from "$app" "$bin"
+check "the test instance is ready for SIGTERM" catches_term "$app"
 
 capture --dry-run --local
 check "dry run names the instance it would close" grep -qF "  running           = PID $app, would be closed" <<< "$out"
@@ -322,7 +356,8 @@ check "same-name program untouched" alive "$decoy"
 check "program with aqtruncat in its arguments untouched" alive "$decoy_args"
 
 start env HOME="$home" "$bin" metrics --watch; app=$last
-sleep 0.5
+check "the second test instance runs" running_from "$app" "$bin"
+check "the second test instance is ready for SIGTERM" catches_term "$app"
 capture --local -U
 check "uninstall with a running instance succeeds" test "$rc" -eq 0
 check "uninstall closes it first" grep -qF "Closing the running AQTRunCat (PID $app)" <<< "$out"
@@ -334,7 +369,7 @@ check "decoys still untouched after uninstall" alive "$decoy"
 capture --local --build-dir="$build_dir" -na
 cp /bin/bash "$bin"
 start "$bin" -c 'trap "" TERM; while :; do sleep 0.2; done'; stubborn=$last
-sleep 0.3
+check "the stuck instance runs" running_from "$stubborn" "$bin"
 XDG_TEST_ENV="AQTRUNCAT_STOP_TIMEOUT=1" capture --local --build-dir="$build_dir" -na
 check "a stuck instance fails the installation" test "$rc" -eq 1
 check "the failure is explained" grep -qF "did not exit within 1 s after SIGTERM; nothing was changed" <<< "$out"

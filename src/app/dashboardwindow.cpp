@@ -8,6 +8,7 @@
 #include <QGridLayout>
 #include <QHideEvent>
 #include <QShowEvent>
+#include <QStyle>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QFileInfo>
@@ -416,6 +417,17 @@ QWidget *DashboardWindow::customCard(const aqtruncat::custommetrics::Source &sou
             auto *row = new QWidget(card);
             auto *rowLayout = new QHBoxLayout(row);
             rowLayout->setContentsMargins(0, 0, 0, 0);
+            if (metric.warning) {
+                // Theme icon, with the style's own as fallback.
+                const QIcon warningIcon = QIcon::fromTheme(QStringLiteral("dialog-warning"),
+                                                           style()->standardIcon(QStyle::SP_MessageBoxWarning));
+                auto *icon = new QLabel(row);
+                icon->setObjectName(QStringLiteral("customWarning_%1_%2").arg(index).arg(itemIndex));
+                icon->setPixmap(warningIcon.pixmap(16, 16));
+                icon->setToolTip(metric.detail);
+                icon->setAccessibleName(tr("Warning"));
+                rowLayout->addWidget(icon);
+            }
             rowLayout->addWidget(label(metric.title, row));
             rowLayout->addStretch();
             auto *value = label(metric.formattedValue, row);

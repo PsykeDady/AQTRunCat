@@ -21,8 +21,10 @@
 > First instruction you will likely receive: *"Read MEMORY.md and continue
 > AQTRunCat."* → **the initial roadmap M0–M9 is COMPLETE; M9 concluded it.**
 > AQTRunCat is in post-project development. The roadmap features are F1–F6 in
-> requirements.md (§13 here). **F1 and F2 are COMPLETE. F3–F6 are NOT
-> STARTED; do not start any of them without an explicit user instruction.**
+> requirements.md (§13 here). **F1, F2 and F3 are COMPLETE (F3 Codex
+> integration implemented and validated on 2026-10-20, uncommitted at that
+> time). F4–F6 are NOT STARTED; do not start any of them without an
+> explicit user instruction.**
 
 ---
 
@@ -117,12 +119,13 @@ M8 COMPLETE   Desktop Compatibility & Polish
 M9 COMPLETE   Packaging, Installation & Release Readiness — end of the initial roadmap
 F1 COMPLETE   Custom Metrics v2 / Executable Custom Metrics
 F2 COMPLETE   Claude Code integration: usage quotas 5h/week (revised 2026-10-20), adapter over F1
-POST-PROJECT  F3–F6 roadmap features (requirements.md), NOT STARTED, need an explicit instruction
+F3 COMPLETE   Codex integration: usage limits per window (local sessions + opt-in live app-server read), adapter over F1
+POST-PROJECT  F4–F6 roadmap features (requirements.md), NOT STARTED, need an explicit instruction
 ```
 
 - Build: `cmake -S . -B build && cmake --build build && ctest --test-dir build`.
   Clean build: **0 warnings** (`-Wall -Wextra -Wpedantic` on all targets).
-- Tests: **38 ctest suites (36 Qt Test suites + Bash `installer` and
+- Tests: **40 ctest suites (38 Qt Test suites + Bash `installer` and
   `packaging-versions`), all passing** on the host (2026-10-20); containers
   skip 4 Qt cases (locale ×2, root permissions ×2).
 - Dependencies: Qt 6.5+ (`Widgets`, `Test`; dev machine has 6.11.2), libarchive
@@ -533,6 +536,10 @@ Key components:
 | Integration configuration ownership (F2) | the adapter owns package + backup; Settings runs the adapter CLI (`status --json` etc.), so GUI = CLI | one configuration, no second metric engine |
 | Integration provenance (F2) | optional top-level `"integration": "<id>"` in a **command** configuration (written by the adapter) → `CommandDefinition::integration` → `Source::integration`; empty = user Custom Metric; M6 snapshots never; never by title/icon/path. Dashboard: **Integrations** section before **Custom Metrics**, same card renderer, each source once, empty sections hidden (no "No custom metrics" label). Old unmarked package: Settings rewrites it once (`integrationMarked` in `status --json`) | user requirement 2026-10-20: provider ≠ user metric |
 | Snapshot item extensions (F2) | optional `id` (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`, unique), `detail`, `metricsBarValue`, `metricsBarLabel`; bar id `custom-item:<item>:<source>`; item without compact value = Unavailable; caption replaces the source icon | multi-value providers without Claude-specific UI code |
+| Codex integration (F3) | adapter outside the core; usage limits of the `codex` bucket per window length (labels/ids/captions from minutes); local rollouts by default, opt-in live `codex app-server` `account/rateLimits/read` ≤ every 5 min (retry 60 s, cached, no account id); newest per window; fresh 10 min, past reset/24 h hidden; never Codex config/credentials; GUI confirmation for live | user decisions 2026-10-20 (hybrid; few live reads for validation) |
+| Item warnings (2026-10-20) | optional snapshot item `"warning": true` (bool) → Dashboard warning icon (`dialog-warning`, style fallback) + detail tooltip; quota windows not current = "Out of date"/"Not reported" with warning; live updates off + a window not current → "Usage data" warning explaining when values change and where to enable live updates (Claude: adapter reads `bridgeStatus`; Codex: `--live`) | user: "Unknown" without live updates was not intuitive |
+| Test suite isolation (2026-10-20) | `installer` ctest is RUN_SERIAL; it brings the build to "no work to do" before testing `--no-build`; integration QTRY timeouts 15 s | the installer test builds the shared build tree; parallel relinks replaced binaries in use (the long-standing intermittent failures); ninja 1.13 needs several passes after incremental rebuilds |
+| Shared provider code (F3) | `src/providers/common` quota + package helpers used by both adapters; no generic provider framework | avoid copying F2 without a large refactor |
 | Installer sudo retry (2026-10-20) | `authenticate_sudo` after build/stage (and before uninstall): `sudo -v` refused → warning "wrong or expired password?"; on a TTY ask "Retry installing the build? [y/N]" (uninstall: "Retry the uninstallation?") and loop without rebuilding; N/EOF/no TTY → die, nothing changed, hint `--no-build` (build kept) | user request: expiring password should not waste the build |
 | Installer options summary (2026-10-20) | every run (also `--dry-run`) starts with "AQTRunCat installer" and `  key               = value (origin)` lines: action, installation type, rebuild, autostart, dry run, binary, data, manifest, privileges, stop timeout, distribution, running; replaced the old `Action:`/`Autostart:` dry-run plan | user request: see the options in effect at start |
 | Installer build (2026-10-20) | default = from scratch every time in persistent `${XDG_CACHE_HOME:-~/.cache}/aqtruncat/install-build` (marker `.aqtruncat-install-build`; root → root's cache); `--no-build` reuses it only if same source tree + Release + `ninja -n` "no work to do" (`make -q` otherwise), else error, nothing installed; `--build-dir` now builds all targets | user: default must stay a full build; full Release build ≈ 97 s on the dev machine (8 jobs on 4 cores + clamd), `--no-build` ≈ 0.2 s |
@@ -738,7 +745,7 @@ sample on purpose (hot-plug) — caching not needed.
 
 ## 9. Tests and validation
 
-Automated (38 ctest suites: 36 Qt suites + 2 Bash suites, 0 warnings, verified 2026-10-20 after the F2 revision — new `claudeusage` 19 and `claudestatusline` 12, `claudecodeintegration` 12, `claudecodemetric` 28 (now `--context`), custommetric 22, commandmetric 13, dashboard 14, metricsbarmodel 17, appsettings 14, installer 189 checks; earlier: 36 suites verified 2026-10-16 after F2; the per-suite table below predates F1 — F1 added `commandmetric` 10 and `commandmetricsservice` 11, and raised custommetric 16, dashboard 11, metricsbarmodel 16, metricsbarrenderer 23; F2 added `claudecodemetric` 28 and `claudecodeintegration` 6 (QtTest totals incl. data rows/init/cleanup) and +2 each to commandmetric/commandmetricsservice; tests never read the real
+Automated (40 ctest suites: 38 Qt suites + 2 Bash suites, 0 warnings, verified 2026-10-20 after F3 — new `codexusage` 17 and `codexintegration` 6, installer 198 checks (later in the day: warnings + suite isolation, 40/40 in 5 consecutive rebuild-then-test cycles); before that, after the F2 revision — new `claudeusage` 19 and `claudestatusline` 12, `claudecodeintegration` 12, `claudecodemetric` 28 (now `--context`), custommetric 22, commandmetric 13, dashboard 14, metricsbarmodel 17, appsettings 14, installer 189 checks; earlier: 36 suites verified 2026-10-16 after F2; the per-suite table below predates F1 — F1 added `commandmetric` 10 and `commandmetricsservice` 11, and raised custommetric 16, dashboard 11, metricsbarmodel 16, metricsbarrenderer 23; F2 added `claudecodemetric` 28 and `claudecodeintegration` 6 (QtTest totals incl. data rows/init/cleanup) and +2 each to commandmetric/commandmetricsservice; tests never read the real
 `/proc`; fixtures are text strings + temporary `/sys` trees; archives built
 with libarchive's writer and re-read to prove hostile names are stored):
 
@@ -857,6 +864,16 @@ before negative ints). moc silently produces an empty .moc for test files
 whose raw string literals contain `)"` (even with a custom delimiter): use
 ordinary literals there. zsh does not word-split `$var` (use arrays/python
 for arithmetic on captured pairs).
+F3 lessons (2026-10-20): a modal QMessageBox opened from an AT-SPI action
+does not appear in the AT-SPI tree of the app — check it with a KWin
+script listing `w.caption`/`w.modal` for the PID; the user may be watching
+and answer dialogs (ask before concluding). `Activate` on the runner SNI
+toggles the Dashboard (a second call hides it). The installer test's
+`--no-build` "up to date" check failed intermittently right after a CMake
+reconfiguration and fixed sleeps raced on a loaded machine: now the test
+brings the build up to date first and waits for the instance's exe and its
+SIGTERM handler (`SigCgt` bit 15). Never clean leftovers with `pkill -f`
+(done once by mistake on an exact "sleep 30" command line): exact PIDs only.
 
 ---
 
@@ -940,8 +957,8 @@ RunCat Neo custom runner names (§11).
 
 M0–M9 are complete; M9 concluded the initial roadmap. `requirements.md`
 ("AQTRunCat — Post-Project Features") is the current source for future work
-and supersedes the earlier F1–F4 post-project ordering. **F1 and F2 are
-COMPLETE. F3–F6 are NOT STARTED; do not start one without an explicit user
+and supersedes the earlier F1–F4 post-project ordering. **F1, F2 and F3 are
+COMPLETE. F4–F6 are NOT STARTED; do not start one without an explicit user
 instruction.**
 
 Development baseline: future post-project work starts from `feature/base`.
@@ -1031,7 +1048,8 @@ create or switch branches, commit or push without explicit permission.
     bar value "31%"/"<1%", caption "5h"/"7d"; item `source` "Usage data";
     with `--context` the old context items (`context` with bar value and
     caption `ctx`, Model, Session, Running sessions). Expired (past reset) /
-    >24 h → "Unknown" + reason; missing → "Not reported" + hint. No report at
+    >24 h → "Out of date" + reason (was "Unknown" until 2026-10-20), both
+    `warning: true`; missing → "Not reported" + hint (warning). No report at
     all → 69; Claude absent → 69; unreadable/unsupported cache → 1 (retry
     once after 100 ms). Cache of another account / not signed in ignored.
   - Live updates: see §5 rows; status-line helper writes only the two
@@ -1066,12 +1084,63 @@ create or switch branches, commit or push without explicit permission.
     rejected (installer never touches user data; would silently disable the
     integration and orphan a live status line).
   - Limitations: see §11 item 22 and the F2 doc §A.10.
-- **F3 — Codex Metric** (NOT STARTED; F2 left the path: a sibling
-  `src/providers/codex/` adapter emitting an F1 snapshot with exit 69 for
-  absent data, no shared AI framework yet): investigate reliable Codex usage/context/status data
-  and use the same F1 architecture principles as F2. Claude and Codex must
-  coexist; share common scheduling/state/configuration/presentation rather
-  than duplicating provider architecture.
+- **F3 — Codex Integration — COMPLETE (2026-10-20, branch managed by the
+  user; uncommitted at that time)**. Full record: `docs/F3-codex-metric.md`;
+  normative summary in requirements.md (F3 "Implemented Behaviour").
+  - Investigation (Codex CLI 0.163.0, ChatGPT Plus): `~/.codex/sessions/
+    YYYY/MM/DD/rollout-*.jsonl` `event_msg`/`token_count` carry
+    `rate_limits` {limit_id ("codex"; also "premium" with null windows;
+    null in old versions), primary/secondary {used_percent, window_minutes,
+    resets_at epoch s; old: resets_in_seconds}, plan_type,
+    rate_limit_reached_type}; written only while Codex works (user's last
+    data 13/10 → both windows already reset). `codex app-server` (stdio
+    JSON-RPC, experimental, schema via `codex app-server
+    generate-json-schema`) `initialize` → `initialized` →
+    `account/rateLimits/read` {excludeResetCreditDetails:true} returns
+    rateLimits / rateLimitsByLimitId["codex"] {primary/secondary
+    {usedPercent, windowDurationMins, resetsAt}, planType,
+    rateLimitReachedType}, ordinaryUsageAllowed, accountId; ~0.8 s wall,
+    ~0.34 s CPU, Codex uses its own login, no tokens. In 1 620 events
+    "primary" was the 7-day window (weekly-only plan) → labels/ids from the
+    window length, never the position. Rejected: sqlite DBs (threads/logs),
+    /status scraping, `codex exec`, auth.json + endpoint.
+  - User decisions: hybrid (local by default, opt-in live every 5 min); a
+    few real live reads allowed for validation.
+  - Architecture: `src/providers/common/` (`aqtruncat_provider_common`:
+    `quota.*` judgement/item format moved out of claudeusage/claudecode with
+    unchanged Claude output, `package.*` helpers now also used by the Claude
+    main); `src/providers/codex/` (`aqtruncat_codex`: `codexusage.*`;
+    `aqtruncat-codex-metric`: snapshot [--live] [--codex-home], enable
+    [--live] [--codex-home] [--force], disable, upgrade, status [--json],
+    live-updates on|off; `codexicon.h` original green bracket-gauge icon).
+    Package `metrics/codex/`, integration "codex", interval 15 s, timeout
+    30 s. Live: QProcess in its own process group (setpgid), stop = close
+    stdin, then group TERM/KILL; refresh 300 s, retry 60 s; state file
+    `$XDG_RUNTIME_DIR/aqtruncat/codex-rate-limits.json` (0600, no account
+    id, bound to the Codex home). Fresh 10 min, max age 24 h. Items
+    `window_<m>m`, titles "5h limit"/"Weekly limit"/…, captions `cx5h`/
+    `cx7d`, detail "N% left · Resets …".
+  - App: `SettingsWindow` takes `codex` (6th ctor arg); Codex panel with
+    confirmation dialog for live updates; shared
+    `integrationAvailability()` for both panels; `trayapp.cpp` creates both
+    ProviderIntegrations lazily. No change to Dashboard/Metrics Bar code
+    (F2 provenance and item ids suffice).
+  - Installer/packaging: CMake installs the adapter (install.sh, --local,
+    PKGBUILD, Debian automatically); RPM %files; install.sh runs `upgrade`
+    for both adapters; help text updated.
+  - Validation (Plasma 6 Wayland, isolated XDG, a11y on): GUI activation of
+    both integrations via AT-SPI; the live confirmation dialog was answered
+    by the user on screen; live 0% (5h, resets 23:21) / 1% (weekly, Oct 27
+    10:08), user compared with Codex `/status` and judged them matching (no
+    transcribed values); Dashboard both cards under Integrations; SNI
+    `cx5h 0%`, `cx7d 1%`, `5h —`; 163 AT-SPI samples over 45 s: no
+    "Waiting…", stable values; app 0.45 % + adapters 0.22 % of a core;
+    clean SIGTERM, no leftover; a live read verified not to modify
+    config.toml/auth.json/top-level json files (Codex's own sqlite logs not
+    checked).
+  - Limitations: local data only while using Codex; experimental app-server
+    protocol; accounts switched on the same CODEX_HOME (local data has no
+    account); no Codex context-window option.
 - **F4 — KDE Plasma Plasmoid**: an additional native Plasma frontend
   that runs **in parallel** with the generic application and **never replaces
   the generic Qt/SNI frontend** (which stays fully supported, also on Plasma);
@@ -1116,7 +1185,7 @@ create or switch branches, commit or push without explicit permission.
   external commands when practical (F1 command sources are the deliberate
   extension); keep system-wide and `--local` install; keep user data separate
   and safe on uninstall/upgrade; never sacrifice the generic app for a
-  desktop-specific frontend; F3–F6 remain future work, not implemented.
+  desktop-specific frontend; F4–F6 remain future work, not implemented.
 
 ## (historical) M9 brief
 Install target, `.desktop`, own icon, Arch PKGBUILD, Flatpak/AppImage
@@ -1180,6 +1249,9 @@ src/custommetrics/             shared Snapshot/Source model, bounded M6 parser, 
 src/cli/                       commandline (grammar/help/exit codes), runnercommands, metricscommand
 src/app/                       runtime/UI: AppSettings, MetricSampler, CustomMetricsService, CPU controller, Dashboard, Settings/preview, autostart
 src/providers/claude/          F2 Claude Code adapter (aqtruncat_claude lib: claudecode context/collect, claudeusage quotas, statuslinebridge settings.json edit; aqtruncat-claude-metric exe + icon); not linked by the core
+src/providers/common/          shared provider code (aqtruncat_provider_common: quota judgement/item format, package helpers)
+src/providers/codex/           F3 Codex adapter (aqtruncat_codex lib: codexusage local/live/state/collect; aqtruncat-codex-metric exe + icon); not linked by the core
+docs/F3-codex-metric.md        F3 investigation/sources, semantics, freshness, accounts, architecture, Settings, tests, Plasma validation
 src/app/providerintegration.*  Settings-side driver of an official integration's adapter CLI (status --json, enable, disable, live-updates)
 data/runners/<id>/metadata.json   AQTRunCat-authored metadata for bundled runners
 third_party/runcatneo/         upstream LICENSE + frames (cat, coffee bundled; engine spike-only)

@@ -4,8 +4,8 @@ This document defines the AQTRunCat feature roadmap after completion of the
 M0–M9 project roadmap. M0–M9 are complete and remain the historical and
 architectural foundation for this work.
 
-F1 and F2 are complete. F3–F6 are not started; recording them here does not
-imply that they are currently available or supported.
+F1, F2 and F3 are complete. F4–F6 are not started; recording them here does
+not imply that they are currently available or supported.
 
 The post-project roadmap is:
 
@@ -409,6 +409,58 @@ v2 infrastructure wherever practical.
 Claude Code and Codex monitoring must coexist. Provider-specific acquisition
 may differ, but common scheduling, state, configuration and presentation
 concepts should not be duplicated unnecessarily.
+
+### Implemented Behaviour (F3 complete, 2026-10-20)
+
+Record, investigation and validation: `docs/F3-codex-metric.md`. Normative:
+
+- Official integration `codex`, adapter `aqtruncat-codex-metric` (library
+  `aqtruncat_codex`, QtCore only, not linked by the core), run as an F1
+  command (`output: "snapshot"`, interval 15 s, timeout 30 s), package
+  `$XDG_DATA_HOME/AQTRunCat/metrics/codex/` with `"integration": "codex"`
+  (Dashboard › Integrations, never Custom Metrics). Shared provider code in
+  `src/providers/common/` (`aqtruncat_provider_common`: quota judgement and
+  item format, package helpers), also used by Claude Code without changing
+  its output.
+- Primary values: Codex usage limits of the `codex` limit bucket (other
+  buckets ignored; no `limit_id` = `codex`), one item per reported window,
+  labelled and identified by its length (`window_minutes` /
+  `windowDurationMins`: 300 → "5h limit"/`window_300m`/`cx5h`, 10080 →
+  "Weekly limit"/`window_10080m`/`cx7d`, others "Daily", "N-day", "Nh",
+  "N-minute"), never by position: percentage used, remaining
+  (`100 − used`), reset in the local time zone, progress bar; "limit
+  reached" at ≥ 100 % and from `rate_limit_reached_type` /
+  `ordinaryUsageAllowed: false`. Never the context window, token counts,
+  API billing or credits.
+- Sources (user decision: hybrid): default = the newest `token_count`
+  `rate_limits` in `$CODEX_HOME` (or `~/.codex`) `sessions/**/rollout-*.jsonl`
+  and `archived_sessions/` (newest 8 files by modification time, tails up to
+  8 MiB; only lines with `"token_count"` and `"rate_limits"` are parsed);
+  opt-in live updates (Settings checkbox with confirmation, or
+  `live-updates on`, recorded only in the package as `--live`) = `codex
+  app-server` over stdio, `initialize` → `account/rateLimits/read`
+  (`excludeResetCreditDetails`), at most every 5 minutes, failures retried
+  after 60 s, cached in `$XDG_RUNTIME_DIR/aqtruncat/codex-rate-limits.json`
+  (0600; no account id; bound to the Codex home). Newest report per window
+  wins. Codex configuration and credentials are never read or written by
+  AQTRunCat; no prompt, no usage consumed.
+- Freshness: > 10 min "as of"; past reset or > 24 h not shown ("Out of
+  date", warning); never 0 for missing.
+- Warnings (both integrations, user request 2026-10-20): snapshot items may
+  carry `"warning": true` (generic, optional, boolean), shown by the
+  Dashboard with the theme's warning icon; out-of-date windows are "Out of
+  date" and missing ones "Not reported", both warnings; with live updates
+  off and a window not current, the "Usage data" item is a warning that
+  says when values change and where to turn live updates on. Codex absent or no report → Unavailable (69);
+  unreadable data or failed live read without any data → Error (1).
+- Settings › Integrations: Codex panel (enable, status, live updates,
+  note), independent from Claude Code; GUI and CLI (`enable [--live]`,
+  `disable`, `upgrade`, `status --json`, `live-updates on|off`) share the
+  package. Metrics Bar: per-window items, captions `cx…`, nothing added
+  automatically, 3-item limit unchanged.
+- Installation: installed by all mechanisms (CMake install; RPM `%files`);
+  `install.sh` runs `upgrade` for both integrations; Codex optional at
+  runtime.
 
 
 ## F4 — KDE Plasma Plasmoid

@@ -105,6 +105,9 @@ if(AQTRUNCAT_BASH)
     add_test(NAME installer
              COMMAND ${AQTRUNCAT_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/installer/test_install.sh
                      ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR})
+    # It builds (and may relink) this very build tree through --build-dir:
+    # never at the same time as tests that are running its executables.
+    set_tests_properties(installer PROPERTIES RUN_SERIAL TRUE)
 endif()
 if(AQTRUNCAT_BASH)
     add_test(NAME packaging-versions
@@ -118,6 +121,12 @@ qt_add_executable(tst_claudecodemetric tst_claudecodemetric.cpp)
 target_link_libraries(tst_claudecodemetric PRIVATE aqtruncat_claude Qt6::Test)
 target_compile_options(tst_claudecodemetric PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME claudecodemetric COMMAND tst_claudecodemetric)
+
+# F3 Codex adapter: synthetic Codex homes and a fake "codex" app-server.
+qt_add_executable(tst_codexusage tst_codexusage.cpp)
+target_link_libraries(tst_codexusage PRIVATE aqtruncat_codex Qt6::Test)
+target_compile_options(tst_codexusage PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME codexusage COMMAND tst_codexusage)
 
 foreach(name claudeusage claudestatusline)
     qt_add_executable(tst_${name} tst_${name}.cpp)
@@ -134,3 +143,13 @@ target_compile_definitions(tst_claudecodeintegration PRIVATE
 add_dependencies(tst_claudecodeintegration aqtruncat-claude-metric)
 add_test(NAME claudecodeintegration COMMAND tst_claudecodeintegration)
 set_tests_properties(claudecodeintegration PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+qt_add_executable(tst_codexintegration tst_codexintegration.cpp)
+target_link_libraries(tst_codexintegration PRIVATE aqtruncat_desktop Qt6::Test Qt6::Widgets)
+target_compile_options(tst_codexintegration PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(tst_codexintegration PRIVATE
+    AQTRUNCAT_CODEX_ADAPTER="$<TARGET_FILE:aqtruncat-codex-metric>"
+    AQTRUNCAT_CLAUDE_ADAPTER="$<TARGET_FILE:aqtruncat-claude-metric>")
+add_dependencies(tst_codexintegration aqtruncat-codex-metric aqtruncat-claude-metric)
+add_test(NAME codexintegration COMMAND tst_codexintegration)
+set_tests_properties(codexintegration PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

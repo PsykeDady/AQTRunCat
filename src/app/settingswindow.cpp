@@ -12,6 +12,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QFormLayout>
+#include <QFrame>
 #include <QFileDialog>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -59,12 +60,13 @@ QGroupBox *group(const QString &title, QWidget *parent)
 
 SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOption> runners,
                                CustomMetricsService *customMetrics, QWidget *parent,
-                               ProviderIntegration *claude)
+                               ProviderIntegration *claude, ProviderIntegration *codex)
     : QWidget(parent, Qt::Tool)
     , m_settings(settings)
     , m_customMetrics(customMetrics)
     , m_runners(std::move(runners))
     , m_claude(claude)
+    , m_codex(codex)
 {
     setObjectName(QStringLiteral("settingsWindow"));
     setWindowTitle(tr("AQTRunCat Settings"));
@@ -124,13 +126,32 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
     networkLayout->addWidget(m_interfaces);
     root->addWidget(networkBox);
 
-    if (m_claude) {
+    QGroupBox *integrationsBox = nullptr;
+    QVBoxLayout *integrations = nullptr;
+    auto providerName = [&](const QString &text) {
+        auto *name = new QLabel(text, integrationsBox);
+        QFont bold = name->font();
+        bold.setBold(true);
+        name->setFont(bold);
+        integrations->addWidget(name);
+    };
+    auto secondaryLabel = [&](const char *objectName) {
+        auto *label = new QLabel(integrationsBox);
+        label->setObjectName(QLatin1String(objectName));
+        label->setWordWrap(true);
+        label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        integrations->addWidget(label);
+        return label;
+    };
+    if (m_claude || m_codex) {
         // Official integrations: AQTRunCat-supported providers whose adapter
         // owns their configuration (see ProviderIntegration), as opposed to
         // the user-defined Custom Metrics below.
-        auto *integrationsBox = group(tr("Integrations"), this);
+        integrationsBox = group(tr("Integrations"), this);
         integrationsBox->setObjectName(QStringLiteral("integrationsGroup"));
-        auto *integrations = new QVBoxLayout(integrationsBox);
+        integrations = new QVBoxLayout(integrationsBox);
+    }
+    if (m_claude) {
         auto *name = new QLabel(tr("Claude Code"), integrationsBox);
         QFont bold = name->font();
         bold.setBold(true);
@@ -182,8 +203,38 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
         m_claudeMessage->setTextInteractionFlags(Qt::TextSelectableByMouse);
         m_claudeMessage->hide();
         integrations->addWidget(m_claudeMessage);
-        root->addWidget(integrationsBox);
     }
+    if (m_codex) {
+        if (m_claude) {
+            auto *separator = new QFrame(integrationsBox);
+            separator->setFrameShape(QFrame::HLine);
+            separator->setFrameShadow(QFrame::Sunken);
+            integrations->addWidget(separator);
+        }
+        providerName(tr("Codex"));
+        auto *description = new QLabel(
+            tr("Your Codex usage limits as Codex's /status shows them (for example the 5-hour and the "
+               "weekly limit), with their reset times, in the Dashboard and, if you select them, in the "
+               "Metrics Bar."),
+            integrationsBox);
+        description->setWordWrap(true);
+        integrations->addWidget(description);
+        m_codexEnabled = new QCheckBox(tr("Show Codex usage"), integrationsBox);
+        m_codexEnabled->setObjectName(QStringLiteral("codexEnabled"));
+        integrations->addWidget(m_codexEnabled);
+        m_codexStatus = secondaryLabel("codexStatus");
+        m_codexLive = new QCheckBox(tr("Live updates from Codex every 5 minutes"), integrationsBox);
+        m_codexLive->setObjectName(QStringLiteral("codexLiveUpdates"));
+        integrations->addWidget(m_codexLive);
+        m_codexLiveNote = secondaryLabel("codexLiveNote");
+        QFont secondary = m_codexLiveNote->font();
+        secondary.setPointSizeF(secondary.pointSizeF() * 0.9);
+        m_codexLiveNote->setFont(secondary);
+        m_codexMessage = secondaryLabel("codexMessage");
+        m_codexMessage->hide();
+    }
+    if (integrationsBox)
+        root->addWidget(integrationsBox);
 
     auto *customBox = group(tr("Custom Metrics"), this);
     auto *customLayout = new QVBoxLayout(customBox);
@@ -378,13 +429,80 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
             m_claudeMessage->setVisible(!message.isEmpty());
         });
         if (m_customMetrics)
-            connect(m_customMetrics, &CustomMetricsService::sourcesChanged, this, [this] { updateClaudeAvailability(); });
+            connect(m_customMetrics, &CustomMetricsService::sourcesChanged, this, [this] { updateIntegrationAvailability(); });
         syncClaude();
         m_claude->refresh();
+    }
+    if (m_codex) {
+        connect(m_codexEnabled, &QCheckBox::toggled, this, [this](bool checked) {
+            m_codex->run(checked ? QStringList{QStringLiteral("enable")} : QStringList{QStringLiteral("disable")});
+        });
+        connect(m_codexLive, &QCheckBox::toggled, this, [this](bool checked) {
+            if (checked) {
+                const auto answer = QMessageBox::question(
+                    this, tr("Turn On Live Updates"),
+                    tr("Every 5 minutes AQTRunCat will start \"codex app-server\" and ask it for your current "
+                       "usage limits. Codex contacts OpenAI with its own login to answer; no prompt is sent, "
+                       "no usage is consumed and nothing in your Codex configuration is changed.\n\n"
+                       "Without live updates AQTRunCat shows the limits Codex recorded in its session files "
+                       "the last time you used it.\n\nTurn on live updates?"));
+                if (answer != QMessageBox::Yes) {
+                    syncCodex();
+                    return;
+                }
+            }
+            m_codex->run({QStringLiteral("live-updates"), checked ? QStringLiteral("on") : QStringLiteral("off")});
+        });
+        connect(m_codex, &ProviderIntegration::statusChanged, this, [this] {
+            syncCodex();
+            rebuildCustomMetrics();
+        });
+        connect(m_codex, &ProviderIntegration::busyChanged, this, [this] { syncCodex(); });
+        connect(m_codex, &ProviderIntegration::commandFinished, this, [this](bool ok, const QString &message) {
+            m_codexMessage->setText(ok ? message : tr("Error: %1").arg(message));
+            m_codexMessage->setVisible(!message.isEmpty());
+        });
+        if (m_customMetrics && !m_claude)
+            connect(m_customMetrics, &CustomMetricsService::sourcesChanged, this, [this] { updateIntegrationAvailability(); });
+        syncCodex();
+        m_codex->refresh();
     }
     syncFromSettings();
     rebuildCustomMetrics();
     rebuildMetricsBar();
+}
+
+void SettingsWindow::syncCodex()
+{
+    if (!m_codex)
+        return;
+    const QJsonObject &status = m_codex->status();
+    const bool enabled = status.value(QStringLiteral("enabled")).toBool();
+    const bool live = status.value(QStringLiteral("liveUpdates")).toString() == QLatin1String("on");
+    {
+        const QSignalBlocker blockEnabled(m_codexEnabled);
+        const QSignalBlocker blockLive(m_codexLive);
+        m_codexEnabled->setChecked(enabled);
+        m_codexLive->setChecked(live);
+    }
+    const bool idle = m_codex->installed() && m_codex->statusKnown() && !m_codex->busy();
+    m_codexEnabled->setEnabled(idle && !status.value(QStringLiteral("userPackage")).toBool());
+    m_codexLive->setEnabled(idle && enabled);
+    QString note;
+    if (live) {
+        const QDateTime last = QDateTime::fromString(status.value(QStringLiteral("lastLiveReport")).toString(), Qt::ISODate);
+        note = last.isValid() ? tr("Last live report: %1.").arg(QLocale().toString(last.toLocalTime(), QLocale::ShortFormat))
+                              : tr("No live report yet.");
+        if (const QString error = status.value(QStringLiteral("liveError")).toString(); !error.isEmpty())
+            note += u' ' + tr("The last attempt failed: %1").arg(error);
+        if (status.value(QStringLiteral("codexExecutable")).toString().isEmpty())
+            note += u' ' + tr("The codex executable was not found in PATH.");
+    } else {
+        note = tr("Off: values are those Codex recorded the last time you used it. Turning this on asks Codex "
+                  "(codex app-server) every 5 minutes; Codex contacts OpenAI with its own login.");
+    }
+    m_codexLiveNote->setText(note);
+    updateIntegrationAvailability();
 }
 
 QStringList SettingsWindow::claudeEnableArguments() const
@@ -458,47 +576,52 @@ void SettingsWindow::syncClaude()
     if (const QString error = status.value(QStringLiteral("settingsError")).toString(); !error.isEmpty())
         note += u' ' + tr("Cannot use it: %1").arg(error);
     m_claudeLiveNote->setText(note);
-    updateClaudeAvailability();
+    updateIntegrationAvailability();
 }
 
-void SettingsWindow::updateClaudeAvailability()
+QString SettingsWindow::integrationAvailability(const ProviderIntegration *integration, const QString &adapter,
+                                               const QString &provider, const QString &foundKey) const
 {
-    if (!m_claude)
-        return;
-    const QJsonObject &status = m_claude->status();
-    QString text;
-    if (!m_claude->installed()) {
-        text = tr("Not available: aqtruncat-claude-metric is not installed.");
-    } else if (!m_claude->statusKnown()) {
-        text = m_claude->lastError().isEmpty() ? tr("Checking…") : tr("Error: %1").arg(m_claude->lastError());
-    } else if (status.value(QStringLiteral("userPackage")).toBool()) {
-        text = tr("A user-defined Custom Metric already uses the id \"claude-code\" (%1); AQTRunCat does not "
-                  "replace it.").arg(status.value(QStringLiteral("metricFile")).toString());
-    } else if (!status.value(QStringLiteral("enabled")).toBool()) {
-        text = status.value(QStringLiteral("claudeFound")).toBool() ? tr("Off.")
-                                                                    : tr("Off. Claude Code was not found on this system.");
-    } else {
-        const QString file = integrationMetricFile();
-        text = tr("On — waiting for the first update…");
-        if (m_customMetrics) {
-            for (const aqtruncat::custommetrics::Source &source : m_customMetrics->sources()) {
-                if (QDir::cleanPath(source.path) != file)
-                    continue;
-                switch (source.state) {
-                case aqtruncat::custommetrics::State::Available: text = tr("On — available."); break;
-                case aqtruncat::custommetrics::State::Pending:
-                    if (source.snapshot && !source.snapshot->metrics.isEmpty())
-                        text = tr("On — available.");
-                    break;
-                case aqtruncat::custommetrics::State::Unavailable:
-                    text = tr("On — unavailable: %1").arg(source.message);
-                    break;
-                case aqtruncat::custommetrics::State::Error: text = tr("On — error: %1").arg(source.message); break;
-                }
-            }
+    const QJsonObject &status = integration->status();
+    if (!integration->installed())
+        return tr("Not available: %1 is not installed.").arg(adapter);
+    if (!integration->statusKnown())
+        return integration->lastError().isEmpty() ? tr("Checking…") : tr("Error: %1").arg(integration->lastError());
+    if (status.value(QStringLiteral("userPackage")).toBool()) {
+        return tr("A user-defined Custom Metric already uses the id \"%1\" (%2); AQTRunCat does not replace it.")
+            .arg(integration->id(), status.value(QStringLiteral("metricFile")).toString());
+    }
+    if (!status.value(QStringLiteral("enabled")).toBool())
+        return status.value(foundKey).toBool() ? tr("Off.") : tr("Off. %1 was not found on this system.").arg(provider);
+    // The integration's own source in the shared F1 service.
+    const QString file = QDir::cleanPath(status.value(QStringLiteral("metricFile")).toString());
+    QString text = tr("On — waiting for the first update…");
+    if (!m_customMetrics)
+        return text;
+    for (const aqtruncat::custommetrics::Source &source : m_customMetrics->sources()) {
+        if (QDir::cleanPath(source.path) != file)
+            continue;
+        switch (source.state) {
+        case aqtruncat::custommetrics::State::Available: text = tr("On — available."); break;
+        case aqtruncat::custommetrics::State::Pending:
+            if (source.snapshot && !source.snapshot->metrics.isEmpty())
+                text = tr("On — available.");
+            break;
+        case aqtruncat::custommetrics::State::Unavailable: text = tr("On — unavailable: %1").arg(source.message); break;
+        case aqtruncat::custommetrics::State::Error: text = tr("On — error: %1").arg(source.message); break;
         }
     }
-    m_claudeStatus->setText(text);
+    return text;
+}
+
+void SettingsWindow::updateIntegrationAvailability()
+{
+    if (m_claude)
+        m_claudeStatus->setText(integrationAvailability(m_claude, QStringLiteral("aqtruncat-claude-metric"),
+                                                        tr("Claude Code"), QStringLiteral("claudeFound")));
+    if (m_codex)
+        m_codexStatus->setText(integrationAvailability(m_codex, QStringLiteral("aqtruncat-codex-metric"),
+                                                       tr("Codex"), QStringLiteral("codexFound")));
 }
 
 bool SettingsWindow::addCustomMetricFile(const QString &path, QString *error)

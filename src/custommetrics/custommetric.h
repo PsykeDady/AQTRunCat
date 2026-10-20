@@ -48,11 +48,14 @@ struct Item {
     // AQTRunCat extensions, all optional (RunCat Neo ignores unknown keys).
     // An id plus a metricsBarValue make the item selectable on its own in the
     // Metrics Bar; detail is a secondary line under the value; the label is
-    // a short caption for the bar ("5h") shown instead of the source icon.
+    // a short caption for the bar ("5h") shown instead of the source icon;
+    // warning marks an item that needs the user's attention (out-of-date or
+    // missing data), shown with a warning icon.
     QString id = {};
     QString detail = {};
     std::optional<QString> metricsBarValue = {};
     QString metricsBarLabel = {};
+    bool warning = false;
 };
 
 // Shared presentation snapshot. M6 parses this from producer-owned RunCat Neo

@@ -149,6 +149,7 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
 
     // Created with the (lazy) Settings window, destroyed after it.
     std::unique_ptr<ProviderIntegration> claudeIntegration;
+    std::unique_ptr<ProviderIntegration> codexIntegration;
     std::unique_ptr<SettingsWindow> settingsWindow;
     std::vector<aqtruncat::metrics::InterfaceMetrics> latestInterfaces;
     QObject::connect(&metrics, &MetricSampler::snapshotReady, &app,
@@ -172,8 +173,10 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
                 options.append({activeRunner.id, activeRunner.displayName, activeRunner.source});
             claudeIntegration = std::make_unique<ProviderIntegration>(
                 QStringLiteral("claude-code"), ProviderIntegration::findAdapter(QStringLiteral("aqtruncat-claude-metric")));
+            codexIntegration = std::make_unique<ProviderIntegration>(
+                QStringLiteral("codex"), ProviderIntegration::findAdapter(QStringLiteral("aqtruncat-codex-metric")));
             settingsWindow = std::make_unique<SettingsWindow>(&settings, std::move(options), &customMetrics, nullptr,
-                                                              claudeIntegration.get());
+                                                              claudeIntegration.get(), codexIntegration.get());
             settingsWindow->setActiveRunner(activeRunner);
             settingsWindow->setAvailableInterfaces(latestInterfaces);
         }

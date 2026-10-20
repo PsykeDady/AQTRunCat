@@ -9,6 +9,7 @@
 #include "claudeicon.h"
 #include "claudeusage.h"
 #include "statuslinebridge.h"
+#include "common/package.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -17,8 +18,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QSaveFile>
-#include <QStandardPaths>
 #include <QStringList>
 
 #include <cstdio>
@@ -86,13 +85,12 @@ void usage(FILE *stream)
 
 QString dataDirectory()
 {
-    return QDir(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)).filePath(QStringLiteral("AQTRunCat"));
+    return aqtruncat::providers::aqtruncatDataDirectory();
 }
 
 QString packageDirectory()
 {
-    // Same location AQTRunCat discovers packages in (custommetricpaths.cpp).
-    return dataDirectory() + QStringLiteral("/metrics/") + QLatin1String(MetricId);
+    return aqtruncat::providers::packageDirectory(QLatin1String(MetricId));
 }
 
 QString metricFile()
@@ -109,27 +107,21 @@ aqtruncat::claude::BridgePaths bridgePaths(const QString &configDirectory)
 
 QJsonObject readMetric(const QString &path)
 {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return {};
-    return QJsonDocument::fromJson(file.read(1024 * 1024)).object();
+    return aqtruncat::providers::readJsonObject(path);
 }
 
 // A package is ours when its metric.json has our id and runs an executable
 // named like this one; only such a package is replaced or removed.
 bool managedPackage(const QJsonObject &metric)
 {
-    const QString executable = metric.value(QStringLiteral("source")).toObject()
-                                   .value(QStringLiteral("executable")).toString();
-    return metric.value(QStringLiteral("id")) == QLatin1String(MetricId)
-        && QFileInfo(executable).fileName() == QLatin1String(ExecutableName);
+    return aqtruncat::providers::isManagedPackage(metric, QLatin1String(MetricId), QLatin1String(ExecutableName));
 }
 
 bool writeAtomically(const QString &path, const QByteArray &contents)
 {
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly) || file.write(contents) != contents.size() || !file.commit()) {
-        printErr(QStringLiteral("%1: cannot write %2: %3").arg(QLatin1String(ExecutableName), path, file.errorString()));
+    QString error;
+    if (!aqtruncat::providers::writeFileAtomically(path, contents, &error)) {
+        printErr(QStringLiteral("%1: %2").arg(QLatin1String(ExecutableName), error));
         return false;
     }
     return true;
@@ -247,11 +239,7 @@ int disable(const QString &configDirectory)
 
 QString packageOption(const QJsonArray &arguments, const QString &option)
 {
-    for (int i = 0; i + 1 < arguments.size(); ++i) {
-        if (arguments.at(i) == option)
-            return arguments.at(i + 1).toString();
-    }
-    return {};
+    return aqtruncat::providers::packageOption(arguments, option);
 }
 
 // --config-dir, else the Claude Code directory the package was enabled for,
@@ -493,6 +481,8 @@ int main(int argc, char *argv[])
         options.globalConfigFile = aqtruncat::claude::globalConfigFile(
             options.configDirectory, !line.configDirectory.isEmpty() || qEnvironmentVariableIsSet("CLAUDE_CONFIG_DIR"));
         options.bridgeStateFile = aqtruncat::claude::bridgeStateFile();
+        options.liveUpdatesOn = aqtruncat::claude::bridgeStatus(bridgePaths(options.configDirectory)).state
+            == aqtruncat::claude::BridgeState::On;
         options.includeContext = line.context;
         options.cwdFilter = line.cwdFilter;
         const aqtruncat::claude::Outcome outcome = aqtruncat::claude::collect(options);

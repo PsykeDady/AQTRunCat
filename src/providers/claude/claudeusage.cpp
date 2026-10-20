@@ -6,7 +6,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <QLocale>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QThread>
@@ -265,39 +264,12 @@ QuotaChoice chooseQuota(QuotaWindow window, const QuotaSourceResult &cache, cons
         choice.reading = a ? a : b;
     if (!choice.reading)
         return choice;
-    const QuotaReading &reading = *choice.reading;
-    const qint64 age = reading.observedAt.secsTo(now);
-    if (reading.resetsAt.isValid() && reading.resetsAt <= now)
-        choice.presence = QuotaPresence::Expired;
-    else if (age > MaximumReportAgeSeconds)
-        choice.presence = QuotaPresence::TooOld;
-    else
-        choice.presence = QuotaPresence::Current;
-    choice.stale = choice.presence == QuotaPresence::Current && age > FreshForSeconds;
+    const aqtruncat::providers::QuotaJudgement judgement = aqtruncat::providers::judgeQuota(
+        aqtruncat::providers::QuotaValue{choice.reading->usedPercent, choice.reading->resetsAt, choice.reading->observedAt},
+        now, FreshForSeconds, MaximumReportAgeSeconds);
+    choice.presence = judgement.presence;
+    choice.stale = judgement.stale;
     return choice;
-}
-
-QString quotaPercentText(double percent)
-{
-    if (std::floor(percent) == percent)
-        return QString::number(qint64(percent)) + u'%';
-    return QString::number(percent, 'f', 1) + u'%';
-}
-
-QString quotaCompactText(double percent)
-{
-    if (percent > 0.0 && percent < 1.0)
-        return QStringLiteral("<1%");
-    return QString::number(qRound64(percent)) + u'%';
-}
-
-QString formatMoment(const QDateTime &moment, const QDateTime &now, const QTimeZone &zone)
-{
-    const QDateTime local = moment.toTimeZone(zone);
-    const QString time = local.time().toString(QStringLiteral("HH:mm"));
-    if (local.date() == now.toTimeZone(zone).date())
-        return time;
-    return QLocale::c().toString(local.date(), QStringLiteral("MMM d")) + QStringLiteral(", ") + time;
 }
 
 } // namespace aqtruncat::claude

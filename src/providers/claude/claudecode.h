@@ -106,6 +106,7 @@ struct Options {
     QString configDirectory;
     QString globalConfigFile;  // .claude.json (claudeusage.h globalConfigFile)
     QString bridgeStateFile;   // live-updates state; empty: not used
+    bool liveUpdatesOn = false; // the status-line bridge is configured
     QString procRoot = QStringLiteral("/proc");
     bool includeContext = false;
     QString cwdFilter; // context: only sessions whose cwd is this directory or below

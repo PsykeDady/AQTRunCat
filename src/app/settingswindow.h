@@ -28,10 +28,11 @@ class SettingsWindow : public QWidget
     Q_OBJECT
 
 public:
-    // claude: the Claude Code integration (F2); nullptr hides the section.
+    // claude/codex: the official integrations (F2 Claude Code, F3 Codex);
+    // nullptr hides that panel (and the section when both are null).
     SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOption> runners,
                    CustomMetricsService *customMetrics = nullptr, QWidget *parent = nullptr,
-                   ProviderIntegration *claude = nullptr);
+                   ProviderIntegration *claude = nullptr, ProviderIntegration *codex = nullptr);
 
     void showAndRaise();
     void setActiveRunner(const aqtruncat::Runner &runner);
@@ -50,7 +51,10 @@ private:
     void storeMetricsBarItems();
     void moveMetricsBarItem(int delta);
     void syncClaude();
-    void updateClaudeAvailability();
+    void updateIntegrationAvailability(); // both integrations' status lines
+    void syncCodex();
+    QString integrationAvailability(const ProviderIntegration *integration, const QString &adapter,
+                                    const QString &provider, const QString &foundKey) const;
     QStringList claudeEnableArguments() const;
     QString integrationMetricFile() const;
 
@@ -88,4 +92,11 @@ private:
     QLineEdit *m_claudeCwd = nullptr;
     QPushButton *m_claudeBrowse = nullptr;
     QLabel *m_claudeMessage = nullptr;
+
+    ProviderIntegration *m_codex = nullptr;
+    QCheckBox *m_codexEnabled = nullptr;
+    QLabel *m_codexStatus = nullptr;
+    QCheckBox *m_codexLive = nullptr;
+    QLabel *m_codexLiveNote = nullptr;
+    QLabel *m_codexMessage = nullptr;
 };

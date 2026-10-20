@@ -111,8 +111,9 @@ Card “Claude Code” (titolo e icona del package):
 |---|---|
 | segnalazione ≤ 5 minuti fa | valore e reset |
 | segnalazione > 5 minuti fa | valore, reset e `· as of HH:MM` (con data se di un altro giorno) |
-| la finestra è stata resettata dopo la segnalazione (`resets_at` passato) | `Unknown` — *The window reset at 13:30; no newer report yet*; nessuna barra, nessun valore nella Metrics Bar |
-| segnalazione più vecchia di 24 ore (solo la settimanale può arrivarci) | `Unknown` — *The last report (…) is too old to show* |
+| la finestra è stata resettata dopo la segnalazione (`resets_at` passato) | ⚠ `Out of date` — *The window reset at 13:30; no newer report yet*; nessuna barra, nessun valore nella Metrics Bar (prima del 2026-10-20 il testo era `Unknown`; vedi F3 doc §11) |
+| segnalazione più vecchia di 24 ore (solo la settimanale può arrivarci) | ⚠ `Out of date` — *The last report (…) is too old to show* |
+| live updates spenti e una finestra non corrente | ⚠ *Usage data*: *Live updates are off: values change only when you open /usage in Claude Code. Turn them on in AQTRunCat Settings › Integrations.* |
 | una sola finestra presente (piano senza 5h, o dato parziale) | l'altra `Not reported` con l'indicazione di aprire `/usage` o attivare i live updates |
 | nessuna segnalazione di nessuna finestra | Unavailable (exit 69): *No Claude Code usage report yet: open /usage …* |
 | cache di un altro account / Claude Code non autenticato | ignorata, con il motivo nel messaggio |
@@ -391,6 +392,15 @@ fuorviante: è un'integrazione ufficiale, non una metrica dell'utente.
   ([F2-claude-code-metric/dashboard-sections.png](F2-claude-code-metric/dashboard-sections.png));
   dopo `disable` dalla CLI il titolo Integrations scompare. Suite completa
   38/38, build pulita senza warning.
+
+## A.14 Modulo condiviso con F3 (2026-10-20)
+
+Con l'integrazione Codex (F3, `docs/F3-codex-metric.md`) il giudizio di
+freschezza/reset e il formato delle voci quota sono stati spostati in
+`src/providers/common/quota.*` e gli helper del package in
+`src/providers/common/package.*` (libreria `aqtruncat_provider_common`).
+L'output di Claude Code è invariato: tutti i test F2 passano senza
+modifiche.
 
 ---
 
