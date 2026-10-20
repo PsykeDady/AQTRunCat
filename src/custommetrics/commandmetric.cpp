@@ -109,6 +109,14 @@ CommandParseResult parseCommandJson(const QByteArray &json, const QString &confi
     if (!parseSymbol(object.value(QStringLiteral("symbol")), baseDirectory,
                      definition.legacySymbol, definition.icon, result.error))
         return result;
+    const QJsonValue integration = object.value(QStringLiteral("integration"));
+    if (!integration.isUndefined()) {
+        if (!integration.isString() || !validId.match(integration.toString()).hasMatch()) {
+            result.error = QStringLiteral("field \"integration\" must match [A-Za-z0-9][A-Za-z0-9._-]{0,99}");
+            return result;
+        }
+        definition.integration = integration.toString();
+    }
 
     const QJsonObject source = sourceValue.toObject();
     if (!requiredString(source, "executable", definition.configuredExecutable, result.error))

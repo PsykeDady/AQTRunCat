@@ -63,6 +63,16 @@ bool isBuiltInId(const QString &id);
 QString customId(const QString &sourceId);
 bool isCustomId(const QString &id);
 QString sourceIdFromCustomId(const QString &id);
+// One item of a multi-value source: "custom-item:<item id>:<source id>". The
+// item id (custommetrics::isValidItemId) never contains ':', so any source id
+// can follow it unambiguously.
+QString customItemId(const QString &sourceId, const QString &itemId);
+bool isCustomItemId(const QString &id);
+QString sourceIdFromCustomItemId(const QString &id);
+QString itemIdFromCustomItemId(const QString &id);
+// The items of a snapshot that can be selected on their own: an id and a
+// nonempty metricsBarValue.
+bool isSelectableItem(const aqtruncat::custommetrics::Item &item);
 // A built-in id or a well-formed custom id: what a selection may contain.
 bool isKnownId(const QString &id);
 
@@ -96,6 +106,7 @@ private:
     void rebuild();
     std::optional<aqtruncat::metricsbar::Item> builtIn(const aqtruncat::metricsbar::BuiltInMetric &metric) const;
     std::optional<aqtruncat::metricsbar::Item> custom(const QString &id) const;
+    std::optional<aqtruncat::metricsbar::Item> customItem(const QString &id) const;
 
     std::string m_homePath;
     bool m_enabled = false;

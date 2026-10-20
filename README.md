@@ -27,6 +27,8 @@ the primary target is KDE Plasma 6 on Wayland.
   activity, read directly from `/proc`, `/sys` and `statvfs`.
 - **Custom Metrics**: keep using RunCat Neo-compatible JSON snapshots, or let
   AQTRunCat periodically run an explicitly configured executable.
+- **Integrations**: Claude Code plan usage (current 5-hour session and
+  current week, as on Claude Code's `/usage` screen), switched on in Settings.
 - **Metrics Bar** (off by default): up to 3 compact values, built-in or
   custom, as extra tray icons next to the runner.
 - **Settings** window, start at login, and a command line (`aqtruncat --help`).
@@ -67,8 +69,16 @@ From the source tree, as your normal user:
 
 The installer checks the build requirements (and prints the exact package
 command for Arch, Fedora or Debian/Ubuntu if something is missing), builds a
-Release binary in a temporary directory and installs it. A system-wide install
-uses `sudo` only to copy the files; `--local` never uses it. Running it again
+Release binary from scratch in `~/.cache/aqtruncat/install-build` (emptied
+first and kept afterwards) and installs it. A full build takes a minute or
+two; to install that same build again without compiling, use `--no-build`
+(it is refused, and nothing is installed, if the build is missing, from
+another source tree, not Release, or older than the sources). A system-wide install
+uses `sudo` only to copy the files; `--local` never uses it. If `sudo` refuses
+after the build (for example an expired password), the installer asks whether
+to retry (after you fix it, e.g. with `passwd` in another terminal) instead of
+starting over; answering N changes nothing, and `--no-build` installs the
+kept build later. Running it again
 updates the installation in place.
 
 | Option | Meaning |
@@ -78,7 +88,8 @@ updates the installation in place.
 | `-A`, `--autostart=true` | start at login (**the default**) |
 | `-na`, `--autostart=false` | do not start at login |
 | `-U`, `--uninstall` | uninstall (add `--local` for a local installation) |
-| `--dry-run` | show what would happen |
+| `--no-build` | install the existing build in `~/.cache/aqtruncat/install-build` without compiling (must be up to date) |
+| `--dry-run` | show what would happen (every run starts with a summary of the effective options) |
 | `-h`, `--help` | full help |
 
 Start at login is a per-user preference, also for a system-wide install: it is
@@ -97,6 +108,19 @@ autostart entry if it starts that installation. **Your settings
 
 If `~/.local/bin` is not in your `PATH`, the installer says so; the menu
 entry and autostart use the full path, and your shell files are never edited.
+
+**A running AQTRunCat is closed first.** Before an update replaces files, or
+an uninstall removes them, the installer sends SIGTERM (the same clean exit as
+*Quit AQTRunCat*) to your AQTRunCat processes whose executable is exactly that
+installation's `bin/aqtruncat`, and waits up to 10 seconds. Nothing is matched
+by name, so Claude Code, other programs and an AQTRunCat started from another
+location are never touched. If it does not exit in time, the installer stops
+with an error and changes nothing; it never kills it. The build, the checks
+and the `sudo` password all come before this step, so a failed build leaves
+your running AQTRunCat alone. It is not restarted afterwards: start it again
+from the menu. `--dry-run` shows which process would be closed. With `sudo`,
+other users' instances of a system-wide installation are reported but not
+stopped.
 
 ### As a distribution package
 
@@ -205,38 +229,67 @@ snapshot object (`"output": "snapshot"`) to show several values in one card,
 and exit with status 69 to report that its data source is absent
 (Unavailable rather than Error).
 
-### Claude Code metric
+### Claude Code usage (Integrations)
 
-AQTRunCat ships an optional, read-only Claude Code metric:
-`aqtruncat-claude-metric`, installed next to `aqtruncat`. It is off until you
-enable it, and Claude Code is not required to install or run AQTRunCat:
+AQTRunCat officially supports Claude Code. In **Settings → Integrations**
+tick *Show Claude Code usage*: the Dashboard gets a **Claude Code** card with
+the two plan-usage indicators of Claude Code's `/usage` screen, each with its
+own progress bar and reset time (in your time zone):
+
+- **Current session (5h)** – how much of the rolling 5-hour usage window is
+  used, e.g. `31% used`, *Resets at 13:30*;
+- **Current week (all models)** – the 7-day window, e.g. `11% used`,
+  *Resets Oct 23, 20:00*.
+
+Where the data comes from:
+
+- **Without any change to Claude Code** AQTRunCat reads the usage that
+  Claude Code itself saved the last time `/usage` was opened (in
+  `~/.claude.json`). It is exactly what `/usage` showed, but it only changes
+  when you open `/usage` again, so an older value says *as of HH:MM*, a value
+  from before its window's reset is not shown at all, and a weekly value is
+  dropped after a day.
+- **Live updates** (optional, a second checkbox): Claude Code reports usage
+  after every response, but only to a *status line* command. Turning this on
+  sets `"statusLine"` in `~/.claude/settings.json` – after asking you, and
+  changing nothing else in that file – to AQTRunCat's small status-line
+  helper, which stores the two percentages and reset times and then runs
+  your own status line, if you had one, with the same input. Turning it off
+  (or disabling the integration) puts your previous `statusLine` back
+  exactly. While any status line is configured, Claude Code shows fewer
+  keyboard hints in its footer.
+
+The card appears in the Dashboard's **Integrations** section, separate from
+your own Custom Metrics (empty sections are not shown). Nothing is sent
+anywhere, no prompts or tokens are used and no credentials are read; unavailable data is shown as such, never as 0%. Optionally the card can
+also show the context window of the most recently active Claude Code session
+(a different thing: how full that conversation's context is). The quotas are
+not added to the Metrics Bar by themselves; pick *Claude Code — Current
+session (5h)* and/or *Claude Code — Current week (all models)* there.
+
+The same switches exist on the command line, and both always show the same
+state:
 
 ```bash
-aqtruncat-claude-metric enable                  # most recently active session
-aqtruncat-claude-metric enable --cwd ~/my/repo  # or only sessions in a project
-aqtruncat-claude-metric disable
+aqtruncat-claude-metric enable [--context [--cwd DIR]]
+aqtruncat-claude-metric live-updates on|off
+aqtruncat-claude-metric status
+aqtruncat-claude-metric disable      # also turns live updates off
+aqtruncat-claude-metric upgrade      # done by install.sh after an update
 ```
 
-`enable` writes `~/.local/share/AQTRunCat/metrics/claude-code/`; AQTRunCat
-picks it up at once and shows a **Claude Code** card in the Dashboard with the
-context-window use of the running Claude Code session (input tokens of its
-latest response over the 200k or 1M window), the model, the session's project
-and status, and how many sessions are running. Every 10 seconds it reads
-Claude Code's local session registry and the tail of that session's
-transcript: no network, no prompts sent, no tokens used, nothing written to
-`~/.claude`, and no conversation text or credentials in the output. It is not
-added to the Metrics Bar by itself; choose it in Settings to see the context
-percentage there. Account usage limits (the 5-hour/7-day allowance) are not
-shown: Claude Code does not store them locally. Details, the exact meaning of
-every value and the limitations:
+Claude Code is not required to install or run AQTRunCat. Details, sources,
+exact semantics and limitations:
 [docs/F2-claude-code-metric.md](docs/F2-claude-code-metric.md).
 
 ### Metrics Bar
 
 Enable it in Settings and choose up to **three** metrics (CPU, memory, swap,
-network down/up, Root/Home storage, disk read/write, or a Custom Metric with
-a `metricsBarValue`). Each one is a small tray icon next to the runner; hover
-it for the full value. The runner itself is always there and is not counted.
+network down/up, Root/Home storage, disk read/write, a Custom Metric with
+a `metricsBarValue`, or a single value of a multi-value metric such as the
+Claude Code 5-hour or weekly usage, shown as `5h`/`7d` over the percentage).
+Each one is a small tray icon next to the runner; hover it for the full value.
+The runner itself is always there and is not counted.
 
 ## Known limitations
 

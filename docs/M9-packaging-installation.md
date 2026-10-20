@@ -81,6 +81,14 @@ degli argomenti non conta. Fallimenti → exit 1.
    famiglia rilevata ed esce; **non installa pacchetti**.
 2. Build Release senza test in una directory temporanea (`mktemp`, rimossa
    all'uscita), con Ninja se disponibile.
+   > Nota (2026-10-20): la build ora avviene, sempre da zero, in
+   > `${XDG_CACHE_HOME:-~/.cache}/aqtruncat/install-build` (svuotata solo se
+   > creata dall'installer, file marcatore `.aqtruncat-install-build`;
+   > conservata dopo; per root la cache di root). `--no-build` installa quella
+   > build senza compilare, solo se esiste, è di questo sorgente, è Release e
+   > `ninja -n`/`make -q` non ha nulla da fare; altrimenti errore e nessuna
+   > installazione. `--build-dir=DIR` ora aggiorna tutti i target (prima solo
+   > `aqtruncat`: l'adattatore Claude poteva restare vecchio).
 3. Staging con `cmake --install --prefix /` in `DESTDIR`; sono ammessi solo
    `bin/` e `share/`, mappati sulle destinazioni (§2). Ogni destinazione deve
    stare sotto la directory bin o data scelta, senza componenti `.`/`..`.
@@ -90,6 +98,11 @@ degli argomenti non conta. Fallimenti → exit 1.
 5. Copia con `install -D` (sostituisce anche un binario in esecuzione); `sudo`
    solo se una destinazione non è scrivibile e solo per copie, rimozioni e
    manifest. Mai per la build, mai con `--local`.
+   > Nota (F2, 2026-10-20): prima della copia (e prima della rimozione in
+   > `--uninstall`) l'installer ora chiude con SIGTERM l'AQTRunCat in
+   > esecuzione di questa installazione e dell'utente reale, con attesa
+   > limitata, senza SIGKILL e senza riavvio; se non esce, si ferma senza
+   > modificare nulla. Dettagli in `docs/F2-claude-code-metric.md` §A.8.
 6. Manifest con l'elenco dei file; su reinstallazione i file del vecchio
    manifest non più installati vengono rimossi (aggiornamento idempotente).
 7. Autostart tramite `aqtruncat autostart enable|disable`, eseguito come

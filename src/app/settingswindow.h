@@ -9,11 +9,13 @@
 class QCheckBox;
 class QComboBox;
 class QLabel;
+class QLineEdit;
 class QRadioButton;
 class QTreeWidget;
 class QPushButton;
 class RunnerPreviewWidget;
 class CustomMetricsService;
+class ProviderIntegration;
 
 struct RunnerOption {
     QString id;
@@ -26,8 +28,10 @@ class SettingsWindow : public QWidget
     Q_OBJECT
 
 public:
+    // claude: the Claude Code integration (F2); nullptr hides the section.
     SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOption> runners,
-                   CustomMetricsService *customMetrics = nullptr, QWidget *parent = nullptr);
+                   CustomMetricsService *customMetrics = nullptr, QWidget *parent = nullptr,
+                   ProviderIntegration *claude = nullptr);
 
     void showAndRaise();
     void setActiveRunner(const aqtruncat::Runner &runner);
@@ -45,6 +49,10 @@ private:
     void rebuildMetricsBar();
     void storeMetricsBarItems();
     void moveMetricsBarItem(int delta);
+    void syncClaude();
+    void updateClaudeAvailability();
+    QStringList claudeEnableArguments() const;
+    QString integrationMetricFile() const;
 
     aqtruncat::AppSettings *m_settings = nullptr;
     CustomMetricsService *m_customMetrics = nullptr;
@@ -69,4 +77,15 @@ private:
     QPushButton *m_metricsBarUp = nullptr;
     QPushButton *m_metricsBarDown = nullptr;
     QLabel *m_metricsBarCount = nullptr;
+
+    ProviderIntegration *m_claude = nullptr;
+    bool m_claudeMigrated = false;
+    QCheckBox *m_claudeEnabled = nullptr;
+    QLabel *m_claudeStatus = nullptr;
+    QCheckBox *m_claudeLive = nullptr;
+    QLabel *m_claudeLiveNote = nullptr;
+    QCheckBox *m_claudeContext = nullptr;
+    QLineEdit *m_claudeCwd = nullptr;
+    QPushButton *m_claudeBrowse = nullptr;
+    QLabel *m_claudeMessage = nullptr;
 };

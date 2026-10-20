@@ -36,6 +36,11 @@ struct CommandDefinition {
     QString configurationPath;
     QString id;
     QString title;
+    // Provenance: the official provider integration that owns this
+    // configuration ("claude-code"), from the optional top-level
+    // "integration" field written by that integration's adapter. Empty for
+    // the user's own Custom Metrics. Presentation only: execution is the same.
+    QString integration;
     std::optional<IconReference> icon;
     std::optional<QString> legacySymbol;
     QString configuredExecutable;

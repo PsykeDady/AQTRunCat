@@ -164,16 +164,22 @@ DashboardWindow::DashboardWindow(std::string homePath, QWidget *parent)
     m_layout->addWidget(twoValues(tr("Read"), &m_diskRead, "diskRead",
                                   tr("Write"), &m_diskWrite, "diskWrite", this));
 
-    auto *customHeader = sectionHeader(tr("Custom Metrics"), this);
-    customHeader->setObjectName(QStringLiteral("customMetricsHeader"));
-    m_layout->addWidget(customHeader);
-    auto *custom = new QWidget(this);
-    custom->setObjectName(QStringLiteral("customMetricsContainer"));
-    m_customLayout = new QVBoxLayout(custom);
-    m_customLayout->setContentsMargins(0, 0, 0, 0);
-    m_customLayout->setSpacing(8);
-    m_customLayout->addWidget(label(tr("No custom metrics"), custom, "customMetricsEmpty"));
-    m_layout->addWidget(custom);
+    auto section = [this](const QString &title, const char *name, QWidget *&header, QWidget *&container,
+                          QVBoxLayout *&layout) {
+        header = sectionHeader(title, this);
+        header->setObjectName(QStringLiteral("%1Header").arg(QLatin1String(name)));
+        m_layout->addWidget(header);
+        container = new QWidget(this);
+        container->setObjectName(QStringLiteral("%1Container").arg(QLatin1String(name)));
+        layout = new QVBoxLayout(container);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(8);
+        m_layout->addWidget(container);
+        header->hide(); // until there is something to show
+        container->hide();
+    };
+    section(tr("Integrations"), "integrations", m_integrationsHeader, m_integrationsContainer, m_integrationsLayout);
+    section(tr("Custom Metrics"), "customMetrics", m_customHeader, m_customContainer, m_customLayout);
     m_layout->addStretch();
 }
 
@@ -343,111 +349,135 @@ void DashboardWindow::updateCustomMetrics(const QList<aqtruncat::custommetrics::
 void DashboardWindow::rebuildCustomMetrics()
 {
     m_customDirty = false;
-    const QList<aqtruncat::custommetrics::Source> &sources = m_customSources;
-    while (QLayoutItem *item = m_customLayout->takeAt(0)) {
-        if (QWidget *widget = item->widget())
-            delete widget;
-        delete item;
-    }
-    if (sources.isEmpty()) {
-        m_customLayout->addWidget(label(tr("No custom metrics"), this, "customMetricsEmpty"));
-        return;
-    }
-
-    int sourceIndex = 0;
-    for (const aqtruncat::custommetrics::Source &source : sources) {
-        auto *card = new QWidget(this);
-        card->setObjectName(QStringLiteral("customSource_%1").arg(sourceIndex));
-        auto *cardLayout = new QVBoxLayout(card);
-        cardLayout->setContentsMargins(0, 2, 0, 6);
-        cardLayout->setSpacing(3);
-
-        const QString fallbackTitle = QFileInfo(source.path).completeBaseName();
-        const QString titleText = source.snapshot ? source.snapshot->title : fallbackTitle;
-        QString heading = titleText;
-        const QIcon icon = source.snapshot ? customSymbolIcon(source.snapshot->icon) : QIcon();
-        const QString symbol = source.snapshot && icon.isNull()
-            ? customSymbolText(source.snapshot->symbol) : QString();
-        if (!symbol.isEmpty())
-            heading = symbol + QStringLiteral("  ") + heading;
-        auto *headingRow = new QWidget(card);
-        auto *headingLayout = new QHBoxLayout(headingRow);
-        headingLayout->setContentsMargins(0, 0, 0, 0);
-        headingLayout->setSpacing(6);
-        if (!icon.isNull()) {
-            auto *iconLabel = new QLabel(headingRow);
-            iconLabel->setObjectName(QStringLiteral("customIcon_%1").arg(sourceIndex));
-            iconLabel->setPixmap(icon.pixmap(16, 16));
-            headingLayout->addWidget(iconLabel);
+    for (QVBoxLayout *layout : {m_integrationsLayout, m_customLayout}) {
+        while (QLayoutItem *item = layout->takeAt(0)) {
+            if (QWidget *widget = item->widget())
+                delete widget;
+            delete item;
         }
-        auto *title = label(heading, card);
-        title->setObjectName(QStringLiteral("customTitle_%1").arg(sourceIndex));
-        QFont font = title->font();
-        font.setBold(true);
-        title->setFont(font);
-        headingLayout->addWidget(title);
-        headingLayout->addStretch();
-        cardLayout->addWidget(headingRow);
+    }
+    // Integrations first, as in Settings; each keeps the service's order.
+    // Card indexes run across both sections.
+    int index = 0;
+    int integrations = 0;
+    int custom = 0;
+    for (const bool official : {true, false}) {
+        for (const aqtruncat::custommetrics::Source &source : std::as_const(m_customSources)) {
+            if (source.integration.isEmpty() == official)
+                continue;
+            (official ? m_integrationsLayout : m_customLayout)->addWidget(customCard(source, index++));
+            ++(official ? integrations : custom);
+        }
+    }
+    m_integrationsHeader->setVisible(integrations > 0);
+    m_integrationsContainer->setVisible(integrations > 0);
+    m_customHeader->setVisible(custom > 0);
+    m_customContainer->setVisible(custom > 0);
+}
 
-        if (source.snapshot) {
-            int itemIndex = 0;
-            for (const aqtruncat::custommetrics::Item &metric : source.snapshot->metrics) {
-                auto *row = new QWidget(card);
-                auto *rowLayout = new QHBoxLayout(row);
-                rowLayout->setContentsMargins(0, 0, 0, 0);
-                rowLayout->addWidget(label(metric.title, row));
-                rowLayout->addStretch();
-                auto *value = label(metric.formattedValue, row);
-                value->setObjectName(QStringLiteral("customValue_%1_%2").arg(sourceIndex).arg(itemIndex));
-                rowLayout->addWidget(value);
-                cardLayout->addWidget(row);
-                if (metric.normalizedValue) {
-                    auto *bar = new QProgressBar(card);
-                    bar->setTextVisible(false);
-                    bar->setObjectName(QStringLiteral("customProgress_%1_%2").arg(sourceIndex).arg(itemIndex));
-                    setProgress(bar, std::clamp(*metric.normalizedValue, 0.0, 1.0) * 100.0);
-                    cardLayout->addWidget(bar);
-                }
-                ++itemIndex;
+QWidget *DashboardWindow::customCard(const aqtruncat::custommetrics::Source &source, int index)
+{
+    auto *card = new QWidget(this);
+    card->setObjectName(QStringLiteral("customSource_%1").arg(index));
+    auto *cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(0, 2, 0, 6);
+    cardLayout->setSpacing(3);
+
+    const QString fallbackTitle = QFileInfo(source.path).completeBaseName();
+    const QString titleText = source.snapshot ? source.snapshot->title : fallbackTitle;
+    QString heading = titleText;
+    const QIcon icon = source.snapshot ? customSymbolIcon(source.snapshot->icon) : QIcon();
+    const QString symbol = source.snapshot && icon.isNull()
+        ? customSymbolText(source.snapshot->symbol) : QString();
+    if (!symbol.isEmpty())
+        heading = symbol + QStringLiteral("  ") + heading;
+    auto *headingRow = new QWidget(card);
+    auto *headingLayout = new QHBoxLayout(headingRow);
+    headingLayout->setContentsMargins(0, 0, 0, 0);
+    headingLayout->setSpacing(6);
+    if (!icon.isNull()) {
+        auto *iconLabel = new QLabel(headingRow);
+        iconLabel->setObjectName(QStringLiteral("customIcon_%1").arg(index));
+        iconLabel->setPixmap(icon.pixmap(16, 16));
+        headingLayout->addWidget(iconLabel);
+    }
+    auto *title = label(heading, card);
+    title->setObjectName(QStringLiteral("customTitle_%1").arg(index));
+    QFont font = title->font();
+    font.setBold(true);
+    title->setFont(font);
+    headingLayout->addWidget(title);
+    headingLayout->addStretch();
+    cardLayout->addWidget(headingRow);
+
+    if (source.snapshot) {
+        int itemIndex = 0;
+        for (const aqtruncat::custommetrics::Item &metric : source.snapshot->metrics) {
+            auto *row = new QWidget(card);
+            auto *rowLayout = new QHBoxLayout(row);
+            rowLayout->setContentsMargins(0, 0, 0, 0);
+            rowLayout->addWidget(label(metric.title, row));
+            rowLayout->addStretch();
+            auto *value = label(metric.formattedValue, row);
+            value->setObjectName(QStringLiteral("customValue_%1_%2").arg(index).arg(itemIndex));
+            rowLayout->addWidget(value);
+            cardLayout->addWidget(row);
+            if (metric.normalizedValue) {
+                auto *bar = new QProgressBar(card);
+                bar->setTextVisible(false);
+                bar->setObjectName(QStringLiteral("customProgress_%1_%2").arg(index).arg(itemIndex));
+                bar->setAccessibleName(metric.title);
+                setProgress(bar, std::clamp(*metric.normalizedValue, 0.0, 1.0) * 100.0);
+                cardLayout->addWidget(bar);
             }
+            if (!metric.detail.isEmpty()) {
+                auto *detail = label(metric.detail, card);
+                detail->setObjectName(QStringLiteral("customDetail_%1_%2").arg(index).arg(itemIndex));
+                QFont secondary = detail->font();
+                secondary.setPointSizeF(secondary.pointSizeF() * 0.9);
+                detail->setFont(secondary);
+                detail->setWordWrap(true);
+                detail->setContentsMargins(0, 0, 0, 4); // apart from the next item
+                cardLayout->addWidget(detail);
+            }
+            ++itemIndex;
         }
-
-        // A refresh with a previous valid value stays Pending internally but
-        // keeps presenting the last settled state; only the first execution
-        // (no valid value yet) shows "Waiting…".
-        aqtruncat::custommetrics::State shownState = source.state;
-        QString shownMessage = source.message;
-        if (source.state == aqtruncat::custommetrics::State::Pending && hasValidCustomValue(source)) {
-            const auto settled = m_customSettled.constFind(settledKey(source));
-            shownState = settled != m_customSettled.cend() ? settled->state
-                                                           : aqtruncat::custommetrics::State::Available;
-            shownMessage = settled != m_customSettled.cend() ? settled->message : QString();
-        }
-
-        QString footer;
-        switch (shownState) {
-        case aqtruncat::custommetrics::State::Available:
-            footer = source.snapshot
-                ? tr("Last updated: %1").arg(QLocale().toString(source.snapshot->lastUpdatedDate.toLocalTime(), QLocale::ShortFormat))
-                : tr("Available");
-            break;
-        case aqtruncat::custommetrics::State::Pending:
-            footer = tr("Waiting…");
-            break;
-        case aqtruncat::custommetrics::State::Unavailable:
-            footer = tr("Unavailable");
-            break;
-        case aqtruncat::custommetrics::State::Error:
-            footer = tr("Error");
-            break;
-        }
-        auto *status = label(footer, card);
-        status->setObjectName(QStringLiteral("customStatus_%1").arg(sourceIndex));
-        status->setToolTip(shownMessage);
-        cardLayout->addWidget(status);
-        m_customLayout->addWidget(card);
-        ++sourceIndex;
     }
+
+    // A refresh with a previous valid value stays Pending internally but
+    // keeps presenting the last settled state; only the first execution
+    // (no valid value yet) shows "Waiting…".
+    aqtruncat::custommetrics::State shownState = source.state;
+    QString shownMessage = source.message;
+    if (source.state == aqtruncat::custommetrics::State::Pending && hasValidCustomValue(source)) {
+        const auto settled = m_customSettled.constFind(settledKey(source));
+        shownState = settled != m_customSettled.cend() ? settled->state
+                                                       : aqtruncat::custommetrics::State::Available;
+        shownMessage = settled != m_customSettled.cend() ? settled->message : QString();
+    }
+
+    QString footer;
+    switch (shownState) {
+    case aqtruncat::custommetrics::State::Available:
+        footer = source.snapshot
+            ? tr("Last updated: %1").arg(QLocale().toString(source.snapshot->lastUpdatedDate.toLocalTime(), QLocale::ShortFormat))
+            : tr("Available");
+        break;
+    case aqtruncat::custommetrics::State::Pending:
+        footer = tr("Waiting…");
+        break;
+    case aqtruncat::custommetrics::State::Unavailable:
+        footer = tr("Unavailable");
+        break;
+    case aqtruncat::custommetrics::State::Error:
+        footer = tr("Error");
+        break;
+    }
+    auto *status = label(footer, card);
+    status->setObjectName(QStringLiteral("customStatus_%1").arg(index));
+    status->setToolTip(shownMessage);
+    cardLayout->addWidget(status);
+    return card;
 }
 
 void DashboardWindow::toggleVisible()

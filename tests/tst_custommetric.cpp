@@ -122,6 +122,42 @@ private slots:
         QTest::newRow("date-invalid")
             << QByteArray(R"({"title":"x","metrics":[],"lastUpdatedDate":"yesterday"})")
             << QStringLiteral("ISO 8601");
+        QTest::newRow("item-id-invalid")
+            << QByteArray(R"({"title":"x","metrics":[{"title":"y","formattedValue":"1","id":"a b"}],"lastUpdatedDate":"2026-01-01T00:00:00Z"})")
+            << QStringLiteral("metrics[0].id");
+        QTest::newRow("item-id-colon")
+            << QByteArray(R"({"title":"x","metrics":[{"title":"y","formattedValue":"1","id":"a:b"}],"lastUpdatedDate":"2026-01-01T00:00:00Z"})")
+            << QStringLiteral("metrics[0].id");
+        QTest::newRow("item-id-duplicate")
+            << QByteArray(R"({"title":"x","metrics":[{"title":"y","formattedValue":"1","id":"a"},{"title":"z","formattedValue":"2","id":"a"}],"lastUpdatedDate":"2026-01-01T00:00:00Z"})")
+            << QStringLiteral("not unique");
+        QTest::newRow("item-detail-type")
+            << QByteArray(R"({"title":"x","metrics":[{"title":"y","formattedValue":"1","detail":5}],"lastUpdatedDate":"2026-01-01T00:00:00Z"})")
+            << QStringLiteral("detail");
+        QTest::newRow("item-bar-value-type")
+            << QByteArray(R"({"title":"x","metrics":[{"title":"y","formattedValue":"1","metricsBarValue":[]}],"lastUpdatedDate":"2026-01-01T00:00:00Z"})")
+            << QStringLiteral("metricsBarValue");
+    }
+
+    void itemIdsDetailsAndOwnBarValues()
+    {
+        // AQTRunCat extensions of a snapshot item, all optional.
+        const ParseResult result = parseJson(R"({"title":"Usage","metrics":[
+            {"title":"Current session","formattedValue":"3% used","normalizedValue":0.03,
+             "id":"five_hour","detail":"Resets at 13:30","metricsBarValue":"3%","metricsBarLabel":"5h"},
+            {"title":"Plain","formattedValue":"x","detail":null}],
+            "lastUpdatedDate":"2026-01-01T00:00:00Z"})");
+        QVERIFY2(result.snapshot, qPrintable(result.error));
+        const Item &quota = result.snapshot->metrics.at(0);
+        QCOMPARE(quota.id, QStringLiteral("five_hour"));
+        QCOMPARE(quota.detail, QStringLiteral("Resets at 13:30"));
+        QCOMPARE(*quota.metricsBarValue, QStringLiteral("3%"));
+        QCOMPARE(quota.metricsBarLabel, QStringLiteral("5h"));
+        const Item &plain = result.snapshot->metrics.at(1);
+        QVERIFY(plain.id.isEmpty() && plain.detail.isEmpty() && !plain.metricsBarValue && plain.metricsBarLabel.isEmpty());
+        QVERIFY(isValidItemId(QStringLiteral("seven_day.v2-x")));
+        QVERIFY(!isValidItemId(QStringLiteral("-x")));
+        QVERIFY(!isValidItemId(QString(65, u'a')));
     }
 
     void rejectsMalformedMissingAndWrongTypes()

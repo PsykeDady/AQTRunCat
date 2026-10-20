@@ -37,10 +37,22 @@ enum class State {
     Error,
 };
 
+// Item ids are short, stable keys chosen by the producer.
+inline constexpr qsizetype MaxItemIdCharacters = 64;
+bool isValidItemId(const QString &id);
+
 struct Item {
     QString title;
     QString formattedValue;
     std::optional<double> normalizedValue;
+    // AQTRunCat extensions, all optional (RunCat Neo ignores unknown keys).
+    // An id plus a metricsBarValue make the item selectable on its own in the
+    // Metrics Bar; detail is a secondary line under the value; the label is
+    // a short caption for the bar ("5h") shown instead of the source icon.
+    QString id = {};
+    QString detail = {};
+    std::optional<QString> metricsBarValue = {};
+    QString metricsBarLabel = {};
 };
 
 // Shared presentation snapshot. M6 parses this from producer-owned RunCat Neo
@@ -68,6 +80,10 @@ struct Source {
     bool discovered = false;
     SourceType type = SourceType::Snapshot;
     QString configuredId;       // command configuration id; empty for M6 snapshots
+    // Official provider integration owning the source (CommandDefinition::
+    // integration); empty = a user-defined Custom Metric. Never derived from
+    // title, symbol or path; M6 snapshots are always user-defined.
+    QString integration;
     State state = State::Pending;
     QString message;
     std::optional<Snapshot> snapshot; // last known good snapshot, retained on failure

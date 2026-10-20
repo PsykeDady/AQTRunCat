@@ -4,12 +4,17 @@
 #include <QDateTime>
 #include <QList>
 #include <QString>
+#include <QTimeZone>
 
 #include <optional>
 
 // F2 Claude Code adapter: read-only acquisition from Claude Code's local
 // state, turned into one F1 snapshot (custom metric "output": "snapshot").
-// Only QtCore; the AQTRunCat core never links this code. Sources:
+// Only QtCore; the AQTRunCat core never links this code.
+//
+// Primary values: the plan usage quotas of /usage (claudeusage.h). Optional
+// secondary values (--context): the context window of the most recently
+// active session, from
 //
 //   <config>/sessions/<pid>.json         live-session registry (internal,
 //                                        Claude Code >= 2.1.x): pid,
@@ -99,14 +104,19 @@ QString formatTokens(qint64 tokens);
 
 struct Options {
     QString configDirectory;
+    QString globalConfigFile;  // .claude.json (claudeusage.h globalConfigFile)
+    QString bridgeStateFile;   // live-updates state; empty: not used
     QString procRoot = QStringLiteral("/proc");
-    QString cwdFilter; // only sessions whose cwd is this directory or below
+    bool includeContext = false;
+    QString cwdFilter; // context: only sessions whose cwd is this directory or below
     QDateTime now = QDateTime::currentDateTimeUtc();
+    QTimeZone timeZone = QTimeZone::systemTimeZone();
 };
 
-// Exit status contract for F1: 0 with a snapshot on stdout, 69
-// (EX_UNAVAILABLE) when Claude Code or a running session is absent, 1 for
-// unreadable or unsupported data. The diagnostic goes to stderr.
+// Exit status contract for F1: 0 with a snapshot on stdout; 69
+// (EX_UNAVAILABLE) when Claude Code is not installed, or when there is no
+// usage report at all (and no context section was asked for); 1 when local
+// data cannot be read or is not understood. The diagnostic goes to stderr.
 struct Outcome {
     int exitCode = 0;
     QByteArray standardOutput;

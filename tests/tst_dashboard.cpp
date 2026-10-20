@@ -7,6 +7,7 @@
 #include <QProgressBar>
 #include <QSignalSpy>
 #include <QScrollArea>
+#include <QRegularExpression>
 #include <QTest>
 #include <QTemporaryDir>
 
@@ -185,7 +186,68 @@ private slots:
         window.updateCustomMetrics({available});
         QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Unavailable"));
         window.updateCustomMetrics({});
-        QCOMPARE(child<QLabel>(window, "customMetricsEmpty")->text(), QStringLiteral("No custom metrics"));
+        // Empty sections are hidden with their heading.
+        QVERIFY(child<QWidget>(window, "customMetricsHeader")->isHidden());
+        QVERIFY(child<QWidget>(window, "customMetricsContainer")->isHidden());
+        QVERIFY(child<QWidget>(window, "integrationsHeader")->isHidden());
+    }
+
+    void integrationsAndCustomMetricsAreSeparateSections()
+    {
+        DashboardWindow window("/home/alice");
+        window.show();
+        auto source = [](const QString &path, const QString &title, const QString &integration) {
+            aqtruncat::custommetrics::Snapshot snapshot;
+            snapshot.title = title;
+            snapshot.lastUpdatedDate = QDateTime::currentDateTimeUtc();
+            snapshot.metrics.append({QStringLiteral("Value"), QStringLiteral("1"), std::nullopt});
+            aqtruncat::custommetrics::Source result;
+            result.id = path;
+            result.path = path;
+            result.state = aqtruncat::custommetrics::State::Available;
+            result.integration = integration;
+            result.snapshot = snapshot;
+            return result;
+        };
+        // Service order: a user metric, the provider, a legacy M6 snapshot
+        // whose title is the same as the provider's.
+        const auto mine = source(QStringLiteral("/m/temperature/metric.json"), QStringLiteral("Temperature"), {});
+        const auto claude = source(QStringLiteral("/m/claude-code/metric.json"), QStringLiteral("Claude Code"),
+                                   QStringLiteral("claude-code"));
+        const auto lookalike = source(QStringLiteral("/m/claude.json"), QStringLiteral("Claude Code"), {});
+        window.updateCustomMetrics({mine, claude, lookalike});
+
+        auto *integrations = child<QWidget>(window, "integrationsContainer");
+        auto *custom = child<QWidget>(window, "customMetricsContainer");
+        QVERIFY(!child<QWidget>(window, "integrationsHeader")->isHidden());
+        QVERIFY(!child<QWidget>(window, "customMetricsHeader")->isHidden());
+        QCOMPARE(child<QLabel>(window, "integrationsHeader")->text(), QStringLiteral("Integrations"));
+        // Integrations first; each card exactly once, in its own section.
+        QCOMPARE(child<QLabel>(window, "customTitle_0")->text(), QStringLiteral("Claude Code"));
+        QCOMPARE(child<QWidget>(window, "customSource_0")->parentWidget(), integrations);
+        QCOMPARE(child<QLabel>(window, "customTitle_1")->text(), QStringLiteral("Temperature"));
+        QCOMPARE(child<QWidget>(window, "customSource_1")->parentWidget(), custom);
+        QCOMPARE(child<QLabel>(window, "customTitle_2")->text(), QStringLiteral("Claude Code"));
+        QCOMPARE(child<QWidget>(window, "customSource_2")->parentWidget(), custom);
+        QVERIFY(!window.findChild<QWidget *>(QStringLiteral("customSource_3")));
+        QCOMPARE(integrations->findChildren<QWidget *>(QRegularExpression(QStringLiteral("^customSource_"))).size(), 1);
+        QCOMPARE(custom->findChildren<QWidget *>(QRegularExpression(QStringLiteral("^customSource_"))).size(), 2);
+
+        // Only the provider: the Custom Metrics heading disappears.
+        window.updateCustomMetrics({claude});
+        QVERIFY(!child<QWidget>(window, "integrationsHeader")->isHidden());
+        QVERIFY(child<QWidget>(window, "customMetricsHeader")->isHidden());
+        // Only user metrics: no Integrations heading.
+        window.updateCustomMetrics({mine, lookalike});
+        QVERIFY(child<QWidget>(window, "integrationsHeader")->isHidden());
+        QVERIFY(!child<QWidget>(window, "customMetricsHeader")->isHidden());
+
+        // A hidden Dashboard applies the classification when shown.
+        window.hide();
+        window.updateCustomMetrics({claude});
+        window.show();
+        QVERIFY(child<QWidget>(window, "customMetricsHeader")->isHidden());
+        QCOMPARE(child<QWidget>(window, "customSource_0")->parentWidget(), integrations);
     }
 
     void manyCustomSnapshotsStayInsideScrollableDashboard()

@@ -3,17 +3,22 @@
 #include "runnerpreviewwidget.h"
 #include "custommetricsservice.h"
 #include "metricsbarmodel.h"
+#include "providerintegration.h"
 
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFileInfo>
+#include <QDir>
 #include <QFormLayout>
 #include <QFileDialog>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QJsonObject>
 #include <QLabel>
+#include <QLineEdit>
+#include <QLocale>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
@@ -53,11 +58,13 @@ QGroupBox *group(const QString &title, QWidget *parent)
 } // namespace
 
 SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOption> runners,
-                               CustomMetricsService *customMetrics, QWidget *parent)
+                               CustomMetricsService *customMetrics, QWidget *parent,
+                               ProviderIntegration *claude)
     : QWidget(parent, Qt::Tool)
     , m_settings(settings)
     , m_customMetrics(customMetrics)
     , m_runners(std::move(runners))
+    , m_claude(claude)
 {
     setObjectName(QStringLiteral("settingsWindow"));
     setWindowTitle(tr("AQTRunCat Settings"));
@@ -116,6 +123,67 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
     m_interfaces->setUniformRowHeights(true);
     networkLayout->addWidget(m_interfaces);
     root->addWidget(networkBox);
+
+    if (m_claude) {
+        // Official integrations: AQTRunCat-supported providers whose adapter
+        // owns their configuration (see ProviderIntegration), as opposed to
+        // the user-defined Custom Metrics below.
+        auto *integrationsBox = group(tr("Integrations"), this);
+        integrationsBox->setObjectName(QStringLiteral("integrationsGroup"));
+        auto *integrations = new QVBoxLayout(integrationsBox);
+        auto *name = new QLabel(tr("Claude Code"), integrationsBox);
+        QFont bold = name->font();
+        bold.setBold(true);
+        name->setFont(bold);
+        integrations->addWidget(name);
+        auto *description = new QLabel(
+            tr("Your Claude plan usage as on Claude Code's /usage screen: the current 5-hour session "
+               "window and the current week (all models), with their reset times, in the Dashboard "
+               "and, if you select them, in the Metrics Bar."),
+            integrationsBox);
+        description->setWordWrap(true);
+        integrations->addWidget(description);
+        m_claudeEnabled = new QCheckBox(tr("Show Claude Code usage"), integrationsBox);
+        m_claudeEnabled->setObjectName(QStringLiteral("claudeEnabled"));
+        integrations->addWidget(m_claudeEnabled);
+        m_claudeStatus = new QLabel(integrationsBox);
+        m_claudeStatus->setObjectName(QStringLiteral("claudeStatus"));
+        m_claudeStatus->setWordWrap(true);
+        m_claudeStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        integrations->addWidget(m_claudeStatus);
+        m_claudeLive = new QCheckBox(tr("Live updates through Claude Code's status line"), integrationsBox);
+        m_claudeLive->setObjectName(QStringLiteral("claudeLiveUpdates"));
+        integrations->addWidget(m_claudeLive);
+        m_claudeLiveNote = new QLabel(integrationsBox);
+        m_claudeLiveNote->setObjectName(QStringLiteral("claudeLiveNote"));
+        m_claudeLiveNote->setWordWrap(true);
+        QFont secondary = m_claudeLiveNote->font();
+        secondary.setPointSizeF(secondary.pointSizeF() * 0.9);
+        m_claudeLiveNote->setFont(secondary);
+        integrations->addWidget(m_claudeLiveNote);
+        m_claudeContext = new QCheckBox(tr("Also show the context window of the most recently active session"),
+                                        integrationsBox);
+        m_claudeContext->setObjectName(QStringLiteral("claudeContext"));
+        integrations->addWidget(m_claudeContext);
+        auto *cwdRow = new QHBoxLayout;
+        cwdRow->addWidget(new QLabel(tr("Only sessions in:"), integrationsBox));
+        m_claudeCwd = new QLineEdit(integrationsBox);
+        m_claudeCwd->setObjectName(QStringLiteral("claudeCwd"));
+        m_claudeCwd->setPlaceholderText(tr("any project"));
+        m_claudeCwd->setClearButtonEnabled(true);
+        cwdRow->addWidget(m_claudeCwd, 1);
+        m_claudeBrowse = new QPushButton(tr("Browse…"), integrationsBox);
+        m_claudeBrowse->setObjectName(QStringLiteral("claudeBrowse"));
+        cwdRow->addWidget(m_claudeBrowse);
+        integrations->addLayout(cwdRow);
+        m_claudeMessage = new QLabel(integrationsBox);
+        m_claudeMessage->setObjectName(QStringLiteral("claudeMessage"));
+        m_claudeMessage->setWordWrap(true);
+        m_claudeMessage->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        m_claudeMessage->hide();
+        integrations->addWidget(m_claudeMessage);
+        root->addWidget(integrationsBox);
+    }
 
     auto *customBox = group(tr("Custom Metrics"), this);
     auto *customLayout = new QVBoxLayout(customBox);
@@ -264,9 +332,173 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
             rebuildMetricsBar();
         });
     }
+    if (m_claude) {
+        connect(m_claudeEnabled, &QCheckBox::toggled, this, [this](bool checked) {
+            m_claude->run(checked ? claudeEnableArguments() : QStringList{QStringLiteral("disable")});
+        });
+        connect(m_claudeLive, &QCheckBox::toggled, this, [this](bool checked) {
+            if (checked) {
+                const QString file = m_claude->status().value(QStringLiteral("settingsFile")).toString();
+                const auto answer = QMessageBox::question(
+                    this, tr("Turn On Live Updates"),
+                    tr("Claude Code reports usage only to a status-line command. AQTRunCat will set "
+                       "\"statusLine\" in\n%1\nand change nothing else in that file.\n\n"
+                       "A status line you already have keeps working: it runs right after AQTRunCat's "
+                       "and is put back when live updates are turned off. While a status line is "
+                       "configured, Claude Code shows fewer keyboard hints in its footer.\n\n"
+                       "Turn on live updates?").arg(file));
+                if (answer != QMessageBox::Yes) {
+                    syncClaude();
+                    return;
+                }
+            }
+            m_claude->run({QStringLiteral("live-updates"), checked ? QStringLiteral("on") : QStringLiteral("off")});
+        });
+        connect(m_claudeContext, &QCheckBox::toggled, this, [this] { m_claude->run(claudeEnableArguments()); });
+        connect(m_claudeCwd, &QLineEdit::editingFinished, this, [this] {
+            const QString current = m_claude->status().value(QStringLiteral("cwd")).toString();
+            if (QDir::cleanPath(m_claudeCwd->text().trimmed()) != current
+                && !(m_claudeCwd->text().trimmed().isEmpty() && current.isEmpty()))
+                m_claude->run(claudeEnableArguments());
+        });
+        connect(m_claudeBrowse, &QPushButton::clicked, this, [this] {
+            const QString directory = QFileDialog::getExistingDirectory(this, tr("Project Folder"), m_claudeCwd->text());
+            if (directory.isEmpty())
+                return;
+            m_claudeCwd->setText(directory);
+            m_claude->run(claudeEnableArguments());
+        });
+        connect(m_claude, &ProviderIntegration::statusChanged, this, [this] {
+            syncClaude();
+            rebuildCustomMetrics();
+        });
+        connect(m_claude, &ProviderIntegration::busyChanged, this, [this] { syncClaude(); });
+        connect(m_claude, &ProviderIntegration::commandFinished, this, [this](bool ok, const QString &message) {
+            m_claudeMessage->setText(ok ? message : tr("Error: %1").arg(message));
+            m_claudeMessage->setVisible(!message.isEmpty());
+        });
+        if (m_customMetrics)
+            connect(m_customMetrics, &CustomMetricsService::sourcesChanged, this, [this] { updateClaudeAvailability(); });
+        syncClaude();
+        m_claude->refresh();
+    }
     syncFromSettings();
     rebuildCustomMetrics();
     rebuildMetricsBar();
+}
+
+QStringList SettingsWindow::claudeEnableArguments() const
+{
+    QStringList arguments{QStringLiteral("enable")};
+    if (m_claudeContext->isChecked()) {
+        arguments << QStringLiteral("--context");
+        const QString cwd = m_claudeCwd->text().trimmed();
+        if (!cwd.isEmpty())
+            arguments << QStringLiteral("--cwd") << cwd;
+    }
+    return arguments;
+}
+
+QString SettingsWindow::integrationMetricFile() const
+{
+    if (!m_claude || !m_claude->status().value(QStringLiteral("enabled")).toBool())
+        return {};
+    return QDir::cleanPath(m_claude->status().value(QStringLiteral("metricFile")).toString());
+}
+
+void SettingsWindow::syncClaude()
+{
+    if (!m_claude)
+        return;
+    const QJsonObject &status = m_claude->status();
+    const bool known = m_claude->statusKnown();
+    const bool enabled = status.value(QStringLiteral("enabled")).toBool();
+    const bool userPackage = status.value(QStringLiteral("userPackage")).toBool();
+    const QString live = status.value(QStringLiteral("liveUpdates")).toString();
+    const bool context = status.value(QStringLiteral("context")).toBool();
+    {
+        const QSignalBlocker blockEnabled(m_claudeEnabled);
+        const QSignalBlocker blockLive(m_claudeLive);
+        const QSignalBlocker blockContext(m_claudeContext);
+        m_claudeEnabled->setChecked(enabled);
+        m_claudeLive->setChecked(live == QLatin1String("on"));
+        m_claudeContext->setChecked(context);
+        if (!m_claudeCwd->hasFocus())
+            m_claudeCwd->setText(status.value(QStringLiteral("cwd")).toString());
+    }
+    const bool idle = m_claude->installed() && known && !m_claude->busy();
+    // A package enabled before the provenance field existed is rewritten
+    // once, with its own options, so that it is shown under Integrations.
+    if (idle && enabled && !status.value(QStringLiteral("integrationMarked")).toBool() && !m_claudeMigrated) {
+        m_claudeMigrated = true;
+        m_claude->run(claudeEnableArguments());
+    }
+    m_claudeEnabled->setEnabled(idle && !userPackage);
+    m_claudeLive->setEnabled(idle && enabled && status.value(QStringLiteral("settingsError")).toString().isEmpty());
+    m_claudeContext->setEnabled(idle && enabled);
+    m_claudeCwd->setEnabled(idle && enabled && context);
+    m_claudeBrowse->setEnabled(idle && enabled && context);
+
+    QString note;
+    if (live == QLatin1String("on")) {
+        note = status.value(QStringLiteral("chainedStatusLine")).toBool()
+            ? tr("Usage is reported after every Claude response; your own status line still runs after AQTRunCat's.")
+            : tr("Usage is reported after every Claude response.");
+        const QDateTime last = QDateTime::fromString(status.value(QStringLiteral("lastLiveReport")).toString(), Qt::ISODate);
+        note += u' ' + (last.isValid() ? tr("Last report: %1.").arg(QLocale().toString(last.toLocalTime(), QLocale::ShortFormat))
+                                       : tr("No report yet: it arrives with the next Claude response."));
+    } else if (live == QLatin1String("replaced")) {
+        note = tr("Off: Claude Code's statusLine was changed after live updates were turned on, so it was left alone.");
+    } else {
+        note = tr("Off: values update when you open /usage in Claude Code. Turning this on sets \"statusLine\" in %1.")
+                   .arg(status.value(QStringLiteral("settingsFile")).toString());
+        if (status.value(QStringLiteral("otherStatusLine")).toBool())
+            note += u' ' + tr("Your current status line would keep working.");
+    }
+    if (const QString error = status.value(QStringLiteral("settingsError")).toString(); !error.isEmpty())
+        note += u' ' + tr("Cannot use it: %1").arg(error);
+    m_claudeLiveNote->setText(note);
+    updateClaudeAvailability();
+}
+
+void SettingsWindow::updateClaudeAvailability()
+{
+    if (!m_claude)
+        return;
+    const QJsonObject &status = m_claude->status();
+    QString text;
+    if (!m_claude->installed()) {
+        text = tr("Not available: aqtruncat-claude-metric is not installed.");
+    } else if (!m_claude->statusKnown()) {
+        text = m_claude->lastError().isEmpty() ? tr("Checking…") : tr("Error: %1").arg(m_claude->lastError());
+    } else if (status.value(QStringLiteral("userPackage")).toBool()) {
+        text = tr("A user-defined Custom Metric already uses the id \"claude-code\" (%1); AQTRunCat does not "
+                  "replace it.").arg(status.value(QStringLiteral("metricFile")).toString());
+    } else if (!status.value(QStringLiteral("enabled")).toBool()) {
+        text = status.value(QStringLiteral("claudeFound")).toBool() ? tr("Off.")
+                                                                    : tr("Off. Claude Code was not found on this system.");
+    } else {
+        const QString file = integrationMetricFile();
+        text = tr("On — waiting for the first update…");
+        if (m_customMetrics) {
+            for (const aqtruncat::custommetrics::Source &source : m_customMetrics->sources()) {
+                if (QDir::cleanPath(source.path) != file)
+                    continue;
+                switch (source.state) {
+                case aqtruncat::custommetrics::State::Available: text = tr("On — available."); break;
+                case aqtruncat::custommetrics::State::Pending:
+                    if (source.snapshot && !source.snapshot->metrics.isEmpty())
+                        text = tr("On — available.");
+                    break;
+                case aqtruncat::custommetrics::State::Unavailable:
+                    text = tr("On — unavailable: %1").arg(source.message);
+                    break;
+                case aqtruncat::custommetrics::State::Error: text = tr("On — error: %1").arg(source.message); break;
+                }
+            }
+        }
+    }
+    m_claudeStatus->setText(text);
 }
 
 bool SettingsWindow::addCustomMetricFile(const QString &path, QString *error)
@@ -276,6 +508,8 @@ bool SettingsWindow::addCustomMetricFile(const QString &path, QString *error)
 
 void SettingsWindow::showAndRaise()
 {
+    if (m_claude)
+        m_claude->refresh();
     show();
     raise();
     activateWindow();
@@ -373,7 +607,13 @@ void SettingsWindow::rebuildCustomMetrics()
     if (!m_customMetrics)
         return;
     QTreeWidgetItem *restored = nullptr;
+    const QString integrationFile = integrationMetricFile();
     for (const aqtruncat::custommetrics::Source &source : m_customMetrics->sources()) {
+        // Managed in Integrations, not one of the user's Custom Metrics. The
+        // path check covers a package written before the provenance field.
+        if (!source.integration.isEmpty()
+            || (!integrationFile.isEmpty() && QDir::cleanPath(source.path) == integrationFile))
+            continue;
         auto *item = new QTreeWidgetItem(m_customMetricFiles);
         if (!current.isEmpty() && source.path == current)
             restored = item;
@@ -439,6 +679,28 @@ void SettingsWindow::rebuildMetricsBar()
             addRow(id, metric.label, note, checked);
             return true;
         }
+        if (isCustomItemId(id)) {
+            const QString sourceId = sourceIdFromCustomItemId(id);
+            const QString itemId = itemIdFromCustomItemId(id);
+            const auto source = std::find_if(sources.cbegin(), sources.cend(),
+                                             [&](const auto &s) { return s.id == sourceId; });
+            const aqtruncat::custommetrics::Snapshot *snapshot =
+                source != sources.cend() && source->snapshot ? &*source->snapshot : nullptr;
+            const aqtruncat::custommetrics::Item *metric = nullptr;
+            if (snapshot) {
+                for (const auto &candidate : snapshot->metrics) {
+                    if (candidate.id == itemId)
+                        metric = &candidate;
+                }
+            }
+            if (metric)
+                addRow(id, snapshot->title + QStringLiteral(" — ") + metric->title,
+                       source->integration.isEmpty() ? tr("Custom") : tr("Integration"), checked);
+            else
+                addRow(id, snapshot ? snapshot->title + QStringLiteral(" — ") + itemId : itemId,
+                       tr("Custom — not currently available"), checked);
+            return true;
+        }
         if (!isCustomId(id))
             return false;
         const QString sourceId = sourceIdFromCustomId(id);
@@ -452,7 +714,8 @@ void SettingsWindow::rebuildMetricsBar()
         const QString name = snapshot ? snapshot->title : QFileInfo(source->path).completeBaseName();
         const bool noValue = source->type == aqtruncat::custommetrics::SourceType::Snapshot && snapshot
             && (!snapshot->metricsBarValue || snapshot->metricsBarValue->trimmed().isEmpty());
-        addRow(id, name, noValue ? tr("Custom — provides no Metrics Bar value") : tr("Custom"), checked);
+        const QString kind = source->integration.isEmpty() ? tr("Custom") : tr("Integration");
+        addRow(id, name, noValue ? tr("%1 — provides no Metrics Bar value").arg(kind) : kind, checked);
         return true;
     };
 
@@ -464,9 +727,22 @@ void SettingsWindow::rebuildMetricsBar()
             addKnown(metric.id, false);
     }
     for (const auto &source : sources) {
+        // A multi-value source whose items carry their own compact values is
+        // offered per item; the whole-source entry stays only if selected.
+        QStringList itemIds;
+        if (source.snapshot) {
+            for (const auto &metric : source.snapshot->metrics) {
+                if (isSelectableItem(metric))
+                    itemIds.append(customItemId(source.id, metric.id));
+            }
+        }
         const QString id = customId(source.id);
-        if (!selected.contains(id))
+        if (!selected.contains(id) && itemIds.isEmpty())
             addKnown(id, false);
+        for (const QString &itemId : std::as_const(itemIds)) {
+            if (!selected.contains(itemId))
+                addKnown(itemId, false);
+        }
     }
     m_metricsBarItems->resizeColumnToContents(0);
     for (int i = 0; i < m_metricsBarItems->topLevelItemCount(); ++i) {

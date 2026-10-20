@@ -1,4 +1,5 @@
 #include "claudecode.h"
+#include "claudeusage.h"
 
 #include <QDir>
 #include <QFile>
@@ -9,6 +10,7 @@
 #include <QJsonParseError>
 #include <QLocale>
 #include <QRegularExpression>
+#include <QStringList>
 #include <QTimeZone>
 
 #include <algorithm>
@@ -298,31 +300,36 @@ QString formatTokens(qint64 tokens)
     return QString::number(tokens);
 }
 
-Outcome collect(const Options &options)
+namespace {
+
+// The context-window section (--context): secondary, so a missing session or
+// an unreadable transcript is reported in its items instead of failing the
+// whole snapshot.
+void appendContext(QJsonArray &metrics, const Options &options)
 {
-    Outcome outcome;
-    if (!QFileInfo(options.configDirectory).isDir()) {
-        outcome.exitCode = 69;
-        outcome.diagnostic = QStringLiteral("Claude Code data directory not found: %1").arg(options.configDirectory);
-        return outcome;
-    }
     const RegistryScan scan = scanRegistry(options.configDirectory, options.procRoot);
     QList<LiveSession> candidates;
     for (const LiveSession &session : scan.live) {
         if (options.cwdFilter.isEmpty() || insideDirectory(session.cwd, options.cwdFilter))
             candidates.append(session);
     }
+    auto contextItem = [](const QString &value, const QString &detail = {}) {
+        QJsonObject object = item(QStringLiteral("Context window"), value);
+        object.insert(QStringLiteral("id"), QStringLiteral("context"));
+        if (!detail.isEmpty())
+            object.insert(QStringLiteral("detail"), detail);
+        return object;
+    };
     if (candidates.isEmpty()) {
         if (scan.entries > 0 && scan.unsupported == scan.entries) {
-            outcome.exitCode = 1;
-            outcome.diagnostic = QStringLiteral("unsupported Claude Code session registry format");
-            return outcome;
+            metrics.append(contextItem(QStringLiteral("Error"),
+                                       QStringLiteral("unsupported Claude Code session registry format")));
+        } else {
+            metrics.append(contextItem(options.cwdFilter.isEmpty()
+                                           ? QStringLiteral("No running session")
+                                           : QStringLiteral("No running session in %1").arg(options.cwdFilter)));
         }
-        outcome.exitCode = 69;
-        outcome.diagnostic = options.cwdFilter.isEmpty()
-            ? QStringLiteral("No running Claude Code session.")
-            : QStringLiteral("No running Claude Code session in %1.").arg(options.cwdFilter);
-        return outcome;
+        return;
     }
 
     // Most recently active: newest transcript write, then registry update.
@@ -343,47 +350,159 @@ Outcome collect(const Options &options)
     if (!selected.transcriptPath.isEmpty())
         usage = readLatestUsage(selected.transcriptPath);
     if (usage.status == UsageStatus::Unreadable || usage.status == UsageStatus::Unsupported) {
-        outcome.exitCode = 1;
-        outcome.diagnostic = usage.error;
-        return outcome;
-    }
-
-    QJsonArray metrics;
-    QString barValue;
-    QDateTime updated = options.now;
-    if (usage.status == UsageStatus::Found) {
+        metrics.append(contextItem(QStringLiteral("Error"), usage.error));
+    } else if (usage.status == UsageStatus::Found) {
         const Usage &u = *usage.usage;
-        if (u.timestamp.isValid())
-            updated = u.timestamp;
         const std::optional<qint64> window = contextWindowFor(u.requestedModel);
         if (u.compactedSince) {
-            metrics.append(item(QStringLiteral("Context window"),
-                                QStringLiteral("Unknown until the next response after /compact")));
-            barValue = QStringLiteral("—");
+            metrics.append(contextItem(QStringLiteral("Unknown until the next response after /compact")));
         } else if (window) {
             const double percent = 100.0 * double(u.contextTokens()) / double(*window);
-            metrics.append(item(QStringLiteral("Context window"),
-                                QStringLiteral("%1 of %2 (%3 tokens)")
-                                    .arg(percentText(percent), formatTokens(*window), formatTokens(u.contextTokens())),
-                                percent / 100.0));
-            barValue = compactPercentText(percent);
+            QJsonObject object = item(QStringLiteral("Context window"),
+                                      QStringLiteral("%1 of %2 (%3 tokens)")
+                                          .arg(percentText(percent), formatTokens(*window), formatTokens(u.contextTokens())),
+                                      percent / 100.0);
+            object.insert(QStringLiteral("id"), QStringLiteral("context"));
+            object.insert(QStringLiteral("metricsBarValue"), compactPercentText(percent));
+            object.insert(QStringLiteral("metricsBarLabel"), QStringLiteral("ctx"));
+            if (u.timestamp.isValid())
+                object.insert(QStringLiteral("detail"), QStringLiteral("Last response at %1")
+                                                            .arg(formatMoment(u.timestamp, options.now, options.timeZone)));
+            metrics.append(object);
         } else {
-            metrics.append(item(QStringLiteral("Context window"),
-                                QStringLiteral("%1 tokens (window size unknown)").arg(formatTokens(u.contextTokens()))));
-            barValue = formatTokens(u.contextTokens());
+            metrics.append(contextItem(QStringLiteral("%1 tokens (window size unknown)").arg(formatTokens(u.contextTokens()))));
         }
         QString model = u.model;
         if (window == ExtendedContextWindow)
             model += QStringLiteral(" · 1M context");
         metrics.append(item(QStringLiteral("Model"), model));
     } else {
-        metrics.append(item(QStringLiteral("Context window"), QStringLiteral("No response yet")));
-        barValue = QStringLiteral("—");
+        metrics.append(contextItem(QStringLiteral("No response yet")));
     }
     metrics.append(item(QStringLiteral("Session"), sessionLabel(selected)));
     metrics.append(item(QStringLiteral("Running sessions"),
                         candidates.size() == 1 ? QStringLiteral("1")
                             : QStringLiteral("%1 (showing the most recently active)").arg(candidates.size())));
+}
+
+QString sourceName(QuotaSource source)
+{
+    return source == QuotaSource::StatusLine ? QStringLiteral("live, Claude Code status line")
+                                             : QStringLiteral("Claude Code /usage");
+}
+
+QJsonObject quotaItem(const QString &id, const QString &title, const QString &barLabel, const QuotaChoice &choice,
+                      const QString &missingHint, const Options &options)
+{
+    QJsonObject object{{QStringLiteral("id"), id}, {QStringLiteral("title"), title},
+                       {QStringLiteral("metricsBarLabel"), barLabel}};
+    const auto moment = [&](const QDateTime &time) { return formatMoment(time, options.now, options.timeZone); };
+    switch (choice.presence) {
+    case QuotaPresence::Current: {
+        const QuotaReading &reading = *choice.reading;
+        QString value = QStringLiteral("%1 used").arg(quotaPercentText(reading.usedPercent));
+        if (reading.usedPercent >= 100.0)
+            value += QStringLiteral(" — limit reached");
+        QString detail;
+        if (reading.resetsAt.isValid()) {
+            const QString when = moment(reading.resetsAt);
+            detail = when.contains(u',') ? QStringLiteral("Resets %1").arg(when) : QStringLiteral("Resets at %1").arg(when);
+        } else {
+            detail = QStringLiteral("Reset time not reported");
+        }
+        if (choice.stale)
+            detail += QStringLiteral(" · as of %1").arg(moment(reading.observedAt));
+        object.insert(QStringLiteral("formattedValue"), value);
+        object.insert(QStringLiteral("normalizedValue"), reading.usedPercent / 100.0);
+        object.insert(QStringLiteral("detail"), detail);
+        object.insert(QStringLiteral("metricsBarValue"), quotaCompactText(reading.usedPercent));
+        break;
+    }
+    case QuotaPresence::Expired:
+        object.insert(QStringLiteral("formattedValue"), QStringLiteral("Unknown"));
+        object.insert(QStringLiteral("detail"), QStringLiteral("The window reset at %1; no newer report yet")
+                                                    .arg(moment(choice.reading->resetsAt)));
+        break;
+    case QuotaPresence::TooOld:
+        object.insert(QStringLiteral("formattedValue"), QStringLiteral("Unknown"));
+        object.insert(QStringLiteral("detail"), QStringLiteral("The last report (%1) is too old to show")
+                                                    .arg(moment(choice.reading->observedAt)));
+        break;
+    case QuotaPresence::Missing:
+        object.insert(QStringLiteral("formattedValue"), QStringLiteral("Not reported"));
+        object.insert(QStringLiteral("detail"), missingHint);
+        break;
+    }
+    return object;
+}
+
+} // namespace
+
+Outcome collect(const Options &options)
+{
+    Outcome outcome;
+    const bool installed = QFileInfo(options.configDirectory).isDir() || QFileInfo::exists(options.globalConfigFile);
+    if (!installed) {
+        outcome.exitCode = 69;
+        outcome.diagnostic = QStringLiteral("Claude Code not found: neither %1 nor %2 exists")
+                                 .arg(options.configDirectory, options.globalConfigFile);
+        return outcome;
+    }
+
+    const QuotaSourceResult cache = readUsageCache(options.globalConfigFile);
+    const QuotaSourceResult bridge = options.bridgeStateFile.isEmpty()
+        ? QuotaSourceResult() : readBridgeState(options.bridgeStateFile, options.configDirectory);
+    const QuotaChoice fiveHour = chooseQuota(QuotaWindow::FiveHour, cache, bridge, options.now);
+    const QuotaChoice sevenDay = chooseQuota(QuotaWindow::SevenDay, cache, bridge, options.now);
+    const QString sourceError = !cache.error.isEmpty() ? cache.error : bridge.error;
+
+    if (!fiveHour.reading && !sevenDay.reading && !options.includeContext) {
+        if (!sourceError.isEmpty()) {
+            outcome.exitCode = 1;
+            outcome.diagnostic = sourceError;
+            return outcome;
+        }
+        outcome.exitCode = 69;
+        outcome.diagnostic = QStringLiteral("No Claude Code usage report yet: open /usage in Claude Code once, "
+                                            "or turn on live updates in AQTRunCat Settings.");
+        if (!cache.note.isEmpty())
+            outcome.diagnostic += QStringLiteral(" (%1)").arg(cache.note);
+        return outcome;
+    }
+
+    QString missingHint = cache.note.isEmpty()
+        ? QStringLiteral("Open /usage in Claude Code, or turn on live updates in AQTRunCat Settings")
+        : cache.note;
+    QJsonArray metrics;
+    metrics.append(quotaItem(QStringLiteral("five_hour"), QStringLiteral("Current session (5h)"), QStringLiteral("5h"),
+                             fiveHour, missingHint, options));
+    metrics.append(quotaItem(QStringLiteral("seven_day"), QStringLiteral("Current week (all models)"), QStringLiteral("7d"),
+                             sevenDay, missingHint, options));
+
+    QStringList sources;
+    for (const QuotaChoice *choice : {&fiveHour, &sevenDay}) {
+        if (choice->presence == QuotaPresence::Current && !sources.contains(sourceName(choice->reading->source)))
+            sources.append(sourceName(choice->reading->source));
+    }
+    QString sourceText = sources.isEmpty() ? QStringLiteral("No current report") : sources.join(QStringLiteral(" + "));
+    QJsonObject sourceItem = item(QStringLiteral("Usage data"), sourceText);
+    sourceItem.insert(QStringLiteral("id"), QStringLiteral("source"));
+    if (!sourceError.isEmpty())
+        sourceItem.insert(QStringLiteral("detail"), sourceError);
+    metrics.append(sourceItem);
+
+    if (options.includeContext)
+        appendContext(metrics, options);
+
+    QDateTime updated;
+    for (const QuotaChoice *choice : {&fiveHour, &sevenDay}) {
+        if (choice->presence == QuotaPresence::Current && (!updated.isValid() || choice->reading->observedAt > updated))
+            updated = choice->reading->observedAt;
+    }
+    if (!updated.isValid())
+        updated = options.now;
+    const QString barValue = fiveHour.presence == QuotaPresence::Current
+        ? quotaCompactText(fiveHour.reading->usedPercent) : QStringLiteral("—");
 
     const QJsonObject snapshot{
         {QStringLiteral("title"), QStringLiteral("Claude Code")},

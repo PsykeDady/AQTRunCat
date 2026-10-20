@@ -97,6 +97,24 @@ private slots:
         }
     }
 
+    void itemsOfMultiValueSourcesPersist()
+    {
+        QTemporaryDir temporary;
+        const QString path = temporary.filePath(QStringLiteral("settings.ini"));
+        const QStringList wanted{QStringLiteral("custom-item:seven_day:/data/claude-code/metric.json"),
+                                 QStringLiteral("custom-item:five_hour:/data/claude-code/metric.json"),
+                                 QStringLiteral("cpu")};
+        {
+            AppSettings settings(QStringLiteral("cat"), path);
+            settings.setMetricsBarItems(wanted + QStringList{QStringLiteral("custom-item:bad id:/x")});
+            QCOMPARE(settings.metricsBarItems(), wanted);
+        }
+        AppSettings loaded(QStringLiteral("cat"), path);
+        QCOMPARE(loaded.metricsBarItems(), wanted);
+        loaded.setMetricsBarItems({QStringLiteral("custom-item:bad id:/x"), QStringLiteral("custom-item:x:")});
+        QVERIFY(loaded.metricsBarItems().isEmpty());
+    }
+
     void valuesPersistAcrossInstances()
     {
         QTemporaryDir temporary;

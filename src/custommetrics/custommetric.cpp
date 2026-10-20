@@ -9,6 +9,7 @@
 #include <QJsonParseError>
 #include <QRegularExpression>
 
+#include <algorithm>
 #include <cmath>
 
 namespace aqtruncat::custommetrics {
@@ -48,6 +49,12 @@ bool requiredString(const QJsonObject &object, const char *name, QString &out, Q
 }
 
 } // namespace
+
+bool isValidItemId(const QString &id)
+{
+    static const QRegularExpression pattern(QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"));
+    return pattern.match(id).hasMatch();
+}
 
 bool parseSymbol(const QJsonValue &value, const QString &baseDirectory,
                  std::optional<QString> &legacySymbol, std::optional<IconReference> &icon,
@@ -163,6 +170,31 @@ ParseResult parseJson(const QByteArray &json, const QString &baseDirectory)
             }
             item.normalizedValue = normalized.toDouble();
         }
+        std::optional<QString> id;
+        std::optional<QString> detail;
+        std::optional<QString> barLabel;
+        if (!stringField(itemObject, "id", false, id, fieldError)
+            || !stringField(itemObject, "detail", false, detail, fieldError)
+            || !stringField(itemObject, "metricsBarValue", false, item.metricsBarValue, fieldError)
+            || !stringField(itemObject, "metricsBarLabel", false, barLabel, fieldError)) {
+            result.error = QStringLiteral("metrics[%1]: %2").arg(index).arg(fieldError);
+            return result;
+        }
+        if (id) {
+            if (!isValidItemId(*id)) {
+                result.error = QStringLiteral("metrics[%1].id must match [A-Za-z0-9][A-Za-z0-9._-]{0,63}").arg(index);
+                return result;
+            }
+            const bool duplicate = std::any_of(snapshot.metrics.cbegin(), snapshot.metrics.cend(),
+                                               [&](const Item &other) { return other.id == *id; });
+            if (duplicate) {
+                result.error = QStringLiteral("metrics[%1].id \"%2\" is not unique").arg(index).arg(*id);
+                return result;
+            }
+            item.id = *id;
+        }
+        item.detail = detail.value_or(QString());
+        item.metricsBarLabel = barLabel.value_or(QString());
         snapshot.metrics.append(std::move(item));
         ++index;
     }

@@ -195,6 +195,33 @@ private slots:
         QCOMPARE(parseCommandJson(configuration(QStringLiteral("/bin/true")), QStringLiteral("/tmp/m.json"))
                      .definition->output, CommandOutput::Scalar);
     }
+
+    void integrationProvenanceIsExplicitRegistrationMetadata()
+    {
+        // Absent: a user-defined Custom Metric (also for every F1 file so far).
+        QCOMPARE(parseCommandJson(configuration(QStringLiteral("/bin/true")), QStringLiteral("/tmp/m.json"))
+                     .definition->integration, QString());
+
+        QJsonObject object = QJsonDocument::fromJson(configuration(QStringLiteral("/bin/true"))).object();
+        object.insert(QStringLiteral("integration"), QStringLiteral("claude-code"));
+        CommandParseResult result = parseCommandJson(QJsonDocument(object).toJson(), QStringLiteral("/tmp/m.json"));
+        QVERIFY2(result.definition, qPrintable(result.error));
+        QCOMPARE(result.definition->integration, QStringLiteral("claude-code"));
+        // Nothing else changes: same execution definition.
+        CommandDefinition plain = *parseCommandJson(configuration(QStringLiteral("/bin/true")),
+                                                    QStringLiteral("/tmp/m.json")).definition;
+        plain.integration = QStringLiteral("claude-code");
+        QCOMPARE(*result.definition, plain);
+
+        for (const QJsonValue &bad : {QJsonValue(QStringLiteral("")), QJsonValue(QStringLiteral("has space")),
+                                      QJsonValue(3), QJsonValue(true)}) {
+            object.insert(QStringLiteral("integration"), bad);
+            result = parseCommandJson(QJsonDocument(object).toJson(), QStringLiteral("/tmp/m.json"));
+            QVERIFY(result.recognized);
+            QVERIFY(!result.definition);
+            QVERIFY(result.error.contains(QStringLiteral("integration")));
+        }
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCommandMetric)

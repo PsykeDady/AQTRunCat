@@ -51,10 +51,19 @@ private:
     static QString statusText(const aqtruncat::metrics::MetricStatus &status);
     StorageRow &ensureStorageRow(const std::string &path);
     void rebuildCustomMetrics();
+    QWidget *customCard(const aqtruncat::custommetrics::Source &source, int index);
 
     std::string m_homePath;
     QVBoxLayout *m_layout = nullptr;
     QVBoxLayout *m_storageLayout = nullptr;
+    // Official provider integrations (Source::integration set) and the
+    // user's own Custom Metrics share the card renderer but not the section;
+    // an empty section is hidden with its heading.
+    QWidget *m_integrationsHeader = nullptr;
+    QWidget *m_integrationsContainer = nullptr;
+    QVBoxLayout *m_integrationsLayout = nullptr;
+    QWidget *m_customHeader = nullptr;
+    QWidget *m_customContainer = nullptr;
     QVBoxLayout *m_customLayout = nullptr;
     QScrollArea *m_scroll = nullptr;
     bool m_shownOnce = false;

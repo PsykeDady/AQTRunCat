@@ -119,6 +119,13 @@ target_link_libraries(tst_claudecodemetric PRIVATE aqtruncat_claude Qt6::Test)
 target_compile_options(tst_claudecodemetric PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME claudecodemetric COMMAND tst_claudecodemetric)
 
+foreach(name claudeusage claudestatusline)
+    qt_add_executable(tst_${name} tst_${name}.cpp)
+    target_link_libraries(tst_${name} PRIVATE aqtruncat_claude Qt6::Test)
+    target_compile_options(tst_${name} PRIVATE -Wall -Wextra -Wpedantic)
+    add_test(NAME ${name} COMMAND tst_${name})
+endforeach()
+
 qt_add_executable(tst_claudecodeintegration tst_claudecodeintegration.cpp)
 target_link_libraries(tst_claudecodeintegration PRIVATE aqtruncat_desktop Qt6::Test Qt6::Widgets)
 target_compile_options(tst_claudecodeintegration PRIVATE -Wall -Wextra -Wpedantic)

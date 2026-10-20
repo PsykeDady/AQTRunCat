@@ -113,6 +113,8 @@ add_library(aqtruncat_desktop STATIC
     app/runpreferences.h
     app/runnerspeedcontroller.cpp
     app/runnerspeedcontroller.h
+    app/providerintegration.cpp
+    app/providerintegration.h
     app/settingswindow.cpp
     app/settingswindow.h
     app/snapshotthrottle.cpp
@@ -170,7 +172,11 @@ endif()
 # QtCore-only executable; nothing in aqtruncat_desktop links it.
 add_library(aqtruncat_claude STATIC
     providers/claude/claudecode.cpp
-    providers/claude/claudecode.h)
+    providers/claude/claudecode.h
+    providers/claude/claudeusage.cpp
+    providers/claude/claudeusage.h
+    providers/claude/statuslinebridge.cpp
+    providers/claude/statuslinebridge.h)
 target_include_directories(aqtruncat_claude PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/providers")
 target_link_libraries(aqtruncat_claude PUBLIC Qt6::Core)
 target_compile_options(aqtruncat_claude PRIVATE -Wall -Wextra -Wpedantic)

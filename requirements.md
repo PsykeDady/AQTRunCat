@@ -254,7 +254,18 @@ AQTRunCat core. If a small provider-specific adapter or executable is needed,
 it should feed the generic metric infrastructure and keep provider acquisition
 logic isolated.
 
-### Implemented Behaviour (F2 complete)
+### F2 Revision (2026-10-20): Integration, Usage Quotas, Installer Lifecycle
+
+After the first implementation the user asked for a final functional revision:
+Claude Code must be an official integration managed from Settings, its
+primary values must be the two plan-usage quotas of Claude Code's `/usage`
+screen (current 5-hour session window and current week, all models) with
+reset times, not the context window, and `install.sh` must close a running
+AQTRunCat before replacing or removing it. The context window may remain as
+an optional secondary metric. The record of the revision is in
+`docs/F2-claude-code-metric.md`.
+
+### Implemented Behaviour (F2 complete, revised 2026-10-20)
 
 The investigation, the evaluated sources and the validation record are in
 `docs/F2-claude-code-metric.md`. The following decisions are normative.
@@ -266,64 +277,124 @@ Architecture:
   does not link it and knows no Claude format; it runs the adapter as an
   ordinary F1 command source (`"output": "snapshot"`, interval 10 s, timeout
   5 s). There is no Claude-specific scheduler, watcher or presentation.
-- F2 adds two provider-independent, backward-compatible F1 extensions:
-  `source.output` = `"scalar"` (default, unchanged) or `"snapshot"` (stdout
-  is one M6 snapshot object, ≤ 16 KiB; the configuration keeps owning title
-  and symbol; `display` is rejected), and exit status 69 (`EX_UNAVAILABLE`)
-  mapping to Unavailable with stderr as the message. Every other non-zero
-  status remains Error.
+- Generic, provider-independent, backward-compatible F1/M6 extensions:
+  - `source.output` = `"scalar"` (default) or `"snapshot"` (stdout is one M6
+    snapshot object, ≤ 16 KiB; the configuration owns title and symbol;
+    `display` is rejected), and exit status 69 (`EX_UNAVAILABLE`) mapping to
+    Unavailable with stderr as the message;
+  - optional snapshot item fields `id` (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`,
+    unique in the snapshot), `detail` (secondary line shown under the value
+    in the Dashboard), `metricsBarValue` and `metricsBarLabel` (the item's own
+    compact value and short caption);
+  - Metrics Bar ids `custom-item:<item id>:<source id>` select one item of a
+    multi-value source; an item is selectable with an `id` and a nonempty
+    `metricsBarValue`, and is shown with its caption instead of the source
+    icon. An item without a compact value is Unavailable, never empty or 0.
+    Settings offers such a source per item. `custom:<source id>` is
+    unchanged.
 
-Data source (read-only, local, no network, no prompts, no token use, no
-write to the Claude Code directory, which is `$CLAUDE_CONFIG_DIR` or
-`~/.claude`):
+Official integrations vs Custom Metrics:
 
-- `sessions/<pid>.json` (Claude Code's internal live-session registry): an
-  entry counts as running only if `/proc/<pid>/stat` starttime equals its
-  `procStart` (fallback without `procStart`: a command line containing
-  `claude`).
-- `projects/*/<sessionId>.jsonl`: only the tail (256 KiB, growing ×4 up to
-  8 MiB) is read; of the last main-conversation (`isSidechain` false, not
-  `<synthetic>`) assistant entry only `message.usage`, `message.model`,
-  `requestedModel` and `timestamp` are used. A later `compact_boundary`
-  makes the context unknown until the next response.
-- The status-line stdin JSON (the only documented interface, and the only
-  one with account rate limits) is not used because it requires changing the
-  user's Claude Code configuration.
+- Provenance is explicit registration metadata, never inferred from title,
+  symbol or path: an optional top-level `"integration": "<id>"` field
+  (same syntax as `id`) of a **command** configuration, written by the
+  provider's adapter (`claude-code`), parsed into
+  `CommandDefinition::integration` and carried as `Source::integration`.
+  Empty = a user-defined Custom Metric. M6 snapshot files can never be
+  integrations (the key is ignored there). Presentation only: execution,
+  scheduling, states and the Metrics Bar are unchanged.
+- The Dashboard shows **Integrations** (sources with provenance) before
+  **Custom Metrics** (all others), each with the same card renderer, each
+  source exactly once; an empty section is hidden with its heading (no "No
+  custom metrics" placeholder any more). A user metric with the same title
+  as a provider stays under Custom Metrics.
+- Settings has an **Integrations** section, separate from the user's Custom
+  Metrics. For Claude Code: enable/disable, availability and error status,
+  a short description, live updates (below) and the optional context window
+  with an optional project directory.
+- The adapter owns the configuration: the metric package
+  `$XDG_DATA_HOME/AQTRunCat/metrics/claude-code/` (written by `enable`,
+  removed by `disable`) and the live-updates backup. The Settings window runs
+  the adapter's own commands (`status --json`, `enable [--context [--cwd
+  DIR]]`, `disable`, `live-updates on|off`) and watches the files they report,
+  so GUI and CLI always show the same state. The package is listed only under
+  Integrations; the Metrics Bar list labels its entries "Integration". A
+  package written before the provenance field existed (`status --json`
+  `integrationMarked: false`) is rewritten with its own options by
+  `aqtruncat-claude-metric upgrade`, which `install.sh` runs as the real user
+  after every installation (no-op when the integration is off; never
+  creates, deletes or touches a user-managed package; failure is only a
+  warning), and once by the Settings window as a fallback. The installer
+  itself never deletes anything in the user's data directory. Packages not written by the adapter are never replaced or
+  removed (`enable --force` only on explicit request).
 
-Values (one "Claude Code" card):
+Usage quotas (primary values):
 
-- Context window: `(input_tokens + cache_creation_input_tokens +
-  cache_read_input_tokens)` of the selected session's latest response
-  divided by 200 000, or 1 000 000 when the requested model ends in `[1m]`
-  (Claude Code's documented status-line formula and window sizes). Output
-  tokens are excluded. Without `requestedModel` only the token count is
-  shown, never a guessed percentage. The Metrics Bar value is the rounded
-  percentage (`<1%` below one).
-- Model, session (project directory name and Claude Code's busy/idle
-  status) and the number of running sessions.
-- Session token consumption, account usage limits and remaining allowance
-  are not exposed: no reliable local source exists.
+- Current session (5h) and Current week (all models): percentage used, a
+  progress bar each (normalized value = percentage / 100) and the reset time
+  in the local time zone ("Resets at 13:30" today, "Resets Oct 23, 20:00"
+  otherwise). ≥ 100% is shown as "… — limit reached". Metrics Bar values
+  `3%` / `<1%` with captions `5h` / `7d`; nothing is added to the bar
+  automatically. A "Usage data" item names the source in use.
+- Sources (local, read-only, no network, no tokens, no credentials):
+  1. Claude Code's own usage cache `cachedUsageUtilization` in
+     `~/.claude.json` (`$CLAUDE_CONFIG_DIR/.claude.json` when set): what
+     `/usage` last fetched, with its fetch time; ignored when it belongs to
+     another account than the signed-in one. Claude Code refreshes it only
+     when `/usage` or an IDE usage view is opened. Internal format.
+  2. Opt-in live updates: the documented status-line `rate_limits` captured
+     by `aqtruncat-claude-metric statusline` into
+     `$XDG_RUNTIME_DIR/aqtruncat/claude-rate-limits.json` (0600, only the two
+     percentages, reset times and capture times).
+  For each window the most recent report wins.
+- Freshness: a report older than 5 minutes is shown with "as of <time>"; a
+  report from before its window's reset is not shown ("The window reset at
+  …; no newer report yet"); one older than 24 hours is not shown. A missing
+  window is "Not reported" with what to do. Unavailable usage is never 0%.
+- States: Claude Code absent, or no usage report at all → Unavailable (exit
+  69); unreadable or unsupported cache → Error (exit 1); one window only →
+  Available with the other "Not reported".
+- Quotas are never derived from context-window tokens; no screen scraping;
+  no polling that consumes tokens.
 
-Session selection: among running sessions (optionally only those whose cwd
-is `--cwd DIR` or below) the most recently active one (newest transcript
-write, then registry update) is shown; with several, the card says so. Stale
-registry entries and old transcripts are ignored.
+Live updates (opt-in, explicit confirmation in Settings or `live-updates
+on`):
 
-States: no Claude Code directory or no running session → Unavailable;
-unreadable or unsupported registry/transcript data → Error; a running session
-without a response yet, or right after `/compact`, is Available with an
-explicit text and `—`, never zero.
+- Sets only the `statusLine` member of Claude Code's user `settings.json`,
+  edited textually and verified to differ from the original in that member
+  only (refused, file untouched, if the file is not a strict JSON object or
+  has duplicate keys). A previous `statusLine` is backed up (value and exact
+  text) in `$XDG_DATA_HOME/AQTRunCat/integrations/claude-code/statusline-backup.json`
+  and keeps running: the helper replaces itself with `/bin/sh -c <previous
+  command>` fed with the identical input. `live-updates off` and `disable`
+  restore it byte for byte; a `statusLine` the user changed meanwhile is left
+  alone.
 
-Installation and activation: the adapter is installed with AQTRunCat by
-`install.sh`, `install.sh --local` and the native packages; Claude Code is
-not a dependency. The metric is off by default. `aqtruncat-claude-metric
-enable [--cwd DIR]` writes the package
-`$XDG_DATA_HOME/AQTRunCat/metrics/claude-code/` (metric.json with the
-adapter's absolute path, plus an original neutral SVG icon); `disable`
-removes it. Both act only on a package they recognise as their own (`id`
-`claude-code` and the adapter's executable name); a user-managed package is
-replaced only with `enable --force` and never removed. Enabling never changes
-settings: the metric is not added to the Metrics Bar automatically.
+Optional context window (`--context`): the previous F2 metric (input +
+cache tokens of the latest main-conversation response of the most recently
+active running session / 200 000 or 1 000 000 for `[1m]`), plus model,
+session and running sessions; no session or unreadable data is reported in
+its items, never by failing the quota snapshot.
+
+Installer lifecycle (`install.sh`):
+
+- Before replacing (install/update) or removing (uninstall) files, the
+  installer closes this user's processes whose `/proc/<pid>/exe` is exactly
+  the installation's `bin/aqtruncat` (or the same path "(deleted)"), with
+  SIGTERM, waiting up to 10 s (start time checked against PID reuse,
+  zombies count as exited). No name matching decides anything; nothing else
+  is signalled; never SIGKILL. Not exiting in time → error, nothing changed.
+  All preflight steps (build, staging, manifest checks, `sudo -v`) run
+  before closing it. It is not restarted. `--dry-run` lists what would be
+  closed. Under `sudo` other users' instances are reported, not stopped.
+- Build (user request 2026-10-20): every installation still builds from
+  scratch (Release, no tests), now in the persistent
+  `${XDG_CACHE_HOME:-~/.cache}/aqtruncat/install-build` (emptied only if it
+  carries the installer's marker or is empty; root uses root's cache).
+  `--no-build` installs that build without compiling, only if it exists,
+  comes from this source tree, is Release and is up to date (build tool dry
+  run); otherwise error and nothing installed. `--build-dir=DIR` builds all
+  targets (previously only `aqtruncat`).
 
 
 ## F3 — Codex Metric

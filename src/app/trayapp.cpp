@@ -11,6 +11,7 @@
 #include "metricsampler.h"
 #include "metricsbarmodel.h"
 #include "metricsbarpresenter.h"
+#include "providerintegration.h"
 #include "runner/runneranimator.h"
 #include "runpreferences.h"
 #include "runnerselection.h"
@@ -146,6 +147,8 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
     applyAutostart(settings.autostartEnabled());
     QObject::connect(&settings, &aqtruncat::AppSettings::autostartEnabledChanged, &app, applyAutostart);
 
+    // Created with the (lazy) Settings window, destroyed after it.
+    std::unique_ptr<ProviderIntegration> claudeIntegration;
     std::unique_ptr<SettingsWindow> settingsWindow;
     std::vector<aqtruncat::metrics::InterfaceMetrics> latestInterfaces;
     QObject::connect(&metrics, &MetricSampler::snapshotReady, &app,
@@ -167,7 +170,10 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
                     return item.id == activeRunner.id;
                 }))
                 options.append({activeRunner.id, activeRunner.displayName, activeRunner.source});
-            settingsWindow = std::make_unique<SettingsWindow>(&settings, std::move(options), &customMetrics);
+            claudeIntegration = std::make_unique<ProviderIntegration>(
+                QStringLiteral("claude-code"), ProviderIntegration::findAdapter(QStringLiteral("aqtruncat-claude-metric")));
+            settingsWindow = std::make_unique<SettingsWindow>(&settings, std::move(options), &customMetrics, nullptr,
+                                                              claudeIntegration.get());
             settingsWindow->setActiveRunner(activeRunner);
             settingsWindow->setAvailableInterfaces(latestInterfaces);
         }

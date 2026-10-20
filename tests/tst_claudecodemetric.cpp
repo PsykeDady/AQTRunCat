@@ -1,5 +1,7 @@
-// F2 Claude Code adapter: synthetic Claude Code state (registry, transcripts,
-// a fake /proc), never the developer's real ~/.claude and never the network.
+// F2 Claude Code adapter, context-window section (--context): synthetic
+// Claude Code state (registry, transcripts, a fake /proc), never the
+// developer's real ~/.claude and never the network. The usage quotas have
+// their own suite (tst_claudeusage).
 
 #include "claude/claudecode.h"
 
@@ -128,13 +130,16 @@ struct Fixture {
         return path;
     }
 
-    Outcome run(const QString &cwdFilter = {}) const
+    Outcome run(const QString &cwdFilter = {}, bool context = true) const
     {
         Options options;
         options.configDirectory = config;
+        options.globalConfigFile = config + QStringLiteral("/.claude.json"); // absent: no quota report
         options.procRoot = proc;
+        options.includeContext = context;
         options.cwdFilter = cwdFilter;
         options.now = QDateTime::fromString(QStringLiteral("2026-10-16T12:00:00Z"), Qt::ISODate);
+        options.timeZone = QTimeZone::UTC;
         return collect(options);
     }
 };
@@ -155,13 +160,23 @@ QString itemValue(const QJsonObject &snapshot, const QString &title)
     return {};
 }
 
-QJsonValue itemNormalized(const QJsonObject &snapshot, const QString &title)
+QJsonValue itemField(const QJsonObject &snapshot, const QString &title, const QString &field)
 {
     for (const QJsonValue &value : snapshot.value(QStringLiteral("metrics")).toArray()) {
         if (value.toObject().value(QStringLiteral("title")) == title)
-            return value.toObject().value(QStringLiteral("normalizedValue"));
+            return value.toObject().value(field);
     }
     return {};
+}
+
+QJsonValue itemNormalized(const QJsonObject &snapshot, const QString &title)
+{
+    return itemField(snapshot, title, QStringLiteral("normalizedValue"));
+}
+
+QString contextBar(const QJsonObject &snapshot)
+{
+    return itemField(snapshot, QStringLiteral("Context window"), QStringLiteral("metricsBarValue")).toString();
 }
 
 void verifyNoPrivateData(const Outcome &outcome)
@@ -184,18 +199,26 @@ private slots:
         QTemporaryDir temporary;
         Options options;
         options.configDirectory = temporary.filePath(QStringLiteral("no claude here"));
+        options.globalConfigFile = temporary.filePath(QStringLiteral("no claude here.json"));
+        options.includeContext = true;
         const Outcome outcome = collect(options);
         QCOMPARE(outcome.exitCode, 69);
         QVERIFY(outcome.standardOutput.isEmpty());
         QVERIFY(outcome.diagnostic.contains(QStringLiteral("not found")));
     }
 
-    void installedButNeverUsedIsUnavailable()
+    void noSessionIsReportedInTheContextSection()
     {
         Fixture f;
-        const Outcome outcome = f.run();
-        QCOMPARE(outcome.exitCode, 69);
-        QCOMPARE(outcome.diagnostic, QStringLiteral("No running Claude Code session."));
+        // Context is secondary: no session is an explicit item, not a failure.
+        const QJsonObject snapshot = snapshotOf(f.run());
+        QCOMPARE(itemValue(snapshot, QStringLiteral("Context window")), QStringLiteral("No running session"));
+        QVERIFY(itemNormalized(snapshot, QStringLiteral("Context window")).isUndefined());
+        QVERIFY(contextBar(snapshot).isEmpty());
+        // Without --context and without any quota report there is nothing to show.
+        const Outcome quotasOnly = f.run({}, false);
+        QCOMPARE(quotasOnly.exitCode, 69);
+        QVERIFY(quotasOnly.diagnostic.contains(QStringLiteral("/usage")));
     }
 
     void staleRegistryEntriesAreIgnored()
@@ -205,8 +228,7 @@ private slots:
         f.process(200, "9999");
         f.session(200, QStringLiteral("reused-pid"), QStringLiteral("/tmp/my project"), "4242"); // PID reused
         f.transcript(QStringLiteral("old-session"), {assistantLine(usageObject(1, 2, 3, 4))});
-        const Outcome outcome = f.run();
-        QCOMPARE(outcome.exitCode, 69);
+        QCOMPARE(itemValue(snapshotOf(f.run()), QStringLiteral("Context window")), QStringLiteral("No running session"));
     }
 
     void unsupportedRegistryIsError()
@@ -215,9 +237,10 @@ private slots:
         writeFile(f.config + QStringLiteral("/sessions/123.json"), "{\"process\":123}");
         writeFile(f.config + QStringLiteral("/sessions/124.json"), "{truncated");
         writeFile(f.config + QStringLiteral("/sessions/notes.json"), "{}"); // not a <pid>.json entry
-        const Outcome outcome = f.run();
-        QCOMPARE(outcome.exitCode, 1);
-        QVERIFY(outcome.diagnostic.contains(QStringLiteral("registry")));
+        const QJsonObject snapshot = snapshotOf(f.run());
+        QCOMPARE(itemValue(snapshot, QStringLiteral("Context window")), QStringLiteral("Error"));
+        QVERIFY(itemField(snapshot, QStringLiteral("Context window"), QStringLiteral("detail")).toString()
+                    .contains(QStringLiteral("registry")));
     }
 
     void validSessionProducesContextModelAndSession()
@@ -232,11 +255,18 @@ private slots:
         QCOMPARE(itemValue(snapshot, QStringLiteral("Context window")),
                  QStringLiteral("12.3% of 200k (24.6k tokens)"));
         QCOMPARE(itemNormalized(snapshot, QStringLiteral("Context window")).toDouble(), 24589.0 / 200000.0);
-        QCOMPARE(snapshot.value(QStringLiteral("metricsBarValue")).toString(), QStringLiteral("12%"));
+        QCOMPARE(contextBar(snapshot), QStringLiteral("12%"));
+        QCOMPARE(itemField(snapshot, QStringLiteral("Context window"), QStringLiteral("id")).toString(),
+                 QStringLiteral("context"));
+        QCOMPARE(itemField(snapshot, QStringLiteral("Context window"), QStringLiteral("detail")).toString(),
+                 QStringLiteral("Last response at 10:00"));
+        // The context window never stands in for the usage quotas.
+        QCOMPARE(itemValue(snapshot, QStringLiteral("Current session (5h)")), QStringLiteral("Not reported"));
+        QVERIFY(itemNormalized(snapshot, QStringLiteral("Current session (5h)")).isUndefined());
+        QCOMPARE(snapshot.value(QStringLiteral("metricsBarValue")).toString(), QStringLiteral("—"));
         QCOMPARE(itemValue(snapshot, QStringLiteral("Model")), QStringLiteral("claude-opus-5-5"));
         QCOMPARE(itemValue(snapshot, QStringLiteral("Session")), QStringLiteral("my project · busy"));
         QCOMPARE(itemValue(snapshot, QStringLiteral("Running sessions")), QStringLiteral("1"));
-        QCOMPARE(snapshot.value(QStringLiteral("lastUpdatedDate")).toString(), QStringLiteral("2026-10-16T10:00:00.000Z"));
         verifyNoPrivateData(outcome);
         QVERIFY(!outcome.standardOutput.contains("/tmp/my project")); // only the directory name
     }
@@ -250,7 +280,7 @@ private slots:
                                                            QStringLiteral("claude-opus-5-5[1m]"))});
         const QJsonObject snapshot = snapshotOf(f.run());
         QCOMPARE(itemValue(snapshot, QStringLiteral("Context window")), QStringLiteral("21.7% of 1M (217.4k tokens)"));
-        QCOMPARE(snapshot.value(QStringLiteral("metricsBarValue")).toString(), QStringLiteral("22%"));
+        QCOMPARE(contextBar(snapshot), QStringLiteral("22%"));
         QCOMPARE(itemValue(snapshot, QStringLiteral("Model")), QStringLiteral("claude-opus-5-5 · 1M context"));
     }
 
@@ -263,7 +293,7 @@ private slots:
         const QJsonObject snapshot = snapshotOf(f.run());
         QCOMPARE(itemValue(snapshot, QStringLiteral("Context window")), QStringLiteral("1.5k tokens (window size unknown)"));
         QVERIFY(itemNormalized(snapshot, QStringLiteral("Context window")).isUndefined());
-        QCOMPARE(snapshot.value(QStringLiteral("metricsBarValue")).toString(), QStringLiteral("1.5k"));
+        QVERIFY(contextBar(snapshot).isEmpty()); // no guessed percentage, not even in the bar
     }
 
     void percentageBoundaries_data()
@@ -290,7 +320,7 @@ private slots:
         f.transcript(QStringLiteral("abc"), {assistantLine(usageObject(tokens, 0, 0, 1))});
         const QJsonObject snapshot = snapshotOf(f.run());
         QCOMPARE(itemValue(snapshot, QStringLiteral("Context window")), text);
-        QCOMPARE(snapshot.value(QStringLiteral("metricsBarValue")).toString(), bar);
+        QCOMPARE(contextBar(snapshot), bar);
     }
 
     void sidechainSyntheticAndTruncatedEntriesAreSkipped()
@@ -317,7 +347,7 @@ private slots:
         QJsonObject snapshot = snapshotOf(f.run());
         QCOMPARE(itemValue(snapshot, QStringLiteral("Context window")),
                  QStringLiteral("Unknown until the next response after /compact"));
-        QCOMPARE(snapshot.value(QStringLiteral("metricsBarValue")).toString(), QStringLiteral("—"));
+        QVERIFY(contextBar(snapshot).isEmpty());
         QCOMPARE(itemValue(snapshot, QStringLiteral("Model")), QStringLiteral("claude-opus-5-5"));
 
         f.transcript(QStringLiteral("abc"), {assistantLine(usageObject(10, 0, 150000, 1)), compactLine(),
@@ -333,7 +363,7 @@ private slots:
         f.session(321, QStringLiteral("no-transcript"), QStringLiteral("/tmp/p"));
         QJsonObject snapshot = snapshotOf(f.run());
         QCOMPARE(itemValue(snapshot, QStringLiteral("Context window")), QStringLiteral("No response yet"));
-        QCOMPARE(snapshot.value(QStringLiteral("metricsBarValue")).toString(), QStringLiteral("—"));
+        QVERIFY(contextBar(snapshot).isEmpty());
         QVERIFY(itemValue(snapshot, QStringLiteral("Model")).isEmpty());
 
         f.transcript(QStringLiteral("no-transcript"), {userLine(), "garbage that is not JSON", ""});
@@ -363,9 +393,10 @@ private slots:
         f.session(321, QStringLiteral("abc"), QStringLiteral("/tmp/p"));
         f.transcript(QStringLiteral("abc"), {line});
         const Outcome outcome = f.run();
-        QCOMPARE(outcome.exitCode, 1);
-        QVERIFY(outcome.standardOutput.isEmpty());
-        QVERIFY(outcome.diagnostic.contains(QStringLiteral("unsupported transcript format")));
+        const QJsonObject snapshot = snapshotOf(outcome);
+        QCOMPARE(itemValue(snapshot, QStringLiteral("Context window")), QStringLiteral("Error"));
+        QVERIFY(itemField(snapshot, QStringLiteral("Context window"), QStringLiteral("detail")).toString()
+                    .contains(QStringLiteral("unsupported transcript format")));
         verifyNoPrivateData(outcome);
     }
 
@@ -422,8 +453,10 @@ private slots:
         snapshot = snapshotOf(f.run(QStringLiteral("/work/alpha")));
         QCOMPARE(itemValue(snapshot, QStringLiteral("Session")), QStringLiteral("alpha · idle"));
         QCOMPARE(itemValue(snapshot, QStringLiteral("Running sessions")), QStringLiteral("1"));
-        QCOMPARE(f.run(QStringLiteral("/work/alp")).exitCode, 69);
-        QCOMPARE(f.run(QStringLiteral("/work")).exitCode, 0);
+        QCOMPARE(itemValue(snapshotOf(f.run(QStringLiteral("/work/alp"))), QStringLiteral("Context window")),
+                 QStringLiteral("No running session in /work/alp"));
+        QCOMPARE(itemValue(snapshotOf(f.run(QStringLiteral("/work"))), QStringLiteral("Running sessions")),
+                 QStringLiteral("2 (showing the most recently active)"));
         Q_UNUSED(newer);
     }
 
@@ -461,8 +494,8 @@ private slots:
         QVERIFY(QFile::setPermissions(path, QFileDevice::Permissions()));
         const Outcome outcome = f.run();
         QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-        QCOMPARE(outcome.exitCode, 1);
-        QVERIFY(outcome.diagnostic.contains(QStringLiteral("cannot read the session transcript")));
+        QVERIFY(itemField(snapshotOf(outcome), QStringLiteral("Context window"), QStringLiteral("detail")).toString()
+                    .contains(QStringLiteral("cannot read the session transcript")));
     }
 
     void contextWindowAndTokenFormatting()

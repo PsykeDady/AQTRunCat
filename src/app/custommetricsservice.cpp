@@ -266,6 +266,7 @@ void CustomMetricsService::reload(bool finalAttempt)
                 source.type = SourceType::Command;
                 if (command.definition) {
                     source.configuredId = command.definition->id;
+                    source.integration = command.definition->integration;
                     commandDefinitions.append(*command.definition);
                     if (previous == m_sources.cend() || previous->type != SourceType::Command) {
                         Snapshot skeleton;

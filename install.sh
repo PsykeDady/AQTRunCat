@@ -18,14 +18,26 @@ usage() {
 AQTRunCat installer - A Cute Run Cat for Linux
 
 Usage:
-  ./install.sh [--local] [-A | --autostart=true | -na | --autostart=false]
+  ./install.sh [--local] [--no-build] [-A | --autostart=true | -na | --autostart=false]
   ./install.sh [--local] -U | --uninstall
   ./install.sh -h | --help
 
 Installation (default):
   Builds AQTRunCat from this source tree (Release, without tests) and installs
   it. Run it as your normal user: sudo is used only for copying files into a
-  system directory that you cannot write to, never for building.
+  system directory that you cannot write to, never for building. sudo is
+  checked after the build: if it refuses (wrong or expired password), on a
+  terminal you are asked whether to retry ("Retry installing the build?
+  [y/N]"; fix an expired password with passwd in another terminal first);
+  N, or no terminal, stops with nothing changed and the build kept.
+
+  Every installation builds from scratch in
+  ${XDG_CACHE_HOME:-~/.cache}/aqtruncat/install-build (emptied first, kept
+  afterwards). To install again without compiling:
+  --no-build              reuse that build as it is. It must exist, come from
+                          this source tree, be a Release build and be up to
+                          date with the sources; otherwise nothing is installed
+                          and you are told to run without --no-build.
 
   System-wide (default)  prefix /usr/local, change with --prefix=DIR:
                            DIR/bin/aqtruncat
@@ -46,6 +58,23 @@ Installation (default):
 
   Installing again over an existing installation updates it in place; files
   that are no longer part of AQTRunCat are removed, user data is kept.
+
+Running AQTRunCat:
+  Before files are replaced (install, update) or removed (uninstall), a running
+  AQTRunCat of this installation is closed: only processes of your user whose
+  executable is exactly this installation's bin/aqtruncat get SIGTERM, the
+  same clean shutdown as "Quit AQTRunCat" in the tray menu. Nothing is matched
+  by name and nothing else is ever signalled (not Claude Code, not other
+  programs, not an AQTRunCat started from another location). The installer
+  waits up to 10 seconds; if the application has not exited by then, it stops
+  with an error and changes nothing, and is never killed forcibly. Everything
+  that can fail first (build, staging, checks, sudo) happens before closing it.
+  AQTRunCat is not restarted afterwards: start it again from the menu.
+  An enabled Claude Code integration from an earlier version is then updated
+  by "aqtruncat-claude-metric upgrade" (run as you; keeps its options, does
+  nothing when it is off, never removes your data).
+  With "sudo" for a system-wide prefix, instances of other users are reported
+  but not stopped; they keep running the version they started.
 
 Autostart (start AQTRunCat at login) - ON by default:
   -A, --autostart=true    enable autostart (the default)
@@ -69,7 +98,12 @@ Uninstallation:
 Other options:
   --prefix=DIR            system-wide prefix (default /usr/local); not with --local
   --dry-run               show what would be done, change nothing
-  --build-dir=DIR         reuse an existing CMake build tree instead of building
+                          (every run first prints its effective options:
+                          action, installation type, rebuild, autostart, …,
+                          each with its origin, default or option)
+  --build-dir=DIR         use an existing CMake build tree instead of the default
+                          one: it is brought up to date (all targets), or with
+                          --no-build only checked
                           in a temporary directory (development and tests)
   -h, --help              show this help
 
@@ -111,6 +145,7 @@ autostart_option=""
 prefix=/usr/local
 prefix_given=0
 build_dir=""
+no_build=0
 dry_run=0
 
 set_autostart() {
@@ -131,6 +166,7 @@ for arg in "$@"; do
         -U | --uninstall) action=uninstall ;;
         --prefix=*) prefix=${arg#--prefix=}; prefix_given=1 ;;
         --build-dir=*) build_dir=${arg#--build-dir=} ;;
+        --no-build) no_build=1 ;;
         --dry-run) dry_run=1 ;;
         *) usage_error "unknown option \"$arg\"" ;;
     esac
@@ -141,6 +177,9 @@ if [[ $action == uninstall && -n $autostart ]]; then
 fi
 if [[ $action == uninstall && -n $build_dir ]]; then
     usage_error "--build-dir only applies to installation"
+fi
+if [[ $action == uninstall && $no_build == 1 ]]; then
+    usage_error "--no-build only applies to installation"
 fi
 if [[ $scope == local && $prefix_given == 1 ]]; then
     usage_error "--prefix is for system-wide installation; --local uses the XDG directories"
@@ -277,6 +316,25 @@ choose_privileges() {
     fi
 }
 
+# Validate sudo before anything is changed. A refused password (wrong, or
+# expired) is not fatal at once on a terminal: the user can fix it, e.g. with
+# "passwd" in another terminal, and retry without rebuilding. Without a
+# terminal, or on "N", nothing is changed and the hint says how to go on.
+authenticate_sudo() { # authenticate_sudo HINT
+    ((${#SUDO[@]})) || return 0
+    local answer
+    while ! sudo -v; do
+        warn "sudo authentication failed (wrong or expired password?)"
+        if [[ ! -t 0 ]]; then
+            die "nothing was changed; $1"
+        fi
+        say "If your password has expired, change it in another terminal (passwd), then retry."
+        answer=""
+        read -r -p "$( [[ $action == install ]] && echo "Retry installing the build?" || echo "Retry the uninstallation?") [y/N] " answer || answer=""
+        [[ $answer == [yY] || $answer == [yY][eE][sS] ]] || die "nothing was changed; $1"
+    done
+}
+
 # Run a command as the real user (the one who invoked sudo, if any).
 as_user() {
     if [[ $EUID -eq 0 && -n ${SUDO_USER:-} && ${SUDO_USER} != root ]]; then
@@ -301,6 +359,153 @@ autostart_points_to() {
     local entry=$config_home/autostart/aqtruncat.desktop bin=$1
     [[ -f $entry ]] || return 1
     grep -qxF "Exec=\"$bin\"" "$entry" || grep -qxF "Exec=$bin" "$entry"
+}
+
+# --- build directory ------------------------------------------------------
+
+# Persistent, owned by whoever runs the build (never root's files in a user's
+# cache: the build is never run through sudo). Only this exact directory is
+# ever emptied.
+if [[ $EUID -eq 0 ]]; then
+    cache_home=$(getent passwd root | cut -d: -f6)/.cache
+else
+    cache_home=$(xdg_dir "${XDG_CACHE_HOME:-}" "${HOME:-/nonexistent}/.cache")
+fi
+default_build=$(clean_path "$cache_home")/aqtruncat/install-build
+readonly BUILD_MARKER=.aqtruncat-install-build
+if [[ -n $build_dir ]]; then
+    build_dir=$(clean_path "$build_dir")
+fi
+
+cache_value() { # cache_value BUILD KEY -> value of KEY in BUILD/CMakeCache.txt
+    sed -n "s/^$2:[A-Z]*=//p" "$1/CMakeCache.txt" | head -n 1
+}
+
+# The existing build may be installed without compiling: it belongs to this
+# source tree and the build tool has nothing left to do.
+check_reusable_build() { # check_reusable_build BUILD REQUIRE_RELEASE
+    local build=$1 home
+    [[ -f $build/CMakeCache.txt ]] ||
+        die "there is no build to reuse in $build; run the installer without --no-build"
+    home=$(cache_value "$build" CMAKE_HOME_DIRECTORY)
+    [[ $(cd -- "$home" 2> /dev/null && pwd -P) == "$(cd -- "$SCRIPT_DIR" && pwd -P)" ]] ||
+        die "$build was configured for another source tree ($home); run the installer without --no-build"
+    if [[ $2 == release && $(cache_value "$build" CMAKE_BUILD_TYPE) != Release ]]; then
+        die "$build is not a Release build; run the installer without --no-build"
+    fi
+    local pending
+    case $(cache_value "$build" CMAKE_GENERATOR) in
+        Ninja*)
+            pending=$(cmake --build "$build" -- -n 2> /dev/null) || pending=unknown
+            [[ $pending == *"no work to do"* ]] || pending=stale
+            ;;
+        *)
+            cmake --build "$build" -- -q > /dev/null 2>&1 && pending="no work to do" || pending=stale
+            ;;
+    esac
+    [[ $pending == *"no work to do"* ]] ||
+        die "the build in $build is not up to date with the sources; run the installer without --no-build"
+}
+
+# --- running instances ----------------------------------------------------
+
+stop_timeout=${AQTRUNCAT_STOP_TIMEOUT:-10} # seconds; overridable for tests
+[[ $stop_timeout =~ ^[1-9][0-9]?$ ]] || usage_error "AQTRUNCAT_STOP_TIMEOUT must be 1-99 seconds"
+if [[ $EUID -eq 0 && -n ${SUDO_USER:-} && ${SUDO_USER} != root ]]; then
+    real_uid=$(id -u -- "$SUDO_USER")
+else
+    real_uid=$EUID
+fi
+stopped_instances=0
+
+# Start time (field 22 of /proc/PID/stat) tells a process apart from a later
+# one that reuses its PID. A zombie has already exited: no start time.
+process_start() {
+    local stat
+    { IFS= read -r stat < "/proc/$1/stat"; } 2> /dev/null || return 1
+    stat=${stat##*) }
+    local -a fields
+    read -r -a fields <<< "$stat"
+    [[ ${fields[0]} != Z ]] || return 1
+    printf '%s\n' "${fields[19]}"
+}
+
+process_uid() {
+    local key value _
+    while read -r key value _; do
+        [[ $key == Uid: ]] && { printf '%s\n' "$value"; return 0; }
+    done < "/proc/$1/status" 2> /dev/null
+    return 1
+}
+
+# "PID UID START" for every process running this installation's binary. The
+# name only preselects candidates cheaply; the decision is the exact
+# executable path (" (deleted)" once a newer file replaced it). Processes of
+# other users are only visible to root.
+running_instances() {
+    local dir pid comm exe
+    for dir in /proc/[0-9]*; do
+        pid=${dir#/proc/}
+        { IFS= read -r comm < "$dir/comm"; } 2> /dev/null || continue
+        [[ $comm == aqtruncat ]] || continue
+        exe=$(readlink -- "$dir/exe" 2> /dev/null) || continue
+        [[ $exe == "$installed_bin" || $exe == "$installed_bin (deleted)" ]] || continue
+        printf '%s %s %s\n' "$pid" "$(process_uid "$pid")" "$(process_start "$pid")"
+    done
+}
+
+describe_instances() {
+    local pid uid start found=0 will="will be"
+    ((dry_run)) && will="would be"
+    while read -r pid uid start; do
+        found=1
+        if [[ $uid == "$real_uid" ]]; then
+            option "running" "PID $pid, $will closed (SIGTERM, up to ${stop_timeout} s) before files change"
+        else
+            option "running" "PID $pid of user $uid, left running (not yours)"
+        fi
+    done < <(running_instances)
+    ((found)) || option "running" "no instance of this installation"
+}
+
+# Close this user's running AQTRunCat of this installation, or fail without
+# having changed anything. Never SIGKILL, never other users, never by name.
+stop_running_instances() {
+    local -a pids=() starts=() others=()
+    local pid uid start
+    while read -r pid uid start; do
+        if [[ $uid == "$real_uid" ]]; then
+            pids+=("$pid")
+            starts+=("$start")
+        else
+            others+=("$pid")
+        fi
+    done < <(running_instances)
+    if ((${#others[@]})); then
+        warn "AQTRunCat is also running for other users (PID ${others[*]}); it is not stopped and keeps the version it started until it is restarted"
+    fi
+    ((${#pids[@]})) || return 0
+
+    say "Closing the running AQTRunCat (PID ${pids[*]}) ..."
+    local i
+    for i in "${!pids[@]}"; do
+        kill -TERM "${pids[$i]}" 2> /dev/null || true
+    done
+    local waited=0 alive
+    while :; do
+        alive=()
+        for i in "${!pids[@]}"; do
+            [[ $(process_start "${pids[$i]}" 2> /dev/null) == "${starts[$i]}" ]] && alive+=("${pids[$i]}")
+        done
+        ((${#alive[@]})) || break
+        if ((waited >= stop_timeout * 10)); then
+            die "AQTRunCat (PID ${alive[*]}) did not exit within ${stop_timeout} s after SIGTERM; nothing was changed. Quit it from its tray menu (or end that process yourself) and run the installer again."
+        fi
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    stopped_instances=1
+    say "AQTRunCat closed."
 }
 
 # --- dependency checks ----------------------------------------------------
@@ -336,7 +541,7 @@ qt_version() {
 check_build_dependencies() {
     local missing=()
     command -v cmake > /dev/null || missing+=("cmake")
-    if [[ -z $build_dir ]]; then
+    if [[ -z $build_dir && $no_build == 0 ]]; then
         command -v c++ > /dev/null || command -v g++ > /dev/null || command -v clang++ > /dev/null || missing+=("a C++ compiler")
         command -v ninja > /dev/null || command -v make > /dev/null || missing+=("ninja (or make)")
         local qt
@@ -369,8 +574,12 @@ check_build_dependencies() {
 work=""
 tmp_base=$(clean_path "${TMPDIR:-/tmp}")
 cleanup() {
+    local status=$?
     if [[ -n $work && -d $work && $work == "$tmp_base"/aqtruncat-install.* ]]; then
         rm -rf -- "$work"
+    fi
+    if ((status != 0 && stopped_instances)); then
+        printf 'install.sh: AQTRunCat was closed before the failure; start it again with: %s\n' "$installed_bin" >&2
     fi
 }
 trap cleanup EXIT
@@ -420,16 +629,36 @@ refresh_desktop_caches() {
 
 # --- plan -----------------------------------------------------------------
 
-print_plan() {
-    say "Action:     $action ($scope)"
-    say "Distribution: $os_name (family: $family)"
-    say "Binary:     $installed_bin"
-    say "Data:       $datadir"
-    say "Manifest:   $manifest"
-    if [[ $action == install ]]; then
-        say "Autostart:  $autostart"
+option() { printf '  %-17s = %s\n' "$1" "$2"; }
+
+# Printed first by every run (also --dry-run): the effective settings and
+# where each one comes from.
+print_options() {
+    say "AQTRunCat installer"
+    option "action" "$action$( [[ $action == uninstall ]] && echo " (-U)" || echo " (default)")"
+    if [[ $scope == system ]]; then
+        option "installation type" "system-wide, all users (prefix $prefix$( ((prefix_given)) && echo ", --prefix" || echo ", default"))"
+    else
+        option "installation type" "local, current user only (--local)"
     fi
-    if need_privileges; then say "Privileges: sudo for file copies"; else say "Privileges: none"; fi
+    if [[ $action == install ]]; then
+        if ((no_build)); then
+            option "rebuild" "false: reuse ${build_dir:-$default_build} (--no-build; must be up to date)"
+        elif [[ -n $build_dir ]]; then
+            option "rebuild" "true: bring $build_dir up to date (--build-dir)"
+        else
+            option "rebuild" "true: from scratch in $default_build (default)"
+        fi
+        option "autostart" "$autostart (${autostart_option:-default})"
+    fi
+    option "dry run" "$( ((dry_run)) && echo true || echo false)"
+    option "binary" "$installed_bin"
+    option "data" "$datadir"
+    option "manifest" "$manifest"
+    if need_privileges; then option "privileges" "sudo for file copies"; else option "privileges" "none"; fi
+    option "stop timeout" "${stop_timeout} s"
+    option "distribution" "$os_name (family: $family)"
+    describe_instances
 }
 
 # --- install --------------------------------------------------------------
@@ -440,14 +669,31 @@ do_install() {
     work=$(mktemp -d "$tmp_base/aqtruncat-install.XXXXXX")
 
     local build
-    if [[ -n $build_dir ]]; then
+    if ((no_build)); then
+        if [[ -n $build_dir ]]; then
+            build=$build_dir
+            check_reusable_build "$build" any
+        else
+            build=$default_build
+            check_reusable_build "$build" release
+        fi
+        say "Reusing the build in $build (--no-build: nothing is compiled)"
+    elif [[ -n $build_dir ]]; then
         [[ -f $build_dir/CMakeCache.txt ]] || die "$build_dir is not a CMake build tree"
         build=$build_dir
         say "Using the existing build tree $build"
-        cmake --build "$build" --target aqtruncat > "$work/build.log" 2>&1 ||
+        cmake --build "$build" --parallel > "$work/build.log" 2>&1 ||
             { tail -n 30 "$work/build.log" >&2; die "build failed (log above)"; }
     else
-        build=$work/build
+        build=$default_build
+        # From scratch every time, but only in a directory this installer
+        # created (marker file) or an empty/missing one.
+        if [[ -e $build && ! -f $build/$BUILD_MARKER && -n $(find "$build" -mindepth 1 -maxdepth 1 -print -quit 2> /dev/null) ]]; then
+            die "$build exists but was not created by the AQTRunCat installer; remove it yourself"
+        fi
+        rm -rf -- "$build"
+        mkdir -p -- "$build" || die "cannot create $build"
+        : > "$build/$BUILD_MARKER"
         local -a generator=()
         command -v ninja > /dev/null && generator=(-G Ninja) # the suggested packages install ninja, not always make
         say "Configuring and building AQTRunCat (Release) ..."
@@ -514,6 +760,11 @@ do_install() {
         say "Updating the existing installation ($manifest)"
     fi
 
+    # Last step that can still fail on its own: the sudo password, asked for
+    # before the running application is closed.
+    authenticate_sudo "the build in $build is kept: run the installer again with --no-build to install it without compiling"
+    stop_running_instances
+
     say "Installing ${#targets[@]} files ..."
     local i
     for i in "${!targets[@]}"; do
@@ -545,9 +796,21 @@ do_install() {
         as_user "$installed_bin" autostart disable || die "AQTRunCat is installed, but disabling autostart failed"
     fi
 
+    # An enabled Claude Code integration written by an earlier version is
+    # rewritten by its own adapter, with its options; the adapter never
+    # creates one, never touches a user-managed package, and this never
+    # deletes anything in the user's data directory.
+    local adapter=$bindir/aqtruncat-claude-metric
+    if [[ -x $adapter ]] && ! as_user "$adapter" upgrade; then
+        warn "the Claude Code integration could not be upgraded; open Settings > Integrations or run: $adapter upgrade"
+    fi
+
     say "AQTRunCat is installed: $installed_bin"
     if [[ $scope == local && ":$PATH:" != *":$bindir:"* ]]; then
         warn "$bindir is not in your PATH. The menu entry and autostart work anyway; to run \"aqtruncat\" from a terminal, add it to PATH yourself."
+    fi
+    if ((stopped_instances)); then
+        say "AQTRunCat was closed for the update and is not restarted automatically."
     fi
     say "Start it from the application menu (AQTRunCat) or with: $installed_bin"
 }
@@ -566,6 +829,8 @@ do_uninstall() {
     check_manifest
     while IFS= read -r line; do files+=("$line"); done < <(read_manifest)
     choose_privileges
+    authenticate_sudo "run the uninstallation again when sudo works"
+    stop_running_instances
 
     if autostart_points_to "$installed_bin"; then
         if [[ -x $installed_bin ]] && as_user "$installed_bin" autostart disable; then
@@ -597,8 +862,8 @@ do_uninstall() {
 
 # --- main -----------------------------------------------------------------
 
+print_options
 if ((dry_run)); then
-    print_plan
     if [[ $action == uninstall && -f $manifest ]]; then
         check_manifest
         say "Would remove:"

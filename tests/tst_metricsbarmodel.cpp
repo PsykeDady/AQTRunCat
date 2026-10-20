@@ -308,6 +308,62 @@ private slots:
         model.setConfiguration(true, {QStringLiteral("memory")});
         QTRY_COMPARE(ids(model.items()), QStringList{"memory"});
     }
+
+    void itemsOfAMultiValueSourceAreSelectableOnTheirOwn()
+    {
+        cm::Source quotas = source(QStringLiteral("/data/claude/metric.json"));
+        quotas.snapshot->icon = cm::IconReference{cm::IconType::Theme, QStringLiteral("x"), QStringLiteral("x")};
+        cm::Item session{QStringLiteral("Current session (5h)"), QStringLiteral("3% used"), 0.03};
+        session.id = QStringLiteral("five_hour");
+        session.detail = QStringLiteral("Resets at 13:30");
+        session.metricsBarValue = QStringLiteral("3%");
+        session.metricsBarLabel = QStringLiteral("5h");
+        cm::Item week{QStringLiteral("Current week (all models)"), QStringLiteral("Not reported"), std::nullopt};
+        week.id = QStringLiteral("seven_day");
+        quotas.snapshot->metrics = {session, week};
+
+        QVERIFY(isCustomItemId(customItemId(quotas.id, QStringLiteral("five_hour"))));
+        QCOMPARE(sourceIdFromCustomItemId(customItemId(quotas.id, QStringLiteral("five_hour"))), quotas.id);
+        QCOMPARE(itemIdFromCustomItemId(customItemId(QStringLiteral("/a:b/c.json"), QStringLiteral("x"))), QStringLiteral("x"));
+        QCOMPARE(sourceIdFromCustomItemId(customItemId(QStringLiteral("/a:b/c.json"), QStringLiteral("x"))),
+                 QStringLiteral("/a:b/c.json"));
+        QVERIFY(!isCustomItemId(QStringLiteral("custom-item:bad id:/x")));
+        QVERIFY(!isCustomItemId(QStringLiteral("custom-item:x:")));
+        QVERIFY(isKnownId(customItemId(quotas.id, QStringLiteral("seven_day"))));
+
+        MetricsBarModel model("/home/alice");
+        model.setConfiguration(true, {customItemId(quotas.id, QStringLiteral("five_hour")),
+                                      customItemId(quotas.id, QStringLiteral("seven_day")),
+                                      customItemId(quotas.id, QStringLiteral("gone"))});
+        model.updateCustom({quotas});
+        QTRY_COMPARE(model.items().size(), 3);
+        const Item &first = model.items().at(0);
+        QCOMPARE(first.label, QStringLiteral("Claude Code — Current session (5h)"));
+        QCOMPARE(first.shortValue, QStringLiteral("3%"));
+        QCOMPARE(first.shortLabel, QStringLiteral("5h"));
+        QVERIFY(!first.icon); // its own caption instead of the shared icon
+        QCOMPARE(first.detail, QStringLiteral("3% used — Resets at 13:30"));
+        QCOMPARE(first.status, Status::Available);
+        // No compact value: never empty or zero, an explicit "unavailable".
+        QCOMPARE(model.items().at(1).status, Status::Unavailable);
+        QVERIFY(model.items().at(1).shortValue.isEmpty());
+        QCOMPARE(model.items().at(1).statusMessage, QStringLiteral("Not reported"));
+        QCOMPARE(model.items().at(2).status, Status::Unavailable);
+
+        // A refresh in progress keeps the last value; an error shows as such.
+        quotas.state = cm::State::Pending;
+        model.updateCustom({quotas});
+        QTRY_COMPARE(model.items().at(0).status, Status::Pending);
+        QCOMPARE(model.items().at(0).shortValue, QStringLiteral("3%"));
+        quotas.state = cm::State::Error;
+        quotas.message = QStringLiteral("boom");
+        model.updateCustom({quotas});
+        QTRY_COMPARE(model.items().at(0).status, Status::Error);
+
+        // The source disappears: its items leave the bar, the selection stays.
+        model.updateCustom({});
+        QTRY_VERIFY(model.items().isEmpty());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestMetricsBarModel)

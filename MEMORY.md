@@ -4,9 +4,14 @@
 > conversations. M0–M9 implementation state was verified against the
 > repository on 2026-10-10; the post-project roadmap was revised and F1 was
 > implemented on 2026-10-13, then audited, hardened and runtime-validated on
-> 2026-10-16 (branch `feature/f1`, still uncommitted at that time). F2 was
-> investigated, implemented and runtime-validated on 2026-10-16 on branch
-> `feature/f2` (uncommitted at that time; the user owns all Git writes).
+> 2026-10-16 (branch `feature/f1`). F2 was investigated, implemented and
+> runtime-validated on 2026-10-16 on branch `feature/f2`; the user committed
+> F1 and F2 ("f2 terminato", 3115c56). On 2026-10-20 F2 was **revised** on
+> `feature/f2` (uncommitted at that time; the user owns all Git writes):
+> official Integrations section in Settings, Claude plan usage quotas
+> (5-hour + weekly, as in `/usage`) as primary values, optional live updates
+> via the Claude Code status line, and `install.sh` closing a running
+> instance before replacing it (§13).
 > Precedence when sources disagree: **actual code/tests > this MEMORY (frozen
 > decisions §5) > docs/M*.md > historical prompts**. `requirements.md` is now
 > the **Post-Project Features** document (F1–F6), the current source for
@@ -42,7 +47,9 @@
   significant dependency is needed, stop and ask first.
 - Post-project Git model: `feature/base` is the dedicated common baseline;
   feature branches are created from it as `feature/f1`, `feature/f2`,
-  `feature/f3`, … . The slash is only part of the branch name and implies no
+  `feature/f3`, … . (Observed 2026-10-20: the repository has `main`,
+  `feature/main`, `feature/f1`, `feature/f2` and **no** `feature/base`; ask
+  the user which baseline to use before F3.) The slash is only part of the branch name and implies no
   Git hierarchy. Do not create, switch, merge, commit or push branches unless
   explicitly requested.
 - No shelling out for routine work (no `top`, `free`, `df`, `iostat`, `unzip`,
@@ -109,14 +116,14 @@ M7 COMPLETE   Metrics Bar (separate SNI items)
 M8 COMPLETE   Desktop Compatibility & Polish
 M9 COMPLETE   Packaging, Installation & Release Readiness — end of the initial roadmap
 F1 COMPLETE   Custom Metrics v2 / Executable Custom Metrics
-F2 COMPLETE   Claude Code Metric (adapter aqtruncat-claude-metric over F1)
+F2 COMPLETE   Claude Code integration: usage quotas 5h/week (revised 2026-10-20), adapter over F1
 POST-PROJECT  F3–F6 roadmap features (requirements.md), NOT STARTED, need an explicit instruction
 ```
 
 - Build: `cmake -S . -B build && cmake --build build && ctest --test-dir build`.
   Clean build: **0 warnings** (`-Wall -Wextra -Wpedantic` on all targets).
-- Tests: **34 ctest suites (32 Qt Test suites + Bash `installer` and
-  `packaging-versions`), all passing** on the host; containers
+- Tests: **38 ctest suites (36 Qt Test suites + Bash `installer` and
+  `packaging-versions`), all passing** on the host (2026-10-20); containers
   skip 4 Qt cases (locale ×2, root permissions ×2).
 - Dependencies: Qt 6.5+ (`Widgets`, `Test`; dev machine has 6.11.2), libarchive
   ≥ 3.0 (CMake `FindLibArchive`; configure fails with an explanatory message if
@@ -142,10 +149,17 @@ POST-PROJECT  F3–F6 roadmap features (requirements.md), NOT STARTED, need an e
   the same Snapshot/Source model for Dashboard and Metrics Bar (§13 and
   `docs/F1-custom-metrics-v2.md`). F2 adds `source.output: "snapshot"`
   (multi-value command output) and exit 69 → Unavailable.
-- Claude Code metric (F2): separate QtCore executable
-  `aqtruncat-claude-metric` (lib `aqtruncat_claude`, not linked by the core)
-  run as a normal F1 command; opt-in via its `enable` subcommand
-  (`docs/F2-claude-code-metric.md`).
+- Claude Code integration (F2, revised 2026-10-20): separate QtCore
+  executable `aqtruncat-claude-metric` (lib `aqtruncat_claude`, not linked by
+  the core) run as a normal F1 command; primary values = plan usage quotas
+  (Current session 5h, Current week all models) with reset times; managed
+  from Settings › Integrations or its CLI (`enable`/`disable`/`status`/
+  `live-updates`), which share one configuration owned by the adapter
+  (`docs/F2-claude-code-metric.md`). Snapshot items may carry `id`/`detail`/
+  `metricsBarValue`/`metricsBarLabel`; Metrics Bar ids
+  `custom-item:<item>:<source>` select one item.
+- Installer closes this installation's running AQTRunCat (SIGTERM, ≤10 s,
+  exact exe path, never SIGKILL) before replacing/removing files.
 - Metrics Bar (M7): one extra QSystemTrayIcon per selected metric next to
   the untouched runner item; **max 3 metric items** (runner always present,
   not counted → worst case 4 SNI); semantic `MetricsBarModel` → SNI renderer/
@@ -232,6 +246,13 @@ Key components:
 - **SettingsWindow** (`src/app/settingswindow.*`): one lazy reusable `Qt::Tool`
   over `AppSettings`; RunnerService-backed selection, fixed-20-FPS preview,
   speed/network/refresh/autostart controls and Restore Defaults. Closing hides.
+  F2 revision: **Integrations** group (Claude Code) driven by a
+  `ProviderIntegration` (`src/app/providerintegration.*`): runs the adapter's
+  `status --json` / `enable` / `disable` / `live-updates` asynchronously, one
+  at a time, and watches the files `status` reports; created lazily with the
+  Settings window in `trayapp.cpp` (adapter found next to the running
+  `aqtruncat`, else in PATH). The integration's package is hidden from the
+  Custom Metrics list.
 - **TrayPresenter** (`src/app/traypresenter.*`): builds one `QIcon` per frame
   once per runner (and on `QEvent::ApplicationPaletteChange`); monochrome
   runners tinted with `QPalette::WindowText` (`CompositionMode_SourceIn`),
@@ -507,7 +528,15 @@ Key components:
 | Command scheduling/lifecycle (F1) | one shared monotonic timer; immediate first run; next interval (1–86400 s) starts after completion; timeout default 10 s/range 1–300 s; no overlap/catch-up; each command is its own process-group leader (`setpgid` child modifier); timeout/overflow SIGKILL the group, then re-check every 1 s (no spin); stop = SIGTERM all groups, ≤250 ms total wait, SIGKILL, final group SIGKILL; helpers left in background after a *successful* run are not killed | independent schedules without CPU-sampler coupling or idle polling; scripts' children never leak |
 | Command publish cost (F1) | service publishes at start and end of every run; hidden Dashboard stores the list and rebuilds cards only on show; Settings keeps the selected custom row across rebuilds | 5 commands cost 2.2 % → 0.87 % of a core after deferral |
 | Command output/state (F1) | stdout/stderr each ≤16 KiB; one trimmed nonempty scalar line; missing/non-executable = Unavailable; startup/exit/timeout/parse = Error; refresh = Pending retaining last value; Dashboard presents the last settled state during a refresh (no "Waiting…" flicker) | bounded failure, diagnostic stderr, never silent zero |
-| Claude Code metric (F2) | adapter outside the core, run as F1 `output:"snapshot"` command every 10 s; context % = input+cache tokens of last response / 200k or 1M (`[1m]`); most recently active running session; opt-in `enable`, never auto-added to the bar | local read-only data, no config changes, no invented values |
+| Claude Code integration (F2, revised 2026-10-20) | adapter outside the core, run as F1 `output:"snapshot"` command every 10 s; **primary = plan quotas** five_hour / seven_day from `~/.claude.json` `cachedUsageUtilization` (what `/usage` fetched; same account only) and, opt-in, status-line `rate_limits` captured to `$XDG_RUNTIME_DIR/aqtruncat/claude-rate-limits.json`; newest report per window wins; >5 min → "as of", past reset or >24 h → not shown; context window only with `--context`; opt-in, never auto-added to the bar | exactly the `/usage` concepts; no credentials/network/tokens; never derived from context tokens; never 0 for missing |
+| Live updates (F2) | only the `statusLine` member of Claude Code's user settings.json, textual edit verified by parse-compare, refuse otherwise; backup (value + exact text) in `$XDG_DATA_HOME/AQTRunCat/integrations/claude-code/statusline-backup.json`; helper chains the previous command via memfd + `execl("/bin/sh","-c",…)`; off/disable restore byte-exactly; user-changed statusLine left alone; explicit confirmation in Settings | user decision 2026-10-20 (hybrid source); never silently modify Claude config |
+| Integration configuration ownership (F2) | the adapter owns package + backup; Settings runs the adapter CLI (`status --json` etc.), so GUI = CLI | one configuration, no second metric engine |
+| Integration provenance (F2) | optional top-level `"integration": "<id>"` in a **command** configuration (written by the adapter) → `CommandDefinition::integration` → `Source::integration`; empty = user Custom Metric; M6 snapshots never; never by title/icon/path. Dashboard: **Integrations** section before **Custom Metrics**, same card renderer, each source once, empty sections hidden (no "No custom metrics" label). Old unmarked package: Settings rewrites it once (`integrationMarked` in `status --json`) | user requirement 2026-10-20: provider ≠ user metric |
+| Snapshot item extensions (F2) | optional `id` (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`, unique), `detail`, `metricsBarValue`, `metricsBarLabel`; bar id `custom-item:<item>:<source>`; item without compact value = Unavailable; caption replaces the source icon | multi-value providers without Claude-specific UI code |
+| Installer sudo retry (2026-10-20) | `authenticate_sudo` after build/stage (and before uninstall): `sudo -v` refused → warning "wrong or expired password?"; on a TTY ask "Retry installing the build? [y/N]" (uninstall: "Retry the uninstallation?") and loop without rebuilding; N/EOF/no TTY → die, nothing changed, hint `--no-build` (build kept) | user request: expiring password should not waste the build |
+| Installer options summary (2026-10-20) | every run (also `--dry-run`) starts with "AQTRunCat installer" and `  key               = value (origin)` lines: action, installation type, rebuild, autostart, dry run, binary, data, manifest, privileges, stop timeout, distribution, running; replaced the old `Action:`/`Autostart:` dry-run plan | user request: see the options in effect at start |
+| Installer build (2026-10-20) | default = from scratch every time in persistent `${XDG_CACHE_HOME:-~/.cache}/aqtruncat/install-build` (marker `.aqtruncat-install-build`; root → root's cache); `--no-build` reuses it only if same source tree + Release + `ninja -n` "no work to do" (`make -q` otherwise), else error, nothing installed; `--build-dir` now builds all targets | user: default must stay a full build; full Release build ≈ 97 s on the dev machine (8 jobs on 4 cores + clamd), `--no-build` ≈ 0.2 s |
+| Installer running instance (F2) | before copy/removal: SIGTERM to the real user's processes whose `/proc/PID/exe` is exactly `BINDIR/aqtruncat` (or "(deleted)"); comm only as prefilter; wait ≤10 s (`AQTRUNCAT_STOP_TIMEOUT` for tests), start time vs PID reuse, zombie = exited; timeout → error, nothing changed, no SIGKILL; preflight (build/stage/manifest/`sudo -v`) first; no restart; other users only reported | user requirement 2026-10-20 |
 | Custom Metrics XDG | non-recursive `$XDG_DATA_HOME/AQTRunCat/metrics/*.json` plus immediate `$XDG_DATA_HOME/AQTRunCat/metrics/<package>/metric.json`; explicit paths persist in INI | package level permits colocated relative executable/icon while preserving M6 standalone discovery |
 | Custom symbols (F1) | legacy string or `{type: theme|file, value}`; file/executable relative paths and command CWD resolve from config directory; invalid icon uses fallback without invalidating metric | deterministic self-contained packages, never process CWD |
 | Custom identity/order | canonical path when resolvable; explicit order first, discovered-only by stable name/path | no duplicate aliases or filesystem-order dependence |
@@ -709,7 +738,7 @@ sample on purpose (hot-plug) — caching not needed.
 
 ## 9. Tests and validation
 
-Automated (36 ctest suites: 34 Qt suites + 2 Bash suites, 0 warnings, verified 2026-10-16 after F2; the per-suite table below predates F1 — F1 added `commandmetric` 10 and `commandmetricsservice` 11, and raised custommetric 16, dashboard 11, metricsbarmodel 16, metricsbarrenderer 23; F2 added `claudecodemetric` 28 and `claudecodeintegration` 6 (QtTest totals incl. data rows/init/cleanup) and +2 each to commandmetric/commandmetricsservice; tests never read the real
+Automated (38 ctest suites: 36 Qt suites + 2 Bash suites, 0 warnings, verified 2026-10-20 after the F2 revision — new `claudeusage` 19 and `claudestatusline` 12, `claudecodeintegration` 12, `claudecodemetric` 28 (now `--context`), custommetric 22, commandmetric 13, dashboard 14, metricsbarmodel 17, appsettings 14, installer 189 checks; earlier: 36 suites verified 2026-10-16 after F2; the per-suite table below predates F1 — F1 added `commandmetric` 10 and `commandmetricsservice` 11, and raised custommetric 16, dashboard 11, metricsbarmodel 16, metricsbarrenderer 23; F2 added `claudecodemetric` 28 and `claudecodeintegration` 6 (QtTest totals incl. data rows/init/cleanup) and +2 each to commandmetric/commandmetricsservice; tests never read the real
 `/proc`; fixtures are text strings + temporary `/sys` trees; archives built
 with libarchive's writer and re-read to prove hostile names are stored):
 
@@ -815,6 +844,19 @@ Qt registers the SNI on a second bus connection of the process. Note
 `pgrep -f` matches the calling shell's own command line — use `pgrep -x`.
 Background job scripts started with `&` from a non-interactive shell ignore
 SIGINT (test Ctrl+C through a pty).
+F2-revision lessons (2026-10-20): `spectacle -b -n -a` captures whatever
+window is active — the user works at the desktop, so first activate the
+exact window with a KWin script (`qdbus org.kde.KWin /Scripting
+loadScript/run`, match `w.pid` + caption, log `workspace.activeWindow` via
+`console.info` → `journalctl --user`), capture immediately, and check the
+image size before looking at it; delete unseen otherwise (two captures of
+personal windows had to be discarded). Close own windows with a KWin script
+(`w.closeWindow()`). DBusMenu clicks: `busctl --user call <unique> /MenuBar
+com.canonical.dbusmenu Event isvu <id> clicked i 0 0` (busctl needs `--`
+before negative ints). moc silently produces an empty .moc for test files
+whose raw string literals contain `)"` (even with a custom delimiter): use
+ordinary literals there. zsh does not word-split `$var` (use arrays/python
+for arithmetic on captured pairs).
 
 ---
 
@@ -872,6 +914,11 @@ SIGINT (test Ctrl+C through a pty).
     may change (parallel re-registration); restored by restarting the app.
 21. With the generic Qt platform theme the runner is letterboxed to a square
     and the bar text uses the generic palette (M1 behaviour, unchanged).
+22. Claude Code quotas without live updates change only when `/usage` (or an
+    IDE usage view) is opened; validated 2026-10-20: 3% "as of 10:28" while
+    `/usage` at 11:44 showed 31%. Live updates need Pro/Max, the user-level
+    status line (project/managed status lines take precedence) and a
+    Claude response. `cachedUsageUtilization` is an internal format.
 
 ---
 
@@ -949,61 +996,76 @@ create or switch branches, commit or push without explicit permission.
   settled state is tracked in `DashboardWindow::updateCustomMetrics`, also
   while hidden. Metrics Bar unchanged (it already shows the retained custom
   value while Pending).
-- **F2 — Claude Code Metric — COMPLETE (2026-10-16, `feature/f2`)**. Full
-  record: `docs/F2-claude-code-metric.md`; normative summary in
-  requirements.md. The M6 Claude JSON example is still only an example
-  snapshot, not how F2 works.
-  - Architecture: `src/providers/claude/` → static lib `aqtruncat_claude`
-    (QtCore only) + executable `aqtruncat-claude-metric` (`snapshot`,
-    `enable [--cwd DIR] [--force]`, `disable`). Core/`aqtruncat_desktop` never
-    link it. AQTRunCat runs it as an ordinary F1 command (`output:
-    "snapshot"`, interval 10 s, timeout 5 s); no second scheduler/watcher/UI.
-  - Generic F1 extensions (provider-neutral, backward compatible, tested):
-    `source.output` "scalar" (default) | "snapshot" (stdout = one M6
-    snapshot ≤16 KiB parsed by the M6 parser; config keeps title/symbol;
-    `display` rejected) and exit status 69 (`UnavailableExitStatus`,
-    EX_UNAVAILABLE) → Unavailable with stderr message; other non-zero → Error.
-  - Selected source (read-only, local, no network/tokens/prompts, no writes;
-    dir = `$CLAUDE_CONFIG_DIR` or `~/.claude`): `sessions/<pid>.json`
-    (internal live-session registry; alive iff `/proc/<pid>/stat` field 22 ==
-    `procStart`, fallback cmdline contains "claude") + tail of
-    `projects/*/<sessionId>.jsonl` (256 KiB growing ×4 to 8 MiB; last
-    non-sidechain, non-`<synthetic>` assistant entry; only usage/model/
-    requestedModel/timestamp; later `compact_boundary` → context unknown).
-    Rejected: status-line stdin (documented, has rate limits, but needs the
-    user's Claude config changed — possible future opt-in bridge),
-    stats-cache (stale aggregates), history.jsonl (private), credentials +
-    network usage endpoint, `claude -p` (tokens), OpenTelemetry (config).
-  - Values: Context window = (input + cache_creation + cache_read tokens of
-    the latest response) / 200 000, or 1 000 000 if requestedModel ends in
-    `[1m]` (documented status-line formula/sizes; output tokens excluded;
-    no requestedModel → tokens only, no %); bar value = rounded % (`<1%`).
-    Plus Model, Session (project dir name · busy/idle), Running sessions.
-    NOT exposed: session token consumption, account limits, allowance.
-  - Session selection: running sessions (optionally cwd under `--cwd`), most
-    recently active (newest transcript mtime, then registry updatedAt); card
-    says "showing the most recently active" when >1. Stale entries ignored.
-  - States: no Claude dir / no running session → 69 Unavailable; unreadable
-    or unsupported registry/transcript → 1 Error; no response yet or just
-    compacted → Available with explicit text and `—`, never 0.
-  - Install/activation: installed with the app by install.sh, `--local`,
-    CMake, PKGBUILD, Debian, RPM (`%files` updated); Claude Code not a
-    dependency. Off by default; `enable` writes
-    `$XDG_DATA_HOME/AQTRunCat/metrics/claude-code/{metric.json,claude-code.svg}`
-    (absolute adapter path; original neutral icon). Never touches settings,
-    never adds to the Metrics Bar. enable/disable only touch a package whose
-    id is `claude-code` and executable is named `aqtruncat-claude-metric`;
-    user packages need `enable --force` and are never removed.
-  - Validation (Plasma 6 Wayland, Claude Code 2.1.301, isolated XDG, fps 10,
-    30 s): baseline 0.40 %; enabled @10 s 0.40 % app + 0.03 % adapter; stress
-    @1 s 0.57 % + 0.53 %; RSS ~68.7 MiB; ~7 ms per adapter run; runner 100
-    NewIcon/10 s unchanged; Dashboard card/icon/bar and SNI pixmap/tooltip
-    verified; Unavailable/Error visible; SIGTERM clean, no adapter left.
-    Not forced at runtime: an adapter timeout (generic F1 path, tested).
-  - Limitations: internal Claude formats (schema change → Error until the
-    adapter is updated); "most recently active" ≠ focused terminal; window
-    inferred from `[1m]`; refresh ≤10 s and only on responses; no account
-    limits.
+- **F2 — Claude Code Metric — COMPLETE (2026-10-16, `feature/f2`), REVISED
+  2026-10-20**. Full record: `docs/F2-claude-code-metric.md` (Part A =
+  revision/current behaviour, Part B = first implementation, kept as
+  history); normative summary in requirements.md. The M6 Claude JSON example
+  is still only an example snapshot, not how F2 works.
+  - Architecture (unchanged): `src/providers/claude/` → static lib
+    `aqtruncat_claude` (QtCore only: `claudecode.*` context + collect,
+    `claudeusage.*` quotas/cache/live state, `statuslinebridge.*`
+    settings.json editing) + executable `aqtruncat-claude-metric` (`main.cpp`:
+    `snapshot [--context [--cwd DIR]] [--config-dir DIR]`, `enable [same]
+    [--force]`, `disable`, `status [--json]`, `live-updates on|off`, internal
+    `statusline`). Core/`aqtruncat_desktop` never link it. AQTRunCat runs it
+    as an ordinary F1 command (`output: "snapshot"`, 10 s, timeout 5 s).
+  - Revision request (user, 2026-10-20): official integration in Settings;
+    primary values = the two `/usage` quotas with reset times, each with its
+    own Dashboard bar; context window only optional; investigate sources
+    without inventing values; installer must close the running instance.
+  - Sources (investigated 2026-10-20, Claude Code 2.1.304):
+    `~/.claude.json` (`$CLAUDE_CONFIG_DIR/.claude.json` if set)
+    `cachedUsageUtilization` {fetchedAtMs, accountUuid, utilization.five_hour/
+    seven_day {utilization %, resets_at ISO with 6-digit fractions}} = exactly
+    what `/usage` fetched; refreshed only when `/usage`/IDE usage view opens
+    (backups in `~/.claude/backups/` proved it). Status-line stdin
+    `rate_limits.five_hour/seven_day.{used_percentage, resets_at epoch s}`
+    (documented, per response, Pro/Max). Rejected: OAuth usage endpoint
+    (credentials + network), `claude -p` (tokens), screen scraping, token
+    stats. **User decision: hybrid** — cache by default, opt-in live
+    updates, newest report per window wins.
+  - Values: items `five_hour` "Current session (5h)" and `seven_day`
+    "Current week (all models)": "31% used" (+ " — limit reached" ≥100),
+    normalized %/100, detail "Resets at 13:30" / "Resets Oct 23, 20:00"
+    (local TZ, 24 h, English month) + " · as of HH:MM" when >5 min old;
+    bar value "31%"/"<1%", caption "5h"/"7d"; item `source` "Usage data";
+    with `--context` the old context items (`context` with bar value and
+    caption `ctx`, Model, Session, Running sessions). Expired (past reset) /
+    >24 h → "Unknown" + reason; missing → "Not reported" + hint. No report at
+    all → 69; Claude absent → 69; unreadable/unsupported cache → 1 (retry
+    once after 100 ms). Cache of another account / not signed in ignored.
+  - Live updates: see §5 rows; status-line helper writes only the two
+    windows (+ capture time per window, config dir) 0600; input without
+    rate_limits never clears stored values; chains the previous status line
+    with identical stdin; never fails.
+  - Settings › Integrations + `ProviderIntegration` (§3); CLI → GUI sync via
+    file watches; GUI live-updates asks for confirmation; `disable` also
+    turns live updates off.
+  - Installer: §5 row "Installer running instance"; `--help`, README and
+    `docs/M9` note updated.
+  - Validation 2026-10-20 (Plasma 6 Wayland, isolated XDG, `--fps 10`, real
+    Claude data read-only): `/usage` at 11:44 = 31% / 11% (resets 1:30pm
+    Rome) ↔ adapter 11:45 = 31% "Resets at 13:30" / 11% "Resets Oct 23,
+    20:00"; Dashboard two bars + "as of 10:28" earlier; Metrics Bar SNI
+    pixmaps `5h 3%`, `7d 7%` + tooltips; Settings Integrations rendered and
+    followed a CLI `enable --context`; app 0.50 % + adapter ~0.1 % of a core
+    (≈11 ms CPU per run); SIGTERM clean, no adapter left. Not done live:
+    live updates on the user's real settings.json (no consent asked; full
+    path covered by tests with the real executable).
+  - Dashboard refinement (2026-10-20, F2 doc §A.13): provenance field and
+    Integrations/Custom Metrics sections (§5 row "Integration provenance");
+    validated on Plasma with a provider card, a same-titled legacy M6
+    snapshot and a user command (`docs/F2-claude-code-metric/
+    dashboard-sections.png`). The user's real
+    `~/.local/share/AQTRunCat/metrics/claude-code/` was written by the old
+    adapter (no marker): it showed under Custom Metrics after the user's
+    reinstall (Settings migration only runs when Settings opens). Fix:
+    adapter `upgrade` (rewrites an enabled own package with its options,
+    refreshes live-updates path; no-op otherwise) run by `install.sh` as the
+    real user after autostart; warning on failure. Deleting the folder was
+    rejected (installer never touches user data; would silently disable the
+    integration and orphan a live status line).
+  - Limitations: see §11 item 22 and the F2 doc §A.10.
 - **F3 — Codex Metric** (NOT STARTED; F2 left the path: a sibling
   `src/providers/codex/` adapter emitting an F1 snapshot with exit 69 for
   absent data, no shared AI framework yet): investigate reliable Codex usage/context/status data
@@ -1099,7 +1161,7 @@ docs/M4-dashboard.md           Dashboard/shared sampler architecture, UI/runtime
 docs/M5-settings-desktop.md    typed settings, preview, speed/network policy, XDG autostart, validation
 docs/M6-custom-metrics.md      historical M6 snapshot schema, registry/watch/retry, Dashboard/Settings, validation
 docs/F1-custom-metrics-v2.md   F1 command schema/output/security, scheduler/lifecycle, packages/icons, validation
-docs/F2-claude-code-metric.md  F2 investigation/sources, metric semantics, session selection, adapter, F1 extensions, install, validation
+docs/F2-claude-code-metric.md  F2: Part A revision 2026-10-20 (quota sources, semantics, live updates, Integrations, installer stop, tests, validation); Part B first implementation (context window)
 docs/M7-metrics-bar.md         Plasma SNI spike, model/renderer/presenter, formatting, statuses, settings, ordering, cost
 docs/M8-desktop-compatibility.md  distro/desktop matrix, suspend, tray restart, fixes, perf, soak
 README.md                      user-facing: features, supported systems, install/uninstall, packages, usage, limitations
@@ -1117,7 +1179,8 @@ src/metrics/                   Qt-free metrics: parsers, CounterRateTracker, Sys
 src/custommetrics/             shared Snapshot/Source model, bounded M6 parser, F1 command config/scalar parser
 src/cli/                       commandline (grammar/help/exit codes), runnercommands, metricscommand
 src/app/                       runtime/UI: AppSettings, MetricSampler, CustomMetricsService, CPU controller, Dashboard, Settings/preview, autostart
-src/providers/claude/          F2 Claude Code adapter (aqtruncat_claude lib + aqtruncat-claude-metric exe + icon); not linked by the core
+src/providers/claude/          F2 Claude Code adapter (aqtruncat_claude lib: claudecode context/collect, claudeusage quotas, statuslinebridge settings.json edit; aqtruncat-claude-metric exe + icon); not linked by the core
+src/app/providerintegration.*  Settings-side driver of an official integration's adapter CLI (status --json, enable, disable, live-updates)
 data/runners/<id>/metadata.json   AQTRunCat-authored metadata for bundled runners
 third_party/runcatneo/         upstream LICENSE + frames (cat, coffee bundled; engine spike-only)
 tests/                         Qt Test suites (tst_*.cpp), including F1 deterministic command helper/service cases and F2 Claude fixtures (synthetic registry/transcripts/fake /proc)
@@ -1282,4 +1345,42 @@ cost; optional `tools/test-metrics-runtime.sh`; Linux portability; docs/
 M3-core-metrics.md; requirements for normative decisions; stop conditions for
 network aggregation, disk aggregation and filesystem semantics (handled as
 standard Linux choices: hardware NICs, whole physical disks, df semantics).
+</details>
+
+<details>
+<summary>F2 revision (2026-10-20) — GUI Integration, Usage Quotas, Installer Lifecycle</summary>
+
+Read requirements/MEMORY/F2 first; keep F1 and the adapter. (1) Claude Code
+as an official integration in a Settings **Integrations** section distinct
+from Custom Metrics: enable/disable, availability/error, short description,
+project/session option only where relevant; no need for the CLI `enable`, CLI
+kept; GUI and CLI share one configuration; still F1-based, no second engine;
+never overwrite/remove user metrics. (2) Primary values = `/usage` quotas:
+Current session (5-hour rolling window) and Current week (all models), %
+used (remaining derivable), reset date/time, two Dashboard progress bars;
+never confuse with context window, token consumption, session duration; no
+quotas from context tokens; context window may stay optional/secondary.
+(3) Reinvestigate read-only sources (documented interfaces, status line,
+local caches, CLI, others); no invented values, no fragile screen scraping,
+no token-consuming polling, no unnecessary secrets; status-line integration
+only explicit/opt-in, never silently modify `~/.claude/settings.json` or
+overwrite an existing status line, document restoring; if no reliable
+source, report and ask before invasive changes. (4) Use F1 `output:
+"snapshot"`, separate normalized ranges, independent bars, local-time
+resets, missing resets not invented; compact Metrics Bar with per-quota
+selection via the smallest generic extension, no Claude code in generic
+Dashboard/Metrics Bar. (5) States: available, temporarily unavailable, no
+Claude, no session, missing/expired cache, partial, source/auth failure,
+reset changes, 100%; never 0% for unavailable, no indefinitely stale values,
+show age; keep F1 no-flicker. (6) install.sh stops the running AQTRunCat of
+the installation/user before replacing: SIGTERM, bounded wait, verify exit,
+never kill unrelated processes or by broad name, never Claude Code/Codex,
+fail clearly if it does not exit, preflight before shutdown, `--dry-run`
+shows only, `--uninstall` lifecycle, system and `--local`, no restart unless
+specified, no hidden privilege escalation, other users not silently
+terminated, documented. (7) Tests for all of it with synthetic fixtures;
+clean build, full suite; Plasma/Wayland runtime with isolated config;
+compare with `/usage` at about the same moment, no unverified claims.
+(8) Update requirements, MEMORY, F2 doc, README, installer docs. (9) No Git
+writes. (10) Report the 9 points, then STOP; do not start F3.
 </details>

@@ -15,6 +15,7 @@ using aqtruncat::metrics::MetricStatus;
 namespace {
 
 const QString CustomPrefix = QStringLiteral("custom:");
+const QString CustomItemPrefix = QStringLiteral("custom-item:");
 
 QString q(const std::string &text)
 {
@@ -113,9 +114,41 @@ QString sourceIdFromCustomId(const QString &id)
     return isCustomId(id) ? id.mid(CustomPrefix.size()) : QString();
 }
 
+QString customItemId(const QString &sourceId, const QString &itemId)
+{
+    return CustomItemPrefix + itemId + u':' + sourceId;
+}
+
+bool isCustomItemId(const QString &id)
+{
+    if (!id.startsWith(CustomItemPrefix))
+        return false;
+    const qsizetype separator = id.indexOf(u':', CustomItemPrefix.size());
+    return separator > 0 && separator + 1 < id.size()
+        && aqtruncat::custommetrics::isValidItemId(id.mid(CustomItemPrefix.size(), separator - CustomItemPrefix.size()));
+}
+
+QString sourceIdFromCustomItemId(const QString &id)
+{
+    return isCustomItemId(id) ? id.mid(id.indexOf(u':', CustomItemPrefix.size()) + 1) : QString();
+}
+
+QString itemIdFromCustomItemId(const QString &id)
+{
+    if (!isCustomItemId(id))
+        return {};
+    const qsizetype separator = id.indexOf(u':', CustomItemPrefix.size());
+    return id.mid(CustomItemPrefix.size(), separator - CustomItemPrefix.size());
+}
+
+bool isSelectableItem(const aqtruncat::custommetrics::Item &item)
+{
+    return !item.id.isEmpty() && item.metricsBarValue && !item.metricsBarValue->trimmed().isEmpty();
+}
+
 bool isKnownId(const QString &id)
 {
-    return isBuiltInId(id) || isCustomId(id);
+    return isBuiltInId(id) || isCustomId(id) || isCustomItemId(id);
 }
 
 } // namespace aqtruncat::metricsbar
@@ -161,6 +194,8 @@ void MetricsBarModel::rebuild()
             std::optional<Item> item;
             if (isCustomId(id)) {
                 item = custom(id);
+            } else if (isCustomItemId(id)) {
+                item = customItem(id);
             } else {
                 const auto &metrics = builtInMetrics();
                 const auto metric = std::find_if(metrics.cbegin(), metrics.cend(),
@@ -283,5 +318,61 @@ std::optional<Item> MetricsBarModel::custom(const QString &id) const
     }
     item.status = statusFor(source->state);
     item.statusMessage = source->message;
+    return item;
+}
+
+std::optional<Item> MetricsBarModel::customItem(const QString &id) const
+{
+    const QString sourceId = sourceIdFromCustomItemId(id);
+    const QString itemId = itemIdFromCustomItemId(id);
+    const auto source = std::find_if(m_sources.cbegin(), m_sources.cend(),
+                                     [&](const auto &s) { return s.id == sourceId; });
+    if (source == m_sources.cend())
+        return std::nullopt;
+
+    Item item;
+    item.id = id;
+    item.origin = Origin::Custom;
+    item.status = statusFor(source->state);
+    item.statusMessage = source->message;
+    const auto &snapshot = source->snapshot;
+    const QString sourceTitle = snapshot ? snapshot->title : QFileInfo(source->path).completeBaseName();
+    item.label = sourceTitle;
+    if (snapshot) {
+        item.shortLabel = customSymbolText(snapshot->symbol);
+        item.icon = snapshot->icon;
+        item.lastUpdated = snapshot->lastUpdatedDate;
+    }
+    // A command skeleton (before the first result) has no items yet: the
+    // source state (Pending) speaks for the item.
+    if (!snapshot || snapshot->metrics.isEmpty())
+        return item;
+
+    const auto metric = std::find_if(snapshot->metrics.cbegin(), snapshot->metrics.cend(),
+                                     [&](const auto &m) { return m.id == itemId; });
+    if (metric == snapshot->metrics.cend()) {
+        if (item.status == Status::Available || item.status == Status::Pending) {
+            item.status = Status::Unavailable;
+            item.statusMessage = QStringLiteral("not reported by this source");
+        }
+        return item;
+    }
+    item.label = sourceTitle + QStringLiteral(" — ") + metric->title;
+    if (!metric->metricsBarLabel.isEmpty()) {
+        // A text caption tells several items of one source apart; the
+        // shared source icon could not.
+        item.shortLabel = metric->metricsBarLabel;
+        item.icon.reset();
+    }
+    item.detail = metric->detail.isEmpty() ? metric->formattedValue
+                                           : metric->formattedValue + QStringLiteral(" — ") + metric->detail;
+    if (isSelectableItem(*metric)) {
+        item.shortValue = *metric->metricsBarValue;
+    } else if (item.status == Status::Available || item.status == Status::Pending) {
+        // The producer has no compact value for it right now (e.g. data not
+        // reported): never show an empty or invented value.
+        item.status = Status::Unavailable;
+        item.statusMessage = metric->formattedValue;
+    }
     return item;
 }
