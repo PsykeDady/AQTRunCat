@@ -4,8 +4,8 @@ This document defines the AQTRunCat feature roadmap after completion of the
 M0–M9 project roadmap. M0–M9 are complete and remain the historical and
 architectural foundation for this work.
 
-F1 is complete. F2–F6 are not started; recording them here does not imply that
-they are currently available or supported.
+F1 and F2 are complete. F3–F6 are not started; recording them here does not
+imply that they are currently available or supported.
 
 The post-project roadmap is:
 
@@ -253,6 +253,77 @@ Do not add unnecessary Claude-specific monitoring infrastructure to the
 AQTRunCat core. If a small provider-specific adapter or executable is needed,
 it should feed the generic metric infrastructure and keep provider acquisition
 logic isolated.
+
+### Implemented Behaviour (F2 complete)
+
+The investigation, the evaluated sources and the validation record are in
+`docs/F2-claude-code-metric.md`. The following decisions are normative.
+
+Architecture:
+
+- Claude Code acquisition lives only in the separate QtCore executable
+  `aqtruncat-claude-metric` (library `aqtruncat_claude`). The AQTRunCat core
+  does not link it and knows no Claude format; it runs the adapter as an
+  ordinary F1 command source (`"output": "snapshot"`, interval 10 s, timeout
+  5 s). There is no Claude-specific scheduler, watcher or presentation.
+- F2 adds two provider-independent, backward-compatible F1 extensions:
+  `source.output` = `"scalar"` (default, unchanged) or `"snapshot"` (stdout
+  is one M6 snapshot object, ≤ 16 KiB; the configuration keeps owning title
+  and symbol; `display` is rejected), and exit status 69 (`EX_UNAVAILABLE`)
+  mapping to Unavailable with stderr as the message. Every other non-zero
+  status remains Error.
+
+Data source (read-only, local, no network, no prompts, no token use, no
+write to the Claude Code directory, which is `$CLAUDE_CONFIG_DIR` or
+`~/.claude`):
+
+- `sessions/<pid>.json` (Claude Code's internal live-session registry): an
+  entry counts as running only if `/proc/<pid>/stat` starttime equals its
+  `procStart` (fallback without `procStart`: a command line containing
+  `claude`).
+- `projects/*/<sessionId>.jsonl`: only the tail (256 KiB, growing ×4 up to
+  8 MiB) is read; of the last main-conversation (`isSidechain` false, not
+  `<synthetic>`) assistant entry only `message.usage`, `message.model`,
+  `requestedModel` and `timestamp` are used. A later `compact_boundary`
+  makes the context unknown until the next response.
+- The status-line stdin JSON (the only documented interface, and the only
+  one with account rate limits) is not used because it requires changing the
+  user's Claude Code configuration.
+
+Values (one "Claude Code" card):
+
+- Context window: `(input_tokens + cache_creation_input_tokens +
+  cache_read_input_tokens)` of the selected session's latest response
+  divided by 200 000, or 1 000 000 when the requested model ends in `[1m]`
+  (Claude Code's documented status-line formula and window sizes). Output
+  tokens are excluded. Without `requestedModel` only the token count is
+  shown, never a guessed percentage. The Metrics Bar value is the rounded
+  percentage (`<1%` below one).
+- Model, session (project directory name and Claude Code's busy/idle
+  status) and the number of running sessions.
+- Session token consumption, account usage limits and remaining allowance
+  are not exposed: no reliable local source exists.
+
+Session selection: among running sessions (optionally only those whose cwd
+is `--cwd DIR` or below) the most recently active one (newest transcript
+write, then registry update) is shown; with several, the card says so. Stale
+registry entries and old transcripts are ignored.
+
+States: no Claude Code directory or no running session → Unavailable;
+unreadable or unsupported registry/transcript data → Error; a running session
+without a response yet, or right after `/compact`, is Available with an
+explicit text and `—`, never zero.
+
+Installation and activation: the adapter is installed with AQTRunCat by
+`install.sh`, `install.sh --local` and the native packages; Claude Code is
+not a dependency. The metric is off by default. `aqtruncat-claude-metric
+enable [--cwd DIR]` writes the package
+`$XDG_DATA_HOME/AQTRunCat/metrics/claude-code/` (metric.json with the
+adapter's absolute path, plus an original neutral SVG icon); `disable`
+removes it. Both act only on a package they recognise as their own (`id`
+`claude-code` and the adapter's executable name); a user-managed package is
+replaced only with `enable --force` and never removed. Enabling never changes
+settings: the metric is not added to the Metrics Bar automatically.
 
 
 ## F3 — Codex Metric

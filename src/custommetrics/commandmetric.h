@@ -14,6 +14,16 @@ inline constexpr int MaximumCommandIntervalSeconds = 24 * 60 * 60;
 inline constexpr int DefaultCommandTimeoutSeconds = 10;
 inline constexpr int MaximumCommandTimeoutSeconds = 5 * 60;
 inline constexpr qsizetype MaxCommandOutputBytes = 16 * 1024;
+// sysexits.h EX_UNAVAILABLE: a command reports that its data source is absent
+// on this system (tool not installed, nothing to monitor). It maps to
+// Unavailable instead of Error; any other non-zero status remains Error.
+inline constexpr int UnavailableExitStatus = 69;
+
+// What a command writes on standard output.
+enum class CommandOutput {
+    Scalar,   // one trimmed scalar line (F1 default)
+    Snapshot, // one M6 snapshot JSON object (multi-value, F2)
+};
 
 struct NormalizedRange {
     double minimum = 0.0;
@@ -34,6 +44,7 @@ struct CommandDefinition {
     QString workingDirectory;
     int intervalSeconds = MinimumCommandIntervalSeconds;
     int timeoutSeconds = DefaultCommandTimeoutSeconds;
+    CommandOutput output = CommandOutput::Scalar;
     QString prefix;
     QString suffix;
     std::optional<NormalizedRange> normalizedRange;

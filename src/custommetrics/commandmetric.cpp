@@ -145,7 +145,24 @@ CommandParseResult parseCommandJson(const QByteArray &json, const QString &confi
                            definition.timeoutSeconds, result.error))
         return result;
 
+    const QJsonValue outputValue = source.value(QStringLiteral("output"));
+    if (!outputValue.isUndefined()) {
+        if (outputValue == QLatin1String("scalar")) {
+            definition.output = CommandOutput::Scalar;
+        } else if (outputValue == QLatin1String("snapshot")) {
+            definition.output = CommandOutput::Snapshot;
+        } else {
+            result.error = QStringLiteral("field \"output\" must be \"scalar\" or \"snapshot\"");
+            return result;
+        }
+    }
+
     const QJsonValue displayValue = object.value(QStringLiteral("display"));
+    if (!displayValue.isUndefined() && definition.output == CommandOutput::Snapshot) {
+        // A snapshot carries its own formatted values and normalized values.
+        result.error = QStringLiteral("field \"display\" applies only to scalar output");
+        return result;
+    }
     if (!displayValue.isUndefined()) {
         if (!displayValue.isObject()) {
             result.error = QStringLiteral("field \"display\" must be an object");
@@ -201,6 +218,21 @@ ScalarResult snapshotFromCommandOutput(const CommandDefinition &definition,
                            .arg(MaxCommandOutputBytes);
         return result;
     }
+    if (definition.output == CommandOutput::Snapshot) {
+        ParseResult parsed = parseJson(standardOutput, QFileInfo(definition.configurationPath).absolutePath());
+        if (!parsed.snapshot) {
+            result.error = QStringLiteral("standard output is not a valid snapshot: %1").arg(parsed.error);
+            return result;
+        }
+        // The configuration owns the source identity, as for scalar output:
+        // title and symbol stay stable across runs and in Settings.
+        parsed.snapshot->title = definition.title;
+        parsed.snapshot->symbol = definition.legacySymbol;
+        parsed.snapshot->icon = definition.icon;
+        result.snapshot = std::move(parsed.snapshot);
+        return result;
+    }
+
     QStringDecoder decoder(QStringDecoder::Utf8);
     const QString decoded = decoder.decode(standardOutput);
     if (decoder.hasError()) {

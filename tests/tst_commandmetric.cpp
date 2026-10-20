@@ -131,6 +131,70 @@ private slots:
             QStringLiteral("/tmp/snapshot.json"));
         QVERIFY(!snapshot.recognized);
     }
+    void snapshotOutputCarriesSeveralValuesUnderTheConfiguredIdentity()
+    {
+        QTemporaryDir temporary;
+        const QString path = temporary.filePath(QStringLiteral("package/metric.json"));
+        QJsonObject object = QJsonDocument::fromJson(configuration(QStringLiteral("./metric-helper"))).object();
+        object.remove(QStringLiteral("display"));
+        QJsonObject source = object.value(QStringLiteral("source")).toObject();
+        source.insert(QStringLiteral("output"), QStringLiteral("snapshot"));
+        object.insert(QStringLiteral("source"), source);
+        const CommandParseResult parsed = parseCommandJson(QJsonDocument(object).toJson(), path);
+        QVERIFY2(parsed.definition, qPrintable(parsed.error));
+        QCOMPARE(parsed.definition->output, CommandOutput::Snapshot);
+
+        const QByteArray output = R"({"title":"Producer title","symbol":"P","metricsBarValue":"42%",
+            "metrics":[{"title":"Load","formattedValue":"42%","normalizedValue":0.42},
+                       {"title":"State","formattedValue":"busy"}],
+            "lastUpdatedDate":"2026-10-16T10:00:00.000Z"})";
+        const ScalarResult result = snapshotFromCommandOutput(*parsed.definition, output);
+        QVERIFY2(result.snapshot, qPrintable(result.error));
+        QCOMPARE(result.snapshot->title, QStringLiteral("Temperature")); // configuration wins
+        QVERIFY(result.snapshot->icon);
+        QCOMPARE(*result.snapshot->symbol, QStringLiteral("temperature")); // not the producer's "P"
+        QCOMPARE(*result.snapshot->metricsBarValue, QStringLiteral("42%"));
+        QCOMPARE(result.snapshot->metrics.size(), 2);
+        QCOMPARE(*result.snapshot->metrics.first().normalizedValue, 0.42);
+        QCOMPARE(result.snapshot->lastUpdatedDate,
+                 QDateTime::fromString(QStringLiteral("2026-10-16T10:00:00.000Z"), Qt::ISODateWithMs));
+
+        for (const QByteArray &bad : {QByteArray("42%"), QByteArray("{\"title\":\"x\"}"), QByteArray(),
+                                      QByteArray("{\"title\":\"x\",\"metrics\":[],\"lastUpdatedDate\":\"yesterday\"}"),
+                                      QByteArray(MaxCommandOutputBytes + 1, ' ')}) {
+            const ScalarResult rejected = snapshotFromCommandOutput(*parsed.definition, bad);
+            QVERIFY(!rejected.snapshot);
+            QVERIFY(!rejected.error.isEmpty());
+        }
+    }
+
+    void outputModeValidation()
+    {
+        QJsonObject object = QJsonDocument::fromJson(configuration(QStringLiteral("/bin/true"))).object();
+        QJsonObject source = object.value(QStringLiteral("source")).toObject();
+        source.insert(QStringLiteral("output"), QStringLiteral("snapshot"));
+        object.insert(QStringLiteral("source"), source);
+        CommandParseResult result = parseCommandJson(QJsonDocument(object).toJson(), QStringLiteral("/tmp/m.json"));
+        QVERIFY(result.recognized);
+        QVERIFY(!result.definition);
+        QVERIFY(result.error.contains(QStringLiteral("display")));
+
+        source.insert(QStringLiteral("output"), QStringLiteral("table"));
+        object.insert(QStringLiteral("source"), source);
+        object.remove(QStringLiteral("display"));
+        result = parseCommandJson(QJsonDocument(object).toJson(), QStringLiteral("/tmp/m.json"));
+        QVERIFY(!result.definition);
+        QVERIFY(result.error.contains(QStringLiteral("output")));
+
+        source.insert(QStringLiteral("output"), QStringLiteral("scalar"));
+        object.insert(QStringLiteral("source"), source);
+        result = parseCommandJson(QJsonDocument(object).toJson(), QStringLiteral("/tmp/m.json"));
+        QVERIFY2(result.definition, qPrintable(result.error));
+        QCOMPARE(result.definition->output, CommandOutput::Scalar);
+        // Omitted: the F1 scalar default.
+        QCOMPARE(parseCommandJson(configuration(QStringLiteral("/bin/true")), QStringLiteral("/tmp/m.json"))
+                     .definition->output, CommandOutput::Scalar);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCommandMetric)

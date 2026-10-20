@@ -336,6 +336,51 @@ private slots:
         QTest::qWait(200);
         QVERIFY(!QFileInfo::exists(marker));
     }
+    void unavailableExitStatusMapsToUnavailableAndKeepsLastValue()
+    {
+        QTemporaryDir temporary;
+        const QString config = temporary.filePath(QStringLiteral("metric.json"));
+        writeConfiguration(config, helperPath(), {QStringLiteral("value"), QStringLiteral("7")});
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
+        settings.setCustomMetricFiles({config});
+        CustomMetricsService service(&settings, temporary.filePath(QStringLiteral("discovery")));
+        service.start();
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Available, 2000);
+
+        writeConfiguration(config, helperPath(), {QStringLiteral("exit"), QString::number(UnavailableExitStatus),
+                                                  QStringLiteral("tool is not installed")});
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Unavailable, 4000);
+        QCOMPARE(onlySource(service).message, QStringLiteral("tool is not installed"));
+
+        // Any other non-zero status stays Error.
+        writeConfiguration(config, helperPath(), {QStringLiteral("exit"), QStringLiteral("70")});
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Error, 4000);
+        QCOMPARE(onlySource(service).message, QStringLiteral("Command exited with status 70."));
+    }
+
+    void snapshotOutputRunsThroughTheScheduler()
+    {
+        QTemporaryDir temporary;
+        const QString config = temporary.filePath(QStringLiteral("metric.json"));
+        const QJsonObject object{
+            {QStringLiteral("id"), QStringLiteral("multi")},
+            {QStringLiteral("title"), QStringLiteral("Multi")},
+            {QStringLiteral("source"), QJsonObject{
+                 {QStringLiteral("type"), QStringLiteral("command")},
+                 {QStringLiteral("executable"), helperPath()},
+                 {QStringLiteral("arguments"), QJsonArray{QStringLiteral("value"), QStringLiteral(
+                      R"({"title":"t","metricsBarValue":"3","metrics":[{"title":"A","formattedValue":"1"},{"title":"B","formattedValue":"2"}],"lastUpdatedDate":"2026-10-16T10:00:00Z"})")}},
+                 {QStringLiteral("output"), QStringLiteral("snapshot")}}}};
+        writeFile(config, QJsonDocument(object).toJson());
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
+        settings.setCustomMetricFiles({config});
+        CustomMetricsService service(&settings, temporary.filePath(QStringLiteral("discovery")));
+        service.start();
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Available, 2000);
+        QCOMPARE(onlySource(service).snapshot->title, QStringLiteral("Multi"));
+        QCOMPARE(onlySource(service).snapshot->metrics.size(), 2);
+        QCOMPARE(*onlySource(service).snapshot->metricsBarValue, QStringLiteral("3"));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCommandMetricsService)

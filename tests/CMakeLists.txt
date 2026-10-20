@@ -110,3 +110,20 @@ if(AQTRUNCAT_BASH)
     add_test(NAME packaging-versions
              COMMAND ${AQTRUNCAT_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/packaging/check_versions.sh ${PROJECT_SOURCE_DIR})
 endif()
+
+# F2 Claude Code adapter: synthetic Claude Code state and a fake /proc for the
+# provider logic, then the real adapter executable run through F1 into the
+# Dashboard and Metrics Bar. Never the developer's ~/.claude, never the network.
+qt_add_executable(tst_claudecodemetric tst_claudecodemetric.cpp)
+target_link_libraries(tst_claudecodemetric PRIVATE aqtruncat_claude Qt6::Test)
+target_compile_options(tst_claudecodemetric PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME claudecodemetric COMMAND tst_claudecodemetric)
+
+qt_add_executable(tst_claudecodeintegration tst_claudecodeintegration.cpp)
+target_link_libraries(tst_claudecodeintegration PRIVATE aqtruncat_desktop Qt6::Test Qt6::Widgets)
+target_compile_options(tst_claudecodeintegration PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(tst_claudecodeintegration PRIVATE
+    AQTRUNCAT_CLAUDE_ADAPTER="$<TARGET_FILE:aqtruncat-claude-metric>")
+add_dependencies(tst_claudecodeintegration aqtruncat-claude-metric)
+add_test(NAME claudecodeintegration COMMAND tst_claudecodeintegration)
+set_tests_properties(claudecodeintegration PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

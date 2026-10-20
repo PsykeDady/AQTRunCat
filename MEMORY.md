@@ -4,7 +4,9 @@
 > conversations. M0–M9 implementation state was verified against the
 > repository on 2026-10-10; the post-project roadmap was revised and F1 was
 > implemented on 2026-10-13, then audited, hardened and runtime-validated on
-> 2026-10-16 (branch `feature/f1`, still uncommitted at that time).
+> 2026-10-16 (branch `feature/f1`, still uncommitted at that time). F2 was
+> investigated, implemented and runtime-validated on 2026-10-16 on branch
+> `feature/f2` (uncommitted at that time; the user owns all Git writes).
 > Precedence when sources disagree: **actual code/tests > this MEMORY (frozen
 > decisions §5) > docs/M*.md > historical prompts**. `requirements.md` is now
 > the **Post-Project Features** document (F1–F6), the current source for
@@ -14,8 +16,8 @@
 > First instruction you will likely receive: *"Read MEMORY.md and continue
 > AQTRunCat."* → **the initial roadmap M0–M9 is COMPLETE; M9 concluded it.**
 > AQTRunCat is in post-project development. The roadmap features are F1–F6 in
-> requirements.md (§13 here). **F1 is COMPLETE. F2–F6 are NOT STARTED; do not
-> start any of them without an explicit user instruction.**
+> requirements.md (§13 here). **F1 and F2 are COMPLETE. F3–F6 are NOT
+> STARTED; do not start any of them without an explicit user instruction.**
 
 ---
 
@@ -107,7 +109,8 @@ M7 COMPLETE   Metrics Bar (separate SNI items)
 M8 COMPLETE   Desktop Compatibility & Polish
 M9 COMPLETE   Packaging, Installation & Release Readiness — end of the initial roadmap
 F1 COMPLETE   Custom Metrics v2 / Executable Custom Metrics
-POST-PROJECT  F2–F6 roadmap features (requirements.md), NOT STARTED, need an explicit instruction
+F2 COMPLETE   Claude Code Metric (adapter aqtruncat-claude-metric over F1)
+POST-PROJECT  F3–F6 roadmap features (requirements.md), NOT STARTED, need an explicit instruction
 ```
 
 - Build: `cmake -S . -B build && cmake --build build && ctest --test-dir build`.
@@ -137,7 +140,12 @@ POST-PROJECT  F2–F6 roadmap features (requirements.md), NOT STARTED, need an e
   bounded direct `QProcess`, scalar output, per-source intervals, a shared
   scheduler, package discovery and structured theme/file icons. Both produce
   the same Snapshot/Source model for Dashboard and Metrics Bar (§13 and
-  `docs/F1-custom-metrics-v2.md`).
+  `docs/F1-custom-metrics-v2.md`). F2 adds `source.output: "snapshot"`
+  (multi-value command output) and exit 69 → Unavailable.
+- Claude Code metric (F2): separate QtCore executable
+  `aqtruncat-claude-metric` (lib `aqtruncat_claude`, not linked by the core)
+  run as a normal F1 command; opt-in via its `enable` subcommand
+  (`docs/F2-claude-code-metric.md`).
 - Metrics Bar (M7): one extra QSystemTrayIcon per selected metric next to
   the untouched runner item; **max 3 metric items** (runner always present,
   not counted → worst case 4 SNI); semantic `MetricsBarModel` → SNI renderer/
@@ -499,6 +507,7 @@ Key components:
 | Command scheduling/lifecycle (F1) | one shared monotonic timer; immediate first run; next interval (1–86400 s) starts after completion; timeout default 10 s/range 1–300 s; no overlap/catch-up; each command is its own process-group leader (`setpgid` child modifier); timeout/overflow SIGKILL the group, then re-check every 1 s (no spin); stop = SIGTERM all groups, ≤250 ms total wait, SIGKILL, final group SIGKILL; helpers left in background after a *successful* run are not killed | independent schedules without CPU-sampler coupling or idle polling; scripts' children never leak |
 | Command publish cost (F1) | service publishes at start and end of every run; hidden Dashboard stores the list and rebuilds cards only on show; Settings keeps the selected custom row across rebuilds | 5 commands cost 2.2 % → 0.87 % of a core after deferral |
 | Command output/state (F1) | stdout/stderr each ≤16 KiB; one trimmed nonempty scalar line; missing/non-executable = Unavailable; startup/exit/timeout/parse = Error; refresh = Pending retaining last value; Dashboard presents the last settled state during a refresh (no "Waiting…" flicker) | bounded failure, diagnostic stderr, never silent zero |
+| Claude Code metric (F2) | adapter outside the core, run as F1 `output:"snapshot"` command every 10 s; context % = input+cache tokens of last response / 200k or 1M (`[1m]`); most recently active running session; opt-in `enable`, never auto-added to the bar | local read-only data, no config changes, no invented values |
 | Custom Metrics XDG | non-recursive `$XDG_DATA_HOME/AQTRunCat/metrics/*.json` plus immediate `$XDG_DATA_HOME/AQTRunCat/metrics/<package>/metric.json`; explicit paths persist in INI | package level permits colocated relative executable/icon while preserving M6 standalone discovery |
 | Custom symbols (F1) | legacy string or `{type: theme|file, value}`; file/executable relative paths and command CWD resolve from config directory; invalid icon uses fallback without invalidating metric | deterministic self-contained packages, never process CWD |
 | Custom identity/order | canonical path when resolvable; explicit order first, discovered-only by stable name/path | no duplicate aliases or filesystem-order dependence |
@@ -700,7 +709,7 @@ sample on purpose (hot-plug) — caching not needed.
 
 ## 9. Tests and validation
 
-Automated (34 ctest suites: 32 Qt suites / 506 cases + 2 Bash suites, 0 warnings, verified 2026-10-16; the per-suite table below predates F1 — F1 added `commandmetric` 10 and `commandmetricsservice` 11, and raised custommetric 16, dashboard 11, metricsbarmodel 16, metricsbarrenderer 23; tests never read the real
+Automated (36 ctest suites: 34 Qt suites + 2 Bash suites, 0 warnings, verified 2026-10-16 after F2; the per-suite table below predates F1 — F1 added `commandmetric` 10 and `commandmetricsservice` 11, and raised custommetric 16, dashboard 11, metricsbarmodel 16, metricsbarrenderer 23; F2 added `claudecodemetric` 28 and `claudecodeintegration` 6 (QtTest totals incl. data rows/init/cleanup) and +2 each to commandmetric/commandmetricsservice; tests never read the real
 `/proc`; fixtures are text strings + temporary `/sys` trees; archives built
 with libarchive's writer and re-read to prove hostile names are stored):
 
@@ -884,8 +893,8 @@ RunCat Neo custom runner names (§11).
 
 M0–M9 are complete; M9 concluded the initial roadmap. `requirements.md`
 ("AQTRunCat — Post-Project Features") is the current source for future work
-and supersedes the earlier F1–F4 post-project ordering. **F1 is COMPLETE.
-F2–F6 are NOT STARTED; do not start one without an explicit user
+and supersedes the earlier F1–F4 post-project ordering. **F1 and F2 are
+COMPLETE. F3–F6 are NOT STARTED; do not start one without an explicit user
 instruction.**
 
 Development baseline: future post-project work starts from `feature/base`.
@@ -940,12 +949,64 @@ create or switch branches, commit or push without explicit permission.
   settled state is tracked in `DashboardWindow::updateCustomMetrics`, also
   while hidden. Metrics Bar unchanged (it already shows the retained custom
   value while Pending).
-- **F2 — Claude Code Metric**: first investigate reliable Claude Code sources
-  and values, then use F1's generic infrastructure where practical. The Claude
-  JSON fixture in current documentation is only an example external snapshot,
-  **not an implemented Claude monitor**. A small provider adapter/executable
-  may feed the generic layer; avoid Claude-specific core architecture.
-- **F3 — Codex Metric**: investigate reliable Codex usage/context/status data
+- **F2 — Claude Code Metric — COMPLETE (2026-10-16, `feature/f2`)**. Full
+  record: `docs/F2-claude-code-metric.md`; normative summary in
+  requirements.md. The M6 Claude JSON example is still only an example
+  snapshot, not how F2 works.
+  - Architecture: `src/providers/claude/` → static lib `aqtruncat_claude`
+    (QtCore only) + executable `aqtruncat-claude-metric` (`snapshot`,
+    `enable [--cwd DIR] [--force]`, `disable`). Core/`aqtruncat_desktop` never
+    link it. AQTRunCat runs it as an ordinary F1 command (`output:
+    "snapshot"`, interval 10 s, timeout 5 s); no second scheduler/watcher/UI.
+  - Generic F1 extensions (provider-neutral, backward compatible, tested):
+    `source.output` "scalar" (default) | "snapshot" (stdout = one M6
+    snapshot ≤16 KiB parsed by the M6 parser; config keeps title/symbol;
+    `display` rejected) and exit status 69 (`UnavailableExitStatus`,
+    EX_UNAVAILABLE) → Unavailable with stderr message; other non-zero → Error.
+  - Selected source (read-only, local, no network/tokens/prompts, no writes;
+    dir = `$CLAUDE_CONFIG_DIR` or `~/.claude`): `sessions/<pid>.json`
+    (internal live-session registry; alive iff `/proc/<pid>/stat` field 22 ==
+    `procStart`, fallback cmdline contains "claude") + tail of
+    `projects/*/<sessionId>.jsonl` (256 KiB growing ×4 to 8 MiB; last
+    non-sidechain, non-`<synthetic>` assistant entry; only usage/model/
+    requestedModel/timestamp; later `compact_boundary` → context unknown).
+    Rejected: status-line stdin (documented, has rate limits, but needs the
+    user's Claude config changed — possible future opt-in bridge),
+    stats-cache (stale aggregates), history.jsonl (private), credentials +
+    network usage endpoint, `claude -p` (tokens), OpenTelemetry (config).
+  - Values: Context window = (input + cache_creation + cache_read tokens of
+    the latest response) / 200 000, or 1 000 000 if requestedModel ends in
+    `[1m]` (documented status-line formula/sizes; output tokens excluded;
+    no requestedModel → tokens only, no %); bar value = rounded % (`<1%`).
+    Plus Model, Session (project dir name · busy/idle), Running sessions.
+    NOT exposed: session token consumption, account limits, allowance.
+  - Session selection: running sessions (optionally cwd under `--cwd`), most
+    recently active (newest transcript mtime, then registry updatedAt); card
+    says "showing the most recently active" when >1. Stale entries ignored.
+  - States: no Claude dir / no running session → 69 Unavailable; unreadable
+    or unsupported registry/transcript → 1 Error; no response yet or just
+    compacted → Available with explicit text and `—`, never 0.
+  - Install/activation: installed with the app by install.sh, `--local`,
+    CMake, PKGBUILD, Debian, RPM (`%files` updated); Claude Code not a
+    dependency. Off by default; `enable` writes
+    `$XDG_DATA_HOME/AQTRunCat/metrics/claude-code/{metric.json,claude-code.svg}`
+    (absolute adapter path; original neutral icon). Never touches settings,
+    never adds to the Metrics Bar. enable/disable only touch a package whose
+    id is `claude-code` and executable is named `aqtruncat-claude-metric`;
+    user packages need `enable --force` and are never removed.
+  - Validation (Plasma 6 Wayland, Claude Code 2.1.301, isolated XDG, fps 10,
+    30 s): baseline 0.40 %; enabled @10 s 0.40 % app + 0.03 % adapter; stress
+    @1 s 0.57 % + 0.53 %; RSS ~68.7 MiB; ~7 ms per adapter run; runner 100
+    NewIcon/10 s unchanged; Dashboard card/icon/bar and SNI pixmap/tooltip
+    verified; Unavailable/Error visible; SIGTERM clean, no adapter left.
+    Not forced at runtime: an adapter timeout (generic F1 path, tested).
+  - Limitations: internal Claude formats (schema change → Error until the
+    adapter is updated); "most recently active" ≠ focused terminal; window
+    inferred from `[1m]`; refresh ≤10 s and only on responses; no account
+    limits.
+- **F3 — Codex Metric** (NOT STARTED; F2 left the path: a sibling
+  `src/providers/codex/` adapter emitting an F1 snapshot with exit 69 for
+  absent data, no shared AI framework yet): investigate reliable Codex usage/context/status data
   and use the same F1 architecture principles as F2. Claude and Codex must
   coexist; share common scheduling/state/configuration/presentation rather
   than duplicating provider architecture.
@@ -993,7 +1054,7 @@ create or switch branches, commit or push without explicit permission.
   external commands when practical (F1 command sources are the deliberate
   extension); keep system-wide and `--local` install; keep user data separate
   and safe on uninstall/upgrade; never sacrifice the generic app for a
-  desktop-specific frontend; F2–F6 remain future work, not implemented.
+  desktop-specific frontend; F3–F6 remain future work, not implemented.
 
 ## (historical) M9 brief
 Install target, `.desktop`, own icon, Arch PKGBUILD, Flatpak/AppImage
@@ -1038,6 +1099,7 @@ docs/M4-dashboard.md           Dashboard/shared sampler architecture, UI/runtime
 docs/M5-settings-desktop.md    typed settings, preview, speed/network policy, XDG autostart, validation
 docs/M6-custom-metrics.md      historical M6 snapshot schema, registry/watch/retry, Dashboard/Settings, validation
 docs/F1-custom-metrics-v2.md   F1 command schema/output/security, scheduler/lifecycle, packages/icons, validation
+docs/F2-claude-code-metric.md  F2 investigation/sources, metric semantics, session selection, adapter, F1 extensions, install, validation
 docs/M7-metrics-bar.md         Plasma SNI spike, model/renderer/presenter, formatting, statuses, settings, ordering, cost
 docs/M8-desktop-compatibility.md  distro/desktop matrix, suspend, tray restart, fixes, perf, soak
 README.md                      user-facing: features, supported systems, install/uninstall, packages, usage, limitations
@@ -1055,9 +1117,10 @@ src/metrics/                   Qt-free metrics: parsers, CounterRateTracker, Sys
 src/custommetrics/             shared Snapshot/Source model, bounded M6 parser, F1 command config/scalar parser
 src/cli/                       commandline (grammar/help/exit codes), runnercommands, metricscommand
 src/app/                       runtime/UI: AppSettings, MetricSampler, CustomMetricsService, CPU controller, Dashboard, Settings/preview, autostart
+src/providers/claude/          F2 Claude Code adapter (aqtruncat_claude lib + aqtruncat-claude-metric exe + icon); not linked by the core
 data/runners/<id>/metadata.json   AQTRunCat-authored metadata for bundled runners
 third_party/runcatneo/         upstream LICENSE + frames (cat, coffee bundled; engine spike-only)
-tests/                         Qt Test suites (tst_*.cpp), including F1 deterministic command helper/service cases
+tests/                         Qt Test suites (tst_*.cpp), including F1 deterministic command helper/service cases and F2 Claude fixtures (synthetic registry/transcripts/fake /proc)
 tools/                         permanent diagnostic scripts (§10)
 spike/m1-tray/                 throwaway M1.0 prototype + its measurement tools (not built by default)
 ```

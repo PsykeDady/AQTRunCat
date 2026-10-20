@@ -29,13 +29,15 @@ Installation (default):
 
   System-wide (default)  prefix /usr/local, change with --prefix=DIR:
                            DIR/bin/aqtruncat
+                           DIR/bin/aqtruncat-claude-metric (optional Claude
+                             Code metric, off until you run its "enable")
                            DIR/share/applications/aqtruncat.desktop
                            DIR/share/icons/hicolor/*/apps/aqtruncat.{png,svg}
                            DIR/share/man/man1/aqtruncat.1
                            DIR/share/doc/aqtruncat/ (README, licenses)
                            DIR/share/aqtruncat/install-manifest.txt
   --local                for the current user only, no root and no sudo:
-                           ${XDG_BIN_HOME:-~/.local/bin}/aqtruncat
+                           ${XDG_BIN_HOME:-~/.local/bin}/aqtruncat, aqtruncat-claude-metric
                            ${XDG_DATA_HOME:-~/.local/share}/applications, icons, man, doc
                            ${XDG_STATE_HOME:-~/.local/state}/aqtruncat/install-manifest.txt
                          Your shell files are never edited; if the bin directory

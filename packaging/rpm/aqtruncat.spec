@@ -45,6 +45,7 @@ export QT_QPA_PLATFORM=offscreen
 %files
 %license LICENSE LICENSE.RunCatNeo
 %{_bindir}/%{name}
+%{_bindir}/%{name}-claude-metric
 %{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/*/apps/%{name}.png
 %{_datadir}/icons/hicolor/scalable/apps/%{name}.svg

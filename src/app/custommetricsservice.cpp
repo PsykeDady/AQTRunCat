@@ -534,9 +534,16 @@ void CustomMetricsService::finishCommand(const QString &id, int exitCode, QProce
     readCommandOutput(id);
 
     QString error = job.forcedError;
+    State failure = State::Error;
     if (error.isEmpty() && exitStatus != QProcess::NormalExit)
         error = tr("Command crashed.");
-    if (error.isEmpty() && exitCode != 0) {
+    if (error.isEmpty() && exitCode == UnavailableExitStatus) {
+        failure = State::Unavailable;
+        error = tr("Source is not available.");
+        const QString diagnostic = QString::fromUtf8(job.standardError).trimmed();
+        if (!diagnostic.isEmpty())
+            error = diagnostic.left(512);
+    } else if (error.isEmpty() && exitCode != 0) {
         error = tr("Command exited with status %1.").arg(exitCode);
         const QString diagnostic = QString::fromUtf8(job.standardError).trimmed();
         if (!diagnostic.isEmpty())
@@ -559,7 +566,7 @@ void CustomMetricsService::finishCommand(const QString &id, int exitCode, QProce
             source->state = State::Available;
             source->message.clear();
         } else {
-            source->state = State::Error;
+            source->state = failure;
             source->message = error;
         }
     }

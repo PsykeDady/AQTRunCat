@@ -169,9 +169,9 @@ files remain unchanged: register one in Settings, or drop it into
 }
 ```
 
-The Claude Code object above is only an example snapshot. AQTRunCat does not
-include a Claude Code monitor; an external producer must create and update the
-file. The future Claude feature is separate from the generic command support.
+The Claude Code object above is only an example of the snapshot format that
+an external producer writes; it is not how the Claude Code metric works (see
+[Claude Code metric](#claude-code-metric) below).
 
 Files are watched: updates (including atomic replace) appear immediately,
 and a broken or missing file only affects its own card.
@@ -200,7 +200,36 @@ Put this at, for example,
 executable and icon are resolved from that package directory. Commands run as
 the AQTRunCat user, without privilege escalation. See
 [docs/F1-custom-metrics-v2.md](docs/F1-custom-metrics-v2.md) for the complete
-schema, limits, states and security model.
+schema, limits, states and security model. A command may also print a whole
+snapshot object (`"output": "snapshot"`) to show several values in one card,
+and exit with status 69 to report that its data source is absent
+(Unavailable rather than Error).
+
+### Claude Code metric
+
+AQTRunCat ships an optional, read-only Claude Code metric:
+`aqtruncat-claude-metric`, installed next to `aqtruncat`. It is off until you
+enable it, and Claude Code is not required to install or run AQTRunCat:
+
+```bash
+aqtruncat-claude-metric enable                  # most recently active session
+aqtruncat-claude-metric enable --cwd ~/my/repo  # or only sessions in a project
+aqtruncat-claude-metric disable
+```
+
+`enable` writes `~/.local/share/AQTRunCat/metrics/claude-code/`; AQTRunCat
+picks it up at once and shows a **Claude Code** card in the Dashboard with the
+context-window use of the running Claude Code session (input tokens of its
+latest response over the 200k or 1M window), the model, the session's project
+and status, and how many sessions are running. Every 10 seconds it reads
+Claude Code's local session registry and the tail of that session's
+transcript: no network, no prompts sent, no tokens used, nothing written to
+`~/.claude`, and no conversation text or credentials in the output. It is not
+added to the Metrics Bar by itself; choose it in Settings to see the context
+percentage there. Account usage limits (the 5-hour/7-day allowance) are not
+shown: Claude Code does not store them locally. Details, the exact meaning of
+every value and the limitations:
+[docs/F2-claude-code-metric.md](docs/F2-claude-code-metric.md).
 
 ### Metrics Bar
 
@@ -237,5 +266,5 @@ AQTRunCat icon is original artwork.
 - [requirements.md](requirements.md): specification and roadmap
 - [docs/](docs/): design and validation reports per milestone (runners,
   metrics, Dashboard, Settings, Custom Metrics, Metrics Bar, desktop
-  compatibility, packaging, executable Custom Metrics)
+  compatibility, packaging, executable Custom Metrics, Claude Code metric)
 - [`tools/`](tools/): diagnostic scripts for developers (not needed by users)

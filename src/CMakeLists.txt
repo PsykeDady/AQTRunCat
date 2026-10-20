@@ -164,3 +164,21 @@ qt_add_resources(aqtruncat bundled_runner_frames PREFIX /runners BASE "${frames_
 if(bundled_metadata)
     qt_add_resources(aqtruncat bundled_runner_metadata PREFIX /runners BASE "${metadata_root}" FILES ${bundled_metadata})
 endif()
+
+# F2 Claude Code adapter: provider acquisition kept out of the core. It feeds
+# F1 command-backed Custom Metrics ("output": "snapshot") as a separate,
+# QtCore-only executable; nothing in aqtruncat_desktop links it.
+add_library(aqtruncat_claude STATIC
+    providers/claude/claudecode.cpp
+    providers/claude/claudecode.h)
+target_include_directories(aqtruncat_claude PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/providers")
+target_link_libraries(aqtruncat_claude PUBLIC Qt6::Core)
+target_compile_options(aqtruncat_claude PRIVATE -Wall -Wextra -Wpedantic)
+
+qt_add_executable(aqtruncat-claude-metric
+    providers/claude/claudeicon.h
+    providers/claude/main.cpp)
+target_link_libraries(aqtruncat-claude-metric PRIVATE aqtruncat_claude Qt6::Core)
+target_compile_options(aqtruncat-claude-metric PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(aqtruncat-claude-metric PRIVATE AQTRUNCAT_VERSION="${PROJECT_VERSION}")
+install(TARGETS aqtruncat-claude-metric RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
