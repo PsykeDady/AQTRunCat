@@ -1,7 +1,7 @@
 #include "settingswindow.h"
 
 #include "runnerpreviewwidget.h"
-#include "custommetricsservice.h"
+#include "custommetricsmodel.h"
 #include "metricsbarmodel.h"
 #include "providerintegration.h"
 
@@ -59,7 +59,7 @@ QGroupBox *group(const QString &title, QWidget *parent)
 } // namespace
 
 SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOption> runners,
-                               CustomMetricsService *customMetrics, QWidget *parent,
+                               CustomMetricsModel *customMetrics, QWidget *parent,
                                ProviderIntegration *claude, ProviderIntegration *codex)
     : QWidget(parent, Qt::Tool)
     , m_settings(settings)
@@ -378,7 +378,7 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
     connect(m_settings, &aqtruncat::AppSettings::metricsBarChanged, this, [this] { rebuildMetricsBar(); },
             Qt::QueuedConnection);
     if (m_customMetrics) {
-        connect(m_customMetrics, &CustomMetricsService::sourcesChanged, this, [this] {
+        connect(m_customMetrics, &CustomMetricsModel::sourcesChanged, this, [this] {
             rebuildCustomMetrics();
             rebuildMetricsBar();
         });
@@ -429,7 +429,7 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
             m_claudeMessage->setVisible(!message.isEmpty());
         });
         if (m_customMetrics)
-            connect(m_customMetrics, &CustomMetricsService::sourcesChanged, this, [this] { updateIntegrationAvailability(); });
+            connect(m_customMetrics, &CustomMetricsModel::sourcesChanged, this, [this] { updateIntegrationAvailability(); });
         syncClaude();
         m_claude->refresh();
     }
@@ -463,7 +463,7 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
             m_codexMessage->setVisible(!message.isEmpty());
         });
         if (m_customMetrics && !m_claude)
-            connect(m_customMetrics, &CustomMetricsService::sourcesChanged, this, [this] { updateIntegrationAvailability(); });
+            connect(m_customMetrics, &CustomMetricsModel::sourcesChanged, this, [this] { updateIntegrationAvailability(); });
         syncCodex();
         m_codex->refresh();
     }

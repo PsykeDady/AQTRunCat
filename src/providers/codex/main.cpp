@@ -45,7 +45,7 @@ void usage(FILE *stream)
         "  %1 upgrade\n"
         "  %1 status [--json]\n"
         "  %1 live-updates on|off\n"
-        "  %1 -h | --help | --version\n"
+        "  %1 -h | --help | -v | --version\n"
         "\n"
         "AQTRunCat Codex integration: your Codex usage limits (the windows Codex's\n"
         "/status shows, e.g. the 5h and weekly limits) with their reset times.\n"
@@ -292,7 +292,7 @@ int main(int argc, char *argv[])
         usage(stdout);
         return 0;
     }
-    if (command == QLatin1String("--version")) {
+    if (command == QLatin1String("-v") || command == QLatin1String("--version")) {
         std::printf("%s %s\n", ExecutableName, AQTRUNCAT_VERSION);
         return 0;
     }

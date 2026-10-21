@@ -8,6 +8,18 @@ Stati: **SUPPORTED**, **SUPPORTED WITH LIMITATIONS**, **DEFERRED**, **NOT
 TESTED**, **NOT APPLICABLE**. Evidenze: **[OSS]** eseguito/misurato,
 **[SRC]** letto da codice/documentazione, **[IPO]** inferenza.
 
+> **Nota F4.1 (2026-10-21).** Da F4.1 ogni installazione contiene anche il
+> backend `bin/aqtruncatd`, la CLI `bin/aqtruncatctl` e il file di
+> attivazione D-Bus `share/dbus-1/services/io.github.psykedady.AQTRunCat.service`
+> (con `Exec` = l'`aqtruncatd` installato). `install.sh` chiude anche
+> l'`aqtruncatd` della stessa installazione (percorso esatto, SIGTERM) e chiede
+> `ReloadConfig` al bus di sessione dopo l'installazione e la
+> disinstallazione. I pacchetti dipendono da D-Bus (PKGBUILD `dbus`, Debian
+> `default-dbus-session-bus | dbus-session-bus`, RPM `Requires: dbus`). Il test
+> `backendipc` è registrato solo se c'è `dbus-run-session`. I pacchetti non
+> sono stati ricostruiti nei container dopo F4.1. Dettagli:
+> [F4.1-headless-backend-ipc-cli.md](F4.1-headless-backend-ipc-cli.md) §10.
+
 ## 1. Riepilogo
 
 | Canale | Stato | Evidenza |
@@ -285,7 +297,7 @@ regressioni sopra non può essere dichiarato supportato.
 
 | Voce | Stato |
 |---|---|
-| Versione | `0.0.1` da `project(VERSION)`; nessuna policy di versione nel repository, quindi non modificata |
+| Versione | `0.0.1` da `project(VERSION)`; nessuna policy di versione nel repository, quindi non modificata. Da F4.1: 1.4.1, regola in `requirements.md` ("Versioning") |
 | Metadati CMake | nome, versione, descrizione; nessun `HOMEPAGE_URL` (nessun repository pubblico) |
 | Eseguibile / nome applicazione / icona | `aqtruncat` / `AQTRunCat` / `aqtruncat` (originale, non RunCat) |
 | Licenze | `LICENSE` (Apache-2.0), `THIRD_PARTY_NOTICES.md`, `third_party/runcatneo/LICENSE` installato come `LICENSE.RunCatNeo` |

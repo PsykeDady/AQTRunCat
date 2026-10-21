@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(AQTRunCat
-    VERSION 0.0.1
+    VERSION 1.4.1
     DESCRIPTION "A Cute Run Cat for Linux"
     LANGUAGES CXX)
 
@@ -17,9 +17,9 @@ include(GNUInstallDirs)
 
 option(BUILD_TESTING "Build the automated test suite" ON)
 if(BUILD_TESTING)
-    find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Test)
+    find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets DBus Test)
 else()
-    find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets)
+    find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets DBus)
 endif()
 
 # Runner ZIP import (aqtruncat runner import).
@@ -48,6 +48,13 @@ endif()
 # executable, so there are no runtime data files to install.
 install(FILES data/aqtruncat.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES data/aqtruncat.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+# F4.1: D-Bus activation of the backend on the session bus (found through
+# $XDG_DATA_DIRS / $XDG_DATA_HOME by dbus-daemon and dbus-broker).
+set(AQTRUNCAT_DBUS_EXEC "${CMAKE_INSTALL_FULL_BINDIR}/aqtruncatd")
+configure_file(data/io.github.psykedady.AQTRunCat.service.in
+               ${CMAKE_CURRENT_BINARY_DIR}/io.github.psykedady.AQTRunCat.service @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.psykedady.AQTRunCat.service
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services)
 install(DIRECTORY data/icons/hicolor DESTINATION ${CMAKE_INSTALL_DATADIR}/icons)
 install(FILES README.md LICENSE THIRD_PARTY_NOTICES.md DESTINATION ${CMAKE_INSTALL_DOCDIR})
 install(FILES third_party/runcatneo/LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR} RENAME LICENSE.RunCatNeo)

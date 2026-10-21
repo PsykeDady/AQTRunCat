@@ -89,6 +89,7 @@ private:
     QList<aqtruncat::metricsbar::Item> m_items;
     QAction m_dashboardAction;
     QAction m_settingsAction;
+    QAction m_versionAction;
     QAction m_quitAction;
     int m_iconUpdates = 0;
     int m_toolTipUpdates = 0;

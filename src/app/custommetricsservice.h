@@ -1,5 +1,6 @@
 #pragma once
 
+#include "custommetricsmodel.h"
 #include "custommetrics/commandmetric.h"
 #include "custommetrics/custommetric.h"
 
@@ -14,7 +15,7 @@
 
 namespace aqtruncat { class AppSettings; }
 
-class CustomMetricsService : public QObject
+class CustomMetricsService : public CustomMetricsModel
 {
     Q_OBJECT
 
@@ -23,19 +24,16 @@ public:
                                   QString discoveryDirectory = {}, QObject *parent = nullptr);
     ~CustomMetricsService() override;
 
-    const QList<aqtruncat::custommetrics::Source> &sources() const { return m_sources; }
-    QString discoveryDirectory() const { return m_discoveryDirectory; }
+    const QList<aqtruncat::custommetrics::Source> &sources() const override { return m_sources; }
+    QString discoveryDirectory() const override { return m_discoveryDirectory; }
 
-    bool registerFile(const QString &path, QString *error = nullptr);
-    void unregisterFile(const QString &path);
+    bool registerFile(const QString &path, QString *error = nullptr) override;
+    void unregisterFile(const QString &path) override;
 
 public slots:
     void start();
     void stop();
     void rescan();
-
-signals:
-    void sourcesChanged(const QList<aqtruncat::custommetrics::Source> &sources);
 
 private:
     static QString absolutePath(const QString &path);

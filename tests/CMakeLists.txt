@@ -153,3 +153,43 @@ target_compile_definitions(tst_codexintegration PRIVATE
 add_dependencies(tst_codexintegration aqtruncat-codex-metric aqtruncat-claude-metric)
 add_test(NAME codexintegration COMMAND tst_codexintegration)
 set_tests_properties(codexintegration PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# F4.1: API schema (no D-Bus).
+qt_add_executable(tst_apischema tst_apischema.cpp)
+target_link_libraries(tst_apischema PRIVATE aqtruncat_api Qt6::Test)
+target_compile_options(tst_apischema PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME apischema COMMAND tst_apischema)
+
+# F4.1: backend, API, frontend client and CLI end to end, on an isolated
+# session bus (dbus-run-session) with temporary XDG/home directories.
+find_program(AQTRUNCAT_DBUS_RUN_SESSION dbus-run-session)
+qt_add_executable(tst_backendipc tst_backendipc.cpp)
+target_link_libraries(tst_backendipc PRIVATE aqtruncat_desktop Qt6::Test Qt6::Widgets Qt6::DBus)
+target_compile_options(tst_backendipc PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(tst_backendipc PRIVATE
+    AQTRUNCAT_DAEMON="$<TARGET_FILE:aqtruncatd>"
+    AQTRUNCAT_CTL="$<TARGET_FILE:aqtruncatctl>"
+    AQTRUNCAT_TEST_VERSION="${PROJECT_VERSION}")
+add_dependencies(tst_backendipc aqtruncatd aqtruncatctl aqtruncat-claude-metric aqtruncat-codex-metric)
+if(AQTRUNCAT_DBUS_RUN_SESSION)
+    # A session bus without service directories: an AQTRunCat installed on
+    # this machine (share/dbus-1/services) must not be activated by the test.
+    set(backendipc_bus "${CMAKE_CURRENT_BINARY_DIR}/backendipc-bus.conf")
+    file(WRITE "${backendipc_bus}" [=[<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <type>session</type>
+  <listen>unix:tmpdir=/tmp</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow send_destination="*" eavesdrop="true"/>
+    <allow eavesdrop="true"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>
+]=])
+    add_test(NAME backendipc COMMAND ${AQTRUNCAT_DBUS_RUN_SESSION} --config-file=${backendipc_bus} -- $<TARGET_FILE:tst_backendipc>)
+    set_tests_properties(backendipc PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+else()
+    message(STATUS "dbus-run-session not found: the backendipc test is not registered")
+endif()

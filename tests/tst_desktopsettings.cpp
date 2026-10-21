@@ -66,6 +66,18 @@ private slots:
         snapshot.timeSeconds = 3.1;
         throttle.submit(snapshot);
         QCOMPARE(emitted, 3); // setting change makes next shared snapshot immediate
+
+        // Timer jitter of the 1 Hz sampler does not skip a period.
+        throttle.setIntervalSeconds(1);
+        emitted = 0;
+        for (double time : {10.0, 10.9996, 12.0003, 12.9999, 13.9998}) {
+            snapshot.timeSeconds = time;
+            throttle.submit(snapshot);
+        }
+        QCOMPARE(emitted, 5);
+        snapshot.timeSeconds = 14.5; // a real early snapshot still waits
+        throttle.submit(snapshot);
+        QCOMPARE(emitted, 5);
     }
 
     void missingPersistedRunnerFallsBackAndRequestsRepair()

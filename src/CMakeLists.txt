@@ -70,9 +70,11 @@ add_library(aqtruncat_cli STATIC
 target_link_libraries(aqtruncat_cli PUBLIC aqtruncat_runner aqtruncat_metrics)
 target_compile_options(aqtruncat_cli PRIVATE -Wall -Wextra -Wpedantic)
 
-# Desktop runtime and Widgets UI. MetricSampler is the sole metrics owner in
-# the tray process; DashboardWindow and the runner are consumers.
-add_library(aqtruncat_desktop STATIC
+# Engine: settings, the system-metrics sampler, Custom Metrics (F1, with the
+# F2/F3 adapters it runs), runner speed, autostart and official-integration
+# management. QtCore only: the headless backend (aqtruncatd) is built on it,
+# and it never needs a display, a tray or Qt Widgets/Gui.
+add_library(aqtruncat_engine STATIC
     custommetrics/commandmetric.cpp
     custommetrics/commandmetric.h
     custommetrics/custommetric.cpp
@@ -89,41 +91,62 @@ add_library(aqtruncat_desktop STATIC
     app/cpumonitor.h
     app/custommetricpaths.cpp
     app/custommetricpaths.h
+    app/custommetricsmodel.h
     app/custommetricsservice.cpp
     app/custommetricsservice.h
+    app/metricsampler.cpp
+    app/metricsampler.h
+    app/metricsbarids.cpp
+    app/metricsbarids.h
+    app/providerintegration.cpp
+    app/providerintegration.h
+    app/runpreferences.cpp
+    app/runpreferences.h
+    app/runnerspeedcontroller.cpp
+    app/runnerspeedcontroller.h
+    app/snapshotthrottle.cpp
+    app/snapshotthrottle.h
+    app/storagepaths.cpp
+    app/storagepaths.h)
+target_link_libraries(aqtruncat_engine PUBLIC aqtruncat_metrics Qt6::Core)
+target_compile_options(aqtruncat_engine PRIVATE -Wall -Wextra -Wpedantic)
+
+# F4.1 public API: schema, the backend service and the client used by the
+# frontends. QtCore + QtDBus only (no Widgets, no Gui).
+add_library(aqtruncat_api STATIC
+    api/apischema.cpp
+    api/apischema.h
+    api/backendclient.cpp
+    api/backendclient.h
+    api/backendservice.cpp
+    api/backendservice.h)
+target_link_libraries(aqtruncat_api PUBLIC aqtruncat_engine Qt6::Core Qt6::DBus)
+target_compile_options(aqtruncat_api PRIVATE -Wall -Wextra -Wpedantic)
+
+# Desktop frontend (Qt Widgets / SNI tray): Dashboard, Settings, Metrics
+# Bar, runner presentation. Since F4.1 it consumes the backend over D-Bus.
+add_library(aqtruncat_desktop STATIC
     app/customsymbol.cpp
     app/customsymbol.h
     app/dashboardwindow.cpp
     app/dashboardwindow.h
-    app/metricsampler.cpp
     app/metricsbarmodel.cpp
     app/metricsbarmodel.h
     app/metricsbarpresenter.cpp
     app/metricsbarpresenter.h
     app/metricsbarrenderer.cpp
     app/metricsbarrenderer.h
-    app/metricsampler.h
     app/runnerpresentation.cpp
     app/runnerpresentation.h
     app/runnerselection.cpp
     app/runnerselection.h
     app/runnerpreviewwidget.cpp
     app/runnerpreviewwidget.h
-    app/runpreferences.cpp
-    app/runpreferences.h
-    app/runnerspeedcontroller.cpp
-    app/runnerspeedcontroller.h
-    app/providerintegration.cpp
-    app/providerintegration.h
     app/settingswindow.cpp
     app/settingswindow.h
-    app/snapshotthrottle.cpp
-    app/snapshotthrottle.h
-    app/storagepaths.cpp
-    app/storagepaths.h
     app/traypresenter.cpp
     app/traypresenter.h)
-target_link_libraries(aqtruncat_desktop PUBLIC aqtruncat_metrics aqtruncat_runner Qt6::Widgets)
+target_link_libraries(aqtruncat_desktop PUBLIC aqtruncat_api aqtruncat_engine aqtruncat_runner Qt6::Widgets)
 target_compile_options(aqtruncat_desktop PRIVATE -Wall -Wextra -Wpedantic)
 
 qt_add_executable(aqtruncat
@@ -166,6 +189,23 @@ qt_add_resources(aqtruncat bundled_runner_frames PREFIX /runners BASE "${frames_
 if(bundled_metadata)
     qt_add_resources(aqtruncat bundled_runner_metadata PREFIX /runners BASE "${metadata_root}" FILES ${bundled_metadata})
 endif()
+
+# The backend (F4.1): one per user session, D-Bus activated, headless.
+# (After AQTRUNCAT_DEFAULT_RUNNER is defined.)
+qt_add_executable(aqtruncatd daemon/main.cpp)
+target_link_libraries(aqtruncatd PRIVATE aqtruncat_api Qt6::Core Qt6::DBus)
+target_compile_options(aqtruncatd PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(aqtruncatd PRIVATE
+    AQTRUNCAT_VERSION="${PROJECT_VERSION}"
+    AQTRUNCAT_DEFAULT_RUNNER="${AQTRUNCAT_DEFAULT_RUNNER}")
+install(TARGETS aqtruncatd RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# Reference CLI client of the backend API (F4.1): QtCore + QtDBus.
+qt_add_executable(aqtruncatctl ctl/main.cpp)
+target_link_libraries(aqtruncatctl PRIVATE aqtruncat_api Qt6::Core Qt6::DBus)
+target_compile_options(aqtruncatctl PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(aqtruncatctl PRIVATE AQTRUNCAT_VERSION="${PROJECT_VERSION}")
+install(TARGETS aqtruncatctl RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # F2 Claude Code adapter: provider acquisition kept out of the core. It feeds
 # F1 command-backed Custom Metrics ("output": "snapshot") as a separate,

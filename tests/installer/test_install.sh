@@ -173,6 +173,35 @@ check "an incomplete or stale build is refused" grep -qF "is not up to date with
 check "a refused build installs nothing" test ! -e "$work/home/.local/bin/aqtruncat"
 rm -rf "$cache_build"
 
+# A build of another version: warning and a question; N (default, and
+# without a terminal) builds the sources, y installs the previous build.
+source_version=$(sed -n 's/^ *VERSION \([0-9][0-9.]*\)$/\1/p' "$source_dir/CMakeLists.txt" | head -n 1)
+old_build=$work/old-build
+mkdir -p "$cache_build/src" "$old_build/src"
+for dir in "$cache_build" "$old_build"; do
+    printf 'CMAKE_HOME_DIRECTORY:INTERNAL=%s\nCMAKE_BUILD_TYPE:STRING=Release\nCMAKE_GENERATOR:INTERNAL=Ninja\nCMAKE_PROJECT_VERSION:STATIC=0.9.0\n' "$source_dir" > "$dir/CMakeCache.txt"
+    printf '#!/bin/sh\necho "AQTRunCat 0.9.0"\n' > "$dir/src/aqtruncat"
+    chmod +x "$dir/src/aqtruncat"
+done
+capture --dry-run --local --no-build
+check "--dry-run shows both versions" grep -qF "build 0.9.0, sources $source_version: you will be asked" <<< "$out"
+capture --local --no-build -na
+check "another version is reported" grep -qF "is AQTRunCat 0.9.0, these sources are AQTRunCat $source_version" <<< "$out"
+check "without a terminal the new version is built" grep -qF "building the new version $source_version" <<< "$out"
+check "building anew does not reuse the old build" grep -qF "Building the new version instead of reusing" <<< "$out"
+check "the old build is never installed without asking" test ! -e "$work/home/.local/bin/aqtruncat"
+if command -v script > /dev/null; then
+    tty_out=$(printf 'y\n' | env -i PATH="$work/fakebin:/usr/local/bin:/usr/bin:/bin" HOME="$work/home" TMPDIR="$work" LANG=C.UTF-8 \
+        script -qec "bash '$installer' --local --no-build --build-dir='$old_build' -na" /dev/null 2>&1)
+    check "the question names both versions" grep -qF "Install the previous version 0.9.0 (y) or build the new version $source_version (N)? [y/N]" <<< "$tty_out"
+    check "y reuses the previous build without compiling" grep -qF "nothing is compiled" <<< "$tty_out"
+    check "y skips the up-to-date check" bash -c '! grep -qF "is not up to date" <<< "$1"' _ "$tty_out"
+    tty_out=$(printf '\n' | env -i PATH="$work/fakebin:/usr/local/bin:/usr/bin:/bin" HOME="$work/home" TMPDIR="$work" LANG=C.UTF-8 \
+        script -qec "bash '$installer' --local --no-build --build-dir='$old_build' -na" /dev/null 2>&1)
+    check "Enter (N) builds the new version" grep -qF "Building the new version instead of reusing" <<< "$tty_out"
+fi
+rm -rf "$cache_build" "$old_build"
+
 # The default build directory is only emptied if the installer created it.
 mkdir -p "$cache_build"
 echo precious > "$cache_build/not-ours.txt"
@@ -229,6 +258,12 @@ check "old Claude Code package runs the installed adapter" grep -qF "\"executabl
 check "old Claude Code package keeps its options" grep -qF '"--context"' "$old_package/metric.json"
 check "nothing else in the package is removed" test -f "$old_package/notes.txt"
 check "Codex adapter installed" test -x "$home/.local/bin/aqtruncat-codex-metric"
+check "backend installed" test -x "$home/.local/bin/aqtruncatd"
+check "command-line client installed" test -x "$home/.local/bin/aqtruncatctl"
+service_file=$home/.local/share/dbus-1/services/io.github.psykedady.AQTRunCat.service
+check "D-Bus activation file installed" test -f "$service_file"
+check "activation starts this installation's backend" grep -qxF "Exec=$home/.local/bin/aqtruncatd" "$service_file"
+check "activation file names the service" grep -qxF "Name=io.github.psykedady.AQTRunCat" "$service_file"
 check "old Codex package gets its provenance" grep -qF '"integration": "codex"' "$old_codex/metric.json"
 check "old Codex package runs the installed adapter" grep -qF "\"executable\": \"$home/.local/bin/aqtruncat-codex-metric\"" "$old_codex/metric.json"
 check "old Codex package keeps live updates" grep -qF '"--live"' "$old_codex/metric.json"
@@ -363,6 +398,31 @@ check "uninstall with a running instance succeeds" test "$rc" -eq 0
 check "uninstall closes it first" grep -qF "Closing the running AQTRunCat (PID $app)" <<< "$out"
 wait "$app"
 check "decoys still untouched after uninstall" alive "$decoy"
+
+# The backend (F4.1) of this installation is closed too: it runs on its own
+# private session bus here.
+if command -v dbus-run-session > /dev/null; then
+    capture --local --build-dir="$build_dir" -na
+    backend_bin=$home/.local/bin/aqtruncatd
+    start dbus-run-session -- env HOME="$home" XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" "$backend_bin"
+    session=$last
+    backend_pid=""
+    for _ in $(seq 50); do
+        for dir in /proc/[0-9]*; do
+            [[ $(readlink "$dir/exe" 2> /dev/null) == "$backend_bin" ]] && backend_pid=${dir#/proc/} && break
+        done
+        [[ -n $backend_pid ]] && break
+        sleep 0.1
+    done
+    check "the test backend runs" test -n "$backend_pid"
+    check "the test backend is ready for SIGTERM" catches_term "$backend_pid"
+    capture --dry-run --local
+    check "dry run names the backend it would close" grep -qF "PID $backend_pid, would be closed" <<< "$out"
+    capture --local --build-dir="$build_dir" -na
+    check "update closes the running backend first" grep -qF "Closing the running AQTRunCat (PID $backend_pid)" <<< "$out"
+    check "the backend has exited" bash -c "! test -d /proc/$backend_pid || ! grep -q . /proc/$backend_pid/cmdline"
+    wait "$session" 2> /dev/null
+fi
 
 # An instance that ignores SIGTERM: the installer gives up, changes nothing
 # and never kills it.

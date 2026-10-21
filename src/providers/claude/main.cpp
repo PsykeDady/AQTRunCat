@@ -49,7 +49,7 @@ void usage(FILE *stream)
         "  %1 upgrade\n"
         "  %1 status [--json] [--config-dir DIR]\n"
         "  %1 live-updates on|off [--config-dir DIR]\n"
-        "  %1 -h | --help | --version\n"
+        "  %1 -h | --help | -v | --version\n"
         "\n"
         "AQTRunCat Claude Code integration: your Claude plan usage, as on Claude\n"
         "Code's /usage screen (current 5-hour session window and current week, all\n"
@@ -430,7 +430,7 @@ int main(int argc, char *argv[])
         usage(stdout);
         return 0;
     }
-    if (line.command == QLatin1String("--version")) {
+    if (line.command == QLatin1String("-v") || line.command == QLatin1String("--version")) {
         std::printf("%s %s\n", ExecutableName, AQTRUNCAT_VERSION);
         return 0;
     }

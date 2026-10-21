@@ -1,7 +1,7 @@
 # Build: packaging/make-source-tarball.sh ~/rpmbuild/SOURCES
 #        rpmbuild -ba packaging/rpm/aqtruncat.spec
 Name:           aqtruncat
-Version:        0.0.1
+Version:        1.4.1
 Release:        1%{?dist}
 Summary:        A Cute Run Cat for Linux
 
@@ -16,6 +16,8 @@ BuildRequires:  libarchive-devel
 BuildRequires:  desktop-file-utils
 BuildRequires:  dejavu-sans-fonts
 Requires:       hicolor-icon-theme
+# F4.1: the backend lives on the D-Bus session bus (activated on demand).
+Requires:       dbus
 Recommends:     qt6-qtwayland
 
 %description
@@ -45,6 +47,9 @@ export QT_QPA_PLATFORM=offscreen
 %files
 %license LICENSE LICENSE.RunCatNeo
 %{_bindir}/%{name}
+%{_bindir}/%{name}d
+%{_bindir}/%{name}ctl
+%{_datadir}/dbus-1/services/io.github.psykedady.AQTRunCat.service
 %{_bindir}/%{name}-claude-metric
 %{_bindir}/%{name}-codex-metric
 %{_datadir}/applications/%{name}.desktop
@@ -54,5 +59,9 @@ export QT_QPA_PLATFORM=offscreen
 %{_docdir}/%{name}/
 
 %changelog
+* Wed Oct 21 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 1.4.1-1
+- F1-F4.1: Custom Metrics v2, Claude Code and Codex integrations, backend
+  aqtruncatd with a D-Bus API and the aqtruncatctl command line.
+
 * Fri Oct 09 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 0.0.1-1
 - First packaged release.

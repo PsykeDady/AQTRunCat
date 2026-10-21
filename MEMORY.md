@@ -21,10 +21,11 @@
 > First instruction you will likely receive: *"Read MEMORY.md and continue
 > AQTRunCat."* → **the initial roadmap M0–M9 is COMPLETE; M9 concluded it.**
 > AQTRunCat is in post-project development. The roadmap features are F1–F6 in
-> requirements.md (§13 here). **F1, F2 and F3 are COMPLETE (F3 Codex
-> integration implemented and validated on 2026-10-20, uncommitted at that
-> time). F4–F6 are NOT STARTED; do not start any of them without an
-> explicit user instruction.**
+> requirements.md (§13 here). **F1, F2, F3 and F4.1 are COMPLETE (F4.1
+> headless backend `aqtruncatd` + D-Bus API + `aqtruncatctl`, implemented
+> and validated on 2026-10-21, uncommitted at that time). F4.2 (Plasmoid),
+> F5 and F6 are NOT STARTED; do not start any of them without an explicit
+> user instruction.**
 
 ---
 
@@ -84,7 +85,18 @@
 ## 1. Project identity
 
 - Name **AQTRunCat**, tagline **"A Cute Run Cat for Linux"**, executable
-  **`aqtruncat`**, version `0.0.1` (CMake `PROJECT_VERSION`).
+  **`aqtruncat`**, version **1.4.1** (CMake `PROJECT_VERSION`; was 0.0.1 until
+  F4.1). Versioning rule (user, 2026-10-21; requirements.md "Versioning"):
+  1.0.0 = M0–M9; each completed feature F<n> raises the minor (F4 → 1.4.x),
+  each completed sub-feature the patch (F4.1 → 1.4.1, F4.2 → 1.4.2); after
+  the 7th feature → 2.0.0. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
+  debian/changelog and the man page together (`packaging-versions` test).
+  All executables accept `-v`/`--version`; the tray menus show "AQTRunCat
+  <version>" (disabled item above Quit). `install.sh --no-build` compares the
+  build's version (`<build>/src/aqtruncat --version`, else
+  CMAKE_PROJECT_VERSION) with the sources and asks "Install the previous
+  version X (y) or build the new version Y (N)? [y/N]" (N default, also
+  without a terminal).
 - Goal: bring the RunCat Neo (macOS) experience to Linux — an animated tray
   runner whose speed follows CPU load, plus system metrics, dashboard, custom
   metrics, metrics bar — as a *proper Linux/Qt application*, not a mechanical
@@ -92,7 +104,7 @@
 - Stack: C++20, Qt 6 (Widgets/Gui/Core/Test), CMake ≥ 3.21, libarchive ≥ 3.0.
 - Primary target: Arch Linux, **KDE Plasma 6 + Wayland**. Avoid KDE-specific
   dependencies in the generic application (no KDE Frameworks or LayerShellQt).
-  Planned F4 adds an optional native Plasmoid alongside, never in place of,
+  Planned F4.2 adds an optional native Plasmoid alongside, never in place of,
   that portable baseline. Metrics core must not depend on Qt GUI, KDE or
   Wayland.
 - Philosophy: **"Compatibility, not bug compatibility."** Keep useful RunCat
@@ -120,7 +132,8 @@ M9 COMPLETE   Packaging, Installation & Release Readiness — end of the initial
 F1 COMPLETE   Custom Metrics v2 / Executable Custom Metrics
 F2 COMPLETE   Claude Code integration: usage quotas 5h/week (revised 2026-10-20), adapter over F1
 F3 COMPLETE   Codex integration: usage limits per window (local sessions + opt-in live app-server read), adapter over F1
-POST-PROJECT  F4–F6 roadmap features (requirements.md), NOT STARTED, need an explicit instruction
+F4.1 COMPLETE Headless backend aqtruncatd (QtCore+QtDBus), D-Bus API io.github.psykedady.AQTRunCat1 (api 1, schema 1), CLI aqtruncatctl; tray = client
+POST-PROJECT  F4.2 Plasmoid, F5, F6 (requirements.md), NOT STARTED, need an explicit instruction
 ```
 
 - Build: `cmake -S . -B build && cmake --build build && ctest --test-dir build`.
@@ -182,6 +195,22 @@ crash loop on this machine, keeping ~1 core busy → idle CPU reads ~19–30 %.
 
 ## 3. Architecture (as implemented)
 
+**Since F4.1 the engine runs in its own process.** `aqtruncatd`
+(`src/daemon/main.cpp`, QtCore + QtDBus only) owns `BackendService`
+(`src/api/backendservice.*`): AppSettings (+ INI file watch → `reload()`),
+the one MetricSampler, CustomMetricsService (F1 + F2/F3 adapters),
+CpuMonitor → RunnerSpeedController (fps), AutostartManager and both
+ProviderIntegrations, exported on the session bus (contract:
+`docs/F4.1-headless-backend-ipc-cli.md`, schema in `src/api/apischema.*`).
+`aqtruncat run` (trayapp) is a client through `BackendClient`
+(`src/api/backendclient.*`, implements `CustomMetricsModel`): it rebuilds
+the system snapshot / sources from JSON for the unchanged Dashboard,
+Metrics Bar and Settings, and animates at the received fps (no sampler, no
+Custom Metrics, no CPU monitor, no autostart in the frontend). The diagram
+below is the pre-F4.1 single-process view: the sampler/CpuMonitor/speed half
+now lives in aqtruncatd, the RunnerAnimator/TrayPresenter half in the tray.
+`aqtruncatctl` (`src/ctl/main.cpp`) is the reference CLI client.
+
 ```text
                      src/app/main.cpp  (parse → dispatch only)
                               │
@@ -212,8 +241,11 @@ Static libraries (see `src/CMakeLists.txt`):
 | `aqtruncat_runner` | `runner/`: model, framenames, loader, catalog, animator, archive, installer, remover, service | core, Qt6::Gui, libarchive (private) |
 | `aqtruncat_metrics` | `metrics/`: status, counterrates, memory, network, diskio, storage, systemmetrics, metricsformat, textparse | core only (no Qt) |
 | `aqtruncat_cli` | `cli/`: commandline (grammar/help/exit codes), runnercommands, metricscommand | runner, metrics |
-| `aqtruncat_desktop` | `app/` + `custommetrics/`: AppSettings, shared MetricSampler, CustomMetricsService/parser, Dashboard/Settings/preview, storage selection, tray/autostart | metrics, runner, Qt6::Widgets |
+| `aqtruncat_engine` (F4.1) | `app/` QtCore part + `custommetrics/`: AppSettings, MetricSampler, CustomMetricsModel/Service/parser, CpuMonitor, RunnerSpeedController, autostart, ProviderIntegration, metricsbarids, storage paths | metrics, Qt6::Core |
+| `aqtruncat_api` (F4.1) | `api/`: apischema, BackendService, BackendClient | engine, Qt6::DBus |
+| `aqtruncat_desktop` | `app/` UI only: trayapp, Dashboard/Settings/preview, Metrics Bar model/renderer/presenter, tray presenter | api, engine, runner, Qt6::Widgets |
 | `aqtruncat` (exe) | `app/`: main, trayapp, logging; bundled runners as qrc | desktop, CLI + Qt6::Widgets |
+| `aqtruncatd` / `aqtruncatctl` (exe, F4.1) | `daemon/main.cpp`, `ctl/main.cpp` | api (QtCore + QtDBus only) |
 
 Key components:
 
@@ -555,7 +587,7 @@ Key components:
 | CLI exit codes / aliases | §6 | public contract |
 | Settings precedence | explicit CLI > persistent setting > compiled default; CLI never rewrites persistence | one central resolver |
 | Missing saved runner | missing id → default + repair; present-but-invalid → temporary fallback without repair | do not destroy potentially recoverable preferences |
-| Dashboard refresh | Settings throttles presentation to 1/2/5 s; sampler and runner stay 1 Hz | preserves M1 EMA/sample semantics |
+| Dashboard refresh | Settings throttles presentation to 1/2/5 s on the snapshot's sample time with 50 ms tolerance (F4.1: `sampleTime` from the backend); sampler and runner stay 1 Hz | preserves M1 EMA/sample semantics; without the tolerance 0.9996 s samples skipped a period |
 | Generic tray integration (M1–M9/current) | QSystemTrayIcon (generic Qt), no Plasmoid/KF/LayerShellQt in this frontend | M1.0 = B; planned F4 is an additive native frontend, not a replacement |
 | Metrics Bar transport | one separate SNI per selected metric; runner item never reused | square slots, no SNI text label (M7 spike) |
 | Metrics Bar model/render split | `MetricsBarModel` semantic only; geometry/fonts only in renderer | keeps an M8 Plasma renderer possible |
@@ -569,7 +601,10 @@ Key components:
 | Qt minimum | 6.5 (Ubuntu 24.04 not supported, README warning) | user decision M8 |
 | SNI identity/order | no per-item Id hacks, no ordering hacks; host-defined | M7/M8 investigation |
 | Install layout | CMake install rules only; installer maps staged bin/ share/; manifest-based uninstall; never touches ~/.config/AQTRunCat or ~/.local/share/AQTRunCat | single source of truth, user data safety (M9) |
-| Installer autostart | default ON; always through `aqtruncat autostart enable|disable` as the real user | app re-applies the INI preference at start-up (M9) |
+| Installer autostart | default ON; always through `aqtruncat autostart enable|disable` as the real user | the backend (since F4.1; the app before) re-applies the INI preference; the entry still starts the frontend `aqtruncat` (M9) |
+| Backend process (F4.1) | dedicated `aqtruncatd`, single instance by bus name (DoNotQueue, no replacement), D-Bus activation + start fallback next to the client, lives until logout/SIGTERM, not stopped by the last client | user-approved option B; Plasmoid/CLI need it without a tray |
+| Public API (F4.1) | `io.github.psykedady.AQTRunCat1` at `/io/github/psykedady/AQTRunCat`, JSON strings, api 1 in the interface name, additive changes raise `schema`; deltas with generation+1, clients resync on gaps | stable contract for third-party clients |
+| API safety (F4.1) | no method runs client-supplied commands; integrations take known ids + fixed adapter args; no credentials/provider files/env exposed | security requirement |
 | Packages | Arch/RPM/DEB recipes in packaging/, versions checked by ctest `packaging-versions`; Flatpak/AppImage deferred | M9 evaluation |
 
 ---
@@ -744,6 +779,13 @@ sample on purpose (hot-plug) — caching not needed.
 ---
 
 ## 9. Tests and validation
+
+F4.1 (2026-10-21): 42 ctest suites (new `apischema` and `backendipc`, the
+latter under `dbus-run-session` with isolated XDG: registration/version/single
+instance, deltas, classification, settings both ways, shared backend,
+frontend exit, backend restart, start fallback, CLI text/JSON/exit codes,
+D-Bus activation on a private dbus-daemon); installer 208 checks. Runtime on
+Plasma 6 Wayland (isolated XDG, real session bus): see the F4.1 doc §13.
 
 Automated (40 ctest suites: 38 Qt suites + 2 Bash suites, 0 warnings, verified 2026-10-20 after F3 — new `codexusage` 17 and `codexintegration` 6, installer 198 checks (later in the day: warnings + suite isolation, 40/40 in 5 consecutive rebuild-then-test cycles); before that, after the F2 revision — new `claudeusage` 19 and `claudestatusline` 12, `claudecodeintegration` 12, `claudecodemetric` 28 (now `--context`), custommetric 22, commandmetric 13, dashboard 14, metricsbarmodel 17, appsettings 14, installer 189 checks; earlier: 36 suites verified 2026-10-16 after F2; the per-suite table below predates F1 — F1 added `commandmetric` 10 and `commandmetricsservice` 11, and raised custommetric 16, dashboard 11, metricsbarmodel 16, metricsbarrenderer 23; F2 added `claudecodemetric` 28 and `claudecodeintegration` 6 (QtTest totals incl. data rows/init/cleanup) and +2 each to commandmetric/commandmetricsservice; tests never read the real
 `/proc`; fixtures are text strings + temporary `/sys` trees; archives built
@@ -957,9 +999,9 @@ RunCat Neo custom runner names (§11).
 
 M0–M9 are complete; M9 concluded the initial roadmap. `requirements.md`
 ("AQTRunCat — Post-Project Features") is the current source for future work
-and supersedes the earlier F1–F4 post-project ordering. **F1, F2 and F3 are
-COMPLETE. F4–F6 are NOT STARTED; do not start one without an explicit user
-instruction.**
+and supersedes the earlier F1–F4 post-project ordering. **F1, F2, F3 and F4.1
+are COMPLETE. F4.2, F5 and F6 are NOT STARTED; do not start one without an
+explicit user instruction.**
 
 Development baseline: future post-project work starts from `feature/base`.
 Each feature branch (`feature/f1`, `feature/f2`, `feature/f3`, …) is created
@@ -1141,12 +1183,69 @@ create or switch branches, commit or push without explicit permission.
   - Limitations: local data only while using Codex; experimental app-server
     protocol; accounts switched on the same CODEX_HOME (local data has no
     account); no Codex context-window option.
-- **F4 — KDE Plasma Plasmoid**: an additional native Plasma frontend
+- **F4.1 — Headless Backend, Local API & CLI — COMPLETE (2026-10-21,
+  uncommitted at that time)**. Full record and API contract:
+  `docs/F4.1-headless-backend-ipc-cli.md` (+ Python Gio client example in
+  `docs/F4.1-headless-backend-ipc-cli/aqtruncat-client.py`); normative
+  summary in requirements.md (F4.1 "Implemented Behaviour").
+  - Decision: option B (dedicated `aqtruncatd`) over A (`aqtruncat
+    --headless`): backend links only Qt6Core/Qt6DBus (~17 MB RSS vs ~60 MB
+    with the GUI stack), clean activation `Exec`, clear ownership.
+  - API: methods GetInfo/GetState/GetMetrics/GetRunner/GetSettings/
+    GetIntegrations, SetSetting(key, jsonValue; bare word = string),
+    Register/UnregisterCustomMetric, SetIntegrationEnabled/LiveUpdates
+    (delayed reply); signals MetricsChanged(t, s{schema, generation,
+    sampleTime, metrics:[changed], removed, order}), RunnerChanged, SettingsChanged,
+    IntegrationsChanged. Errors …AQTRunCat1.Error.InvalidArgument/NotFound/
+    Failed. Metric fields: id, category builtin|integration|custom, kind
+    system|snapshot|command, integration, title, state, message, value (null,
+    never invented 0), unit, formattedValue, detail, compactValue,
+    compactLabel, normalized, updatedAt (null for system), icon, items[]
+    (with warning), data (raw values / source info).
+  - Client behaviour (BackendClient, CLI, Python example): GetState with
+    autostart, apply deltas only for generation+1, else resync; watch the
+    name owner; frontend 3 s grace then "the AQTRunCat backend (aqtruncatd)
+    is not running", retry 3 s, start fallback at most every 10 s.
+  - Settings: same INI; backend watches file+directory, reloads after 100 ms
+    (`AppSettings::reload()` emits only changed values) → SettingsChanged →
+    frontend `settings.reload()`.
+  - CLI exit codes 0/1/2/3/4 (ok/backend failure/usage/unavailable/
+    rejected); human output hides `custom:` ids.
+  - Install: `data/io.github.psykedady.AQTRunCat.service.in` →
+    `share/dbus-1/services`; install.sh sets Exec to `$bindir/aqtruncatd`,
+    stops this installation's aqtruncat AND aqtruncatd (exact exe path),
+    `ReloadConfig` on the user's bus after install/uninstall; PKGBUILD dbus,
+    Debian default-dbus-session-bus | dbus-session-bus, RPM %files +
+    Requires dbus.
+  - Validation (Plasma 6 Wayland, isolated XDG): headless backend, CLI,
+    tray connects to the same backend (one aqtruncatd), Metrics Bar enabled
+    via CLI reached the tray (SNI tooltips incl. Claude/Codex items), tray
+    animation 11 NewIcon/s at targetFps 11, two `watch --json` clients got
+    identical generations/payloads, backend SIGTERM → tray restarted it via
+    fallback (inherits the tray's environment), frontend exit left the
+    backend running, adapters only as backend children. Perf: backend alone
+    0.07–0.33 % / 17 MB, backend+tray 0.07+0.47 % / 17+61 MB (F3 single
+    process 0.47 % / 84 MB), CLI one-shot 5–6 ms, 52 bus messages in 30 s.
+    Dashboard read via AT-SPI (`gi.repository.Atspi`, no screenshot; open/
+    close with SNI `Activate` on the runner item): same values as the CLI,
+    cadence 1 s / 2 s. Two defects found and fixed: rebuilt snapshots had
+    timeSeconds 0 so SnapshotThrottle passed only the first (CPU/network/
+    disk stuck on "Waiting…"; the IPC test had bypassed the throttle) → the
+    backend now publishes `sampleTime`; and the throttle's strict `>=`
+    skipped 0.9996 s samples (pre-existing since M5) → 50 ms tolerance.
+  - Limitations: dbus-broker needs ReloadConfig (installer asks) or the
+    fallback; backend lives until logout; Qt Settings › Integrations still
+    drives adapters directly (backend observes the adapter files);
+    updatedAt null for system metrics; native packages not rebuilt in
+    containers.
+- **F4.2 — KDE Plasma Plasmoid (NOT STARTED)**: will be a client of the
+  F4.1 API (requirements F4.2, F4.2.1 Installation, F4.2.2 Plasma
+  Integration). Original intent: an additional native Plasma frontend
   that runs **in parallel** with the generic application and **never replaces
   the generic Qt/SNI frontend** (which stays fully supported, also on Plasma);
   both reuse the same core (metrics, settings, runner state, models,
   configuration, application logic) without duplicating business logic.
-  - F4.1 install: `install.sh` detects a compatible Plasma; if detected the
+  - F4.2.1 install: `install.sh` detects a compatible Plasma; if detected the
     Plasmoid is installed **by default** alongside the app; `--no-plasmoid`
     disables it, `--plasmoid` requests it explicitly when Plasma is not
     detected (if dependencies/compatibility are satisfied); documented in
@@ -1154,7 +1253,7 @@ create or switch branches, commit or push without explicit permission.
     Plasmoid only when it belongs to the installation being removed, never
     other widgets or user data; all existing installer guarantees (manifest,
     user data preservation, autostart) keep applying.
-  - F4.2 integration: behave like a normal Plasma widget, with a native
+  - F4.2.2 integration: behave like a normal Plasma widget, with a native
     Plasma popup comparable to the Network/Wi-Fi Plasmoid; integrate with the
     panel, popup behaviour, Plasma themes, panel sizing, orientation where
     practical and Plasma configuration conventions.
@@ -1185,7 +1284,7 @@ create or switch branches, commit or push without explicit permission.
   external commands when practical (F1 command sources are the deliberate
   extension); keep system-wide and `--local` install; keep user data separate
   and safe on uninstall/upgrade; never sacrifice the generic app for a
-  desktop-specific frontend; F4–F6 remain future work, not implemented.
+  desktop-specific frontend; F4.2–F6 remain future work, not implemented.
 
 ## (historical) M9 brief
 Install target, `.desktop`, own icon, Arch PKGBUILD, Flatpak/AppImage
@@ -1253,6 +1352,10 @@ src/providers/common/          shared provider code (aqtruncat_provider_common: 
 src/providers/codex/           F3 Codex adapter (aqtruncat_codex lib: codexusage local/live/state/collect; aqtruncat-codex-metric exe + icon); not linked by the core
 docs/F3-codex-metric.md        F3 investigation/sources, semantics, freshness, accounts, architecture, Settings, tests, Plasma validation
 src/app/providerintegration.*  Settings-side driver of an official integration's adapter CLI (status --json, enable, disable, live-updates)
+src/api/                       F4.1 public API: apischema (identity, versions, JSON schema both ways), backendservice (D-Bus object), backendclient (Qt client, CustomMetricsModel)
+src/daemon/main.cpp, src/ctl/main.cpp   F4.1 aqtruncatd backend and aqtruncatctl CLI
+data/io.github.psykedady.AQTRunCat.service.in   D-Bus activation file template (Exec=@AQTRUNCAT_DBUS_EXEC@)
+docs/F4.1-headless-backend-ipc-cli.md   F4.1 architecture, lifecycle, complete API contract, CLI, security, performance, limits (+ Python client example dir)
 data/runners/<id>/metadata.json   AQTRunCat-authored metadata for bundled runners
 third_party/runcatneo/         upstream LICENSE + frames (cat, coffee bundled; engine spike-only)
 tests/                         Qt Test suites (tst_*.cpp), including F1 deterministic command helper/service cases and F2 Claude fixtures (synthetic registry/transcripts/fake /proc)
@@ -1455,4 +1558,40 @@ clean build, full suite; Plasma/Wayland runtime with isolated config;
 compare with `/usage` at about the same moment, no unverified claims.
 (8) Update requirements, MEMORY, F2 doc, README, installer docs. (9) No Git
 writes. (10) Report the 9 points, then STOP; do not start F3.
+</details>
+
+<details>
+<summary>F4.1 (2026-10-21) — Headless Backend, Frontend Independence, Local API & CLI</summary>
+
+F4 split into F4.1 (backend independence, local IPC API, reference CLI) and
+F4.2 (native Plasmoid, not to be started). Goal: AQTRunCat as a reusable
+Linux metric service for multiple independent frontends (Qt/SNI, Plasma,
+GTK, terminal, third parties). (0) Read-only Git only. (1) Inspect the
+architecture first, find the smallest viable migration, document the
+approach. (2–3) One authoritative backend; evaluate A (headless mode of the
+existing executable) vs B (dedicated daemon); no duplicated sampling or
+adapter execution, no competing config stores. (4) Backend without
+QSystemTrayIcon, windows, Widgets, Plasma or a graphical session (QtCore
+allowed), keeping all built-in, custom, Claude, Codex metrics, runner state,
+settings. (5–7) Prefer D-Bus session bus; language-neutral serializable
+types, stable identity, explicit versioning/capabilities; health, metrics
+(built-in/custom/integration, states), runner, settings, integrations,
+change notifications, controlled setters; no arbitrary execution, no
+credentials; provider-neutral metric schema with multi-value support, no
+invented zeros; efficient deltas with recovery, no per-client sampler.
+(8) `aqtruncatctl`: human + JSON output, predictable exit codes, real API
+client. (9–10) Qt/SNI frontend becomes a client, everything preserved,
+independent lifecycle, meaningful unavailable state, no flicker, no
+duplicates; frontend coexistence matrix. (11) Single-instance lifecycle,
+activation strategy without mandatory systemd. (12) One configuration,
+consistent across clients. (13) Local only, no privilege escalation, no
+secrets. (14) Measure performance (alone, + frontend, + CLI, multiple
+clients, with/without integrations; CPU, memory, IPC, processes, latency).
+(15) All installers/packages; installer stops backend too; dry-run;
+autostart compatibility. (16) Backward compatibility. (17) Tests with
+isolated buses/XDG, no real credentials, no flaky timing. (18) Runtime
+validation on Plasma/Wayland without touching the user's running
+AQTRunCat. (19) docs/F4.1-headless-backend-ipc-cli.md with a non-Qt client
+example. (20) requirements + MEMORY. (21) No F4.2/F5/F6, no GTK deps, no
+HTTP/cloud. (22) Final validation. (23) Report 17 points, then STOP.
 </details>

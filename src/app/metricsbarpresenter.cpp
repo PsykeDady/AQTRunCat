@@ -63,8 +63,10 @@ MetricsBarPresenter::MetricsBarPresenter(MetricsBarTrayItemFactory factory, QObj
     , m_factory(std::move(factory))
     , m_dashboardAction(tr("Show Dashboard"))
     , m_settingsAction(tr("Settings…"))
+    , m_versionAction(QStringLiteral("AQTRunCat %1").arg(QCoreApplication::applicationVersion()))
     , m_quitAction(tr("Quit AQTRunCat"))
 {
+    m_versionAction.setEnabled(false); // informational, as in the runner's menu
     if (!m_factory)
         m_factory = [](QMenu *menu) { return std::make_unique<SystemTrayItem>(menu); };
     connect(&m_dashboardAction, &QAction::triggered, this, &MetricsBarPresenter::dashboardToggleRequested);
@@ -135,6 +137,7 @@ std::unique_ptr<MetricsBarPresenter::Entry> MetricsBarPresenter::createEntry(con
     entry->menu->addAction(&m_dashboardAction);
     entry->menu->addAction(&m_settingsAction);
     entry->menu->addSeparator();
+    entry->menu->addAction(&m_versionAction);
     entry->menu->addAction(&m_quitAction);
     entry->tray = m_factory(entry->menu.get());
     connect(entry->tray.get(), &MetricsBarTrayItem::activated, this, &MetricsBarPresenter::dashboardToggleRequested);

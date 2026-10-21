@@ -24,6 +24,8 @@ public:
     void showFrame(int frameIndex);
     void setDashboardVisible(bool visible);
 
+    const QMenu &menu() const { return m_menu; }
+
 signals:
     void dashboardToggleRequested();
     void settingsRequested();

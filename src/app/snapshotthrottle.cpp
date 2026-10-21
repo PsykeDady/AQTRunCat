@@ -17,8 +17,11 @@ void SnapshotThrottle::setIntervalSeconds(int seconds)
 
 void SnapshotThrottle::submit(const aqtruncat::metrics::SystemMetricsSnapshot &snapshot)
 {
+    // The 1 Hz sampler's timer drifts by fractions of a millisecond: a sample
+    // 0.9996 s after the last one belongs to the next period, not to this one.
+    constexpr double tolerance = 0.05;
     if (!m_lastEmission || snapshot.timeSeconds < *m_lastEmission
-        || snapshot.timeSeconds - *m_lastEmission >= m_intervalSeconds) {
+        || snapshot.timeSeconds - *m_lastEmission >= m_intervalSeconds - tolerance) {
         m_lastEmission = snapshot.timeSeconds;
         emit snapshotReady(snapshot);
     }

@@ -1,6 +1,6 @@
 #include "appsettings.h"
 
-#include "metricsbarmodel.h"
+#include "metricsbarids.h"
 
 #include <QRegularExpression>
 #include <QDir>
@@ -255,6 +255,51 @@ void AppSettings::setMetricsBarItems(QStringList ids)
     // restart instead of falling back to the default.
     write(QLatin1String(MetricsBarItemsKey), m_metricsBarItems);
     emit metricsBarChanged();
+}
+
+bool AppSettings::reload()
+{
+    const QString runner = m_runnerId;
+    const SpeedMode speed = m_speedMode;
+    const metrics::NetworkPolicyMode networkMode = m_networkMode;
+    const QStringList interfaces = m_networkInterfaces;
+    const int refresh = m_dashboardRefreshSeconds;
+    const bool autostart = m_autostartEnabled;
+    const QStringList customFiles = m_customMetricFiles;
+    const bool barEnabled = m_metricsBarEnabled;
+    const QStringList barItems = m_metricsBarItems;
+    m_settings.sync(); // no pending local writes: this picks up the file on disk
+    load();
+    bool changed = false;
+    if (runner != m_runnerId) {
+        changed = true;
+        emit runnerIdChanged(m_runnerId);
+    }
+    if (speed != m_speedMode) {
+        changed = true;
+        emit speedModeChanged(m_speedMode);
+    }
+    if (networkMode != m_networkMode || interfaces != m_networkInterfaces) {
+        changed = true;
+        emit networkSettingsChanged();
+    }
+    if (refresh != m_dashboardRefreshSeconds) {
+        changed = true;
+        emit dashboardRefreshSecondsChanged(m_dashboardRefreshSeconds);
+    }
+    if (autostart != m_autostartEnabled) {
+        changed = true;
+        emit autostartEnabledChanged(m_autostartEnabled);
+    }
+    if (customFiles != m_customMetricFiles) {
+        changed = true;
+        emit customMetricFilesChanged(m_customMetricFiles);
+    }
+    if (barEnabled != m_metricsBarEnabled || barItems != m_metricsBarItems) {
+        changed = true;
+        emit metricsBarChanged();
+    }
+    return changed;
 }
 
 void AppSettings::restoreDefaults()

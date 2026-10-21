@@ -6,12 +6,12 @@
 # the release tarball and replace SKIP with its checksum.
 
 pkgname=aqtruncat
-pkgver=0.0.1
+pkgver=1.4.1
 pkgrel=1
 pkgdesc='A Cute Run Cat for Linux: CPU-driven tray runner with system metrics'
 arch=('x86_64' 'aarch64')
 license=('Apache-2.0')
-depends=('qt6-base>=6.5' 'libarchive' 'hicolor-icon-theme' 'gcc-libs' 'glibc')
+depends=('qt6-base>=6.5' 'libarchive' 'hicolor-icon-theme' 'gcc-libs' 'glibc' 'dbus')
 makedepends=('cmake>=3.21' 'ninja')
 checkdepends=('ttf-dejavu' 'desktop-file-utils')
 optdepends=('qt6-wayland: native Wayland windows instead of XWayland')

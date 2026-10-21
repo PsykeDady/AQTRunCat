@@ -51,7 +51,7 @@ struct CustomMetricsService::CommandJob {
 
 CustomMetricsService::CustomMetricsService(aqtruncat::AppSettings *settings,
                                            QString discoveryDirectory, QObject *parent)
-    : QObject(parent)
+    : CustomMetricsModel(parent)
     , m_settings(settings)
     , m_discoveryDirectory(discoveryDirectory.isEmpty() ? customMetricsDirectory()
                                                         : absolutePath(discoveryDirectory))

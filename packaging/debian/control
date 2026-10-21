@@ -15,7 +15,7 @@ Rules-Requires-Root: no
 
 Package: aqtruncat
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, hicolor-icon-theme
+Depends: ${shlibs:Depends}, ${misc:Depends}, hicolor-icon-theme, default-dbus-session-bus | dbus-session-bus
 Recommends: qt6-wayland
 Description: cute CPU-driven run cat for the system tray
  AQTRunCat is an animated runner in the system tray whose speed follows the

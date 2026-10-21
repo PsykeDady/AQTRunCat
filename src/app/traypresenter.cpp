@@ -13,6 +13,8 @@ TrayPresenter::TrayPresenter(QObject *parent)
     m_dashboardAction = m_menu.addAction(tr("Show Dashboard"), this, &TrayPresenter::dashboardToggleRequested);
     m_menu.addAction(tr("Settings…"), this, &TrayPresenter::settingsRequested);
     m_menu.addSeparator();
+    // Informational only: which AQTRunCat is running.
+    m_menu.addAction(QStringLiteral("AQTRunCat %1").arg(QCoreApplication::applicationVersion()))->setEnabled(false);
     m_menu.addAction(tr("Quit AQTRunCat"), this, [] { requestApplicationQuit(); });
     m_tray.setContextMenu(&m_menu);
     m_tray.setToolTip(QStringLiteral("AQTRunCat"));

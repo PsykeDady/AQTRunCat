@@ -14,7 +14,7 @@ class QRadioButton;
 class QTreeWidget;
 class QPushButton;
 class RunnerPreviewWidget;
-class CustomMetricsService;
+class CustomMetricsModel;
 class ProviderIntegration;
 
 struct RunnerOption {
@@ -31,7 +31,7 @@ public:
     // claude/codex: the official integrations (F2 Claude Code, F3 Codex);
     // nullptr hides that panel (and the section when both are null).
     SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOption> runners,
-                   CustomMetricsService *customMetrics = nullptr, QWidget *parent = nullptr,
+                   CustomMetricsModel *customMetrics = nullptr, QWidget *parent = nullptr,
                    ProviderIntegration *claude = nullptr, ProviderIntegration *codex = nullptr);
 
     void showAndRaise();
@@ -59,7 +59,7 @@ private:
     QString integrationMetricFile() const;
 
     aqtruncat::AppSettings *m_settings = nullptr;
-    CustomMetricsService *m_customMetrics = nullptr;
+    CustomMetricsModel *m_customMetrics = nullptr;
     QList<RunnerOption> m_runners;
     QString m_activeRunnerId;
     std::vector<aqtruncat::metrics::InterfaceMetrics> m_availableInterfaces;

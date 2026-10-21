@@ -1,4 +1,5 @@
 #include "app/metricsbarpresenter.h"
+#include "app/traypresenter.h"
 
 #include <QApplication>
 #include <QPalette>
@@ -74,7 +75,11 @@ private slots:
         QCOMPARE(f.trays[0]->icons, 1);
         QVERIFY(!f.trays[0]->lastIcon.isNull());
         QVERIFY(f.trays[0]->toolTip.contains(QStringLiteral("CPU: 23% (detail)")));
-        QVERIFY(f.trays[0]->menu && f.trays[0]->menu->actions().size() == 4);
+        QVERIFY(f.trays[0]->menu && f.trays[0]->menu->actions().size() == 5);
+        // The running version, informational only, above Quit.
+        const QAction *version = f.trays[0]->menu->actions().at(3);
+        QCOMPARE(version->text(), QStringLiteral("AQTRunCat %1").arg(QCoreApplication::applicationVersion()));
+        QVERIFY(!version->isEnabled());
 
         f.presenter.setItems({item("cpu", "24%"), item("memory", "45%")});
         QCOMPARE(f.trays[0]->icons, 2);
@@ -193,6 +198,18 @@ private slots:
         QCOMPARE(settings.count(), 1);
         actions[0]->trigger();
         QCOMPARE(dashboard.count(), 2);
+    }
+
+    void runnerMenuShowsTheVersion()
+    {
+        QCoreApplication::setApplicationVersion(QStringLiteral("1.2.3"));
+        TrayPresenter tray;
+        const QList<QAction *> actions = tray.menu().actions();
+        QCOMPARE(actions.size(), 5); // Dashboard, Settings, separator, version, Quit
+        QCOMPARE(actions[3]->text(), QStringLiteral("AQTRunCat 1.2.3"));
+        QVERIFY(!actions[3]->isEnabled());
+        QCOMPARE(actions[4]->text(), QStringLiteral("Quit AQTRunCat"));
+        QCoreApplication::setApplicationVersion(QString());
     }
 
     void paletteChangeRerendersEveryItem()

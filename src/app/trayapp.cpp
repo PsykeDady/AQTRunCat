@@ -1,27 +1,24 @@
 #include "trayapp.h"
 
+#include "api/backendclient.h"
 #include "applicationquit.h"
 #include "appsettings.h"
-#include "autostartmanager.h"
 #include "cli/runnercommands.h"
-#include "cpumonitor.h"
-#include "custommetricsservice.h"
 #include "dashboardwindow.h"
 #include "logging.h"
-#include "metricsampler.h"
 #include "metricsbarmodel.h"
 #include "metricsbarpresenter.h"
 #include "providerintegration.h"
 #include "runner/runneranimator.h"
 #include "runpreferences.h"
 #include "runnerselection.h"
-#include "runnerspeedcontroller.h"
 #include "settingswindow.h"
 #include "snapshotthrottle.h"
-#include "storagepaths.h"
 #include "traypresenter.h"
 
 #include <QApplication>
+#include <QDir>
+#include <QFileInfo>
 #include <QElapsedTimer>
 #include <QLoggingCategory>
 #include <QSocketNotifier>
@@ -95,19 +92,24 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
 
     TrayPresenter tray;
     const QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
-    aqtruncat::metrics::MetricsSources metricSources;
-    metricSources.storagePaths = desktopStoragePaths(home.toStdString());
-    metricSources.networkSelection = settings.networkSelection();
-    MetricSampler metrics(nullptr, std::move(metricSources));
-    CustomMetricsService customMetrics(&settings);
+    // F4.1: the metrics, Custom Metrics (with the Claude Code/Codex
+    // adapters), the runner speed and autostart live in the backend
+    // (aqtruncatd); this frontend only presents them. The backend is
+    // D-Bus activated, or started from next to this executable.
+    BackendClient::Options backendOptions;
+    const QFileInfo backendExecutable(QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("aqtruncatd")));
+    if (backendExecutable.isFile() && backendExecutable.isExecutable())
+        backendOptions.backendExecutable = backendExecutable.absoluteFilePath();
+    BackendClient backend(backendOptions);
     DashboardWindow dashboard(home.toStdString());
     SnapshotThrottle dashboardUpdates(settings.dashboardRefreshSeconds());
     aqtruncat::RunnerAnimator animator;
     QObject::connect(&animator, &aqtruncat::RunnerAnimator::frameChanged, &tray, &TrayPresenter::showFrame);
-    QObject::connect(&metrics, &MetricSampler::snapshotReady, &dashboardUpdates, &SnapshotThrottle::submit);
+    QObject::connect(&backend, &BackendClient::systemSnapshot, &dashboardUpdates, &SnapshotThrottle::submit);
     QObject::connect(&dashboardUpdates, &SnapshotThrottle::snapshotReady, &dashboard, &DashboardWindow::updateSnapshot);
-    QObject::connect(&customMetrics, &CustomMetricsService::sourcesChanged,
-                     &dashboard, &DashboardWindow::updateCustomMetrics);
+    QObject::connect(&backend, &CustomMetricsModel::sourcesChanged, &dashboard, &DashboardWindow::updateCustomMetrics);
+    // One settings file: whatever the backend reports changed is re-read.
+    QObject::connect(&backend, &BackendClient::settingsChanged, &settings, &aqtruncat::AppSettings::reload);
     QObject::connect(&tray, &TrayPresenter::dashboardToggleRequested, &dashboard, &DashboardWindow::toggleVisible);
     QObject::connect(&dashboard, &DashboardWindow::visibilityChanged, &tray, &TrayPresenter::setDashboardVisible);
     tray.setRunner(activeRunner);
@@ -122,37 +124,22 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
     };
     applyMetricsBarSettings();
     QObject::connect(&settings, &aqtruncat::AppSettings::metricsBarChanged, &metricsBar, applyMetricsBarSettings);
-    QObject::connect(&metrics, &MetricSampler::snapshotReady, &metricsBar, &MetricsBarModel::updateSystem);
-    QObject::connect(&customMetrics, &CustomMetricsService::sourcesChanged, &metricsBar, &MetricsBarModel::updateCustom);
+    QObject::connect(&backend, &BackendClient::systemSnapshot, &metricsBar, &MetricsBarModel::updateSystem);
+    QObject::connect(&backend, &CustomMetricsModel::sourcesChanged, &metricsBar, &MetricsBarModel::updateCustom);
     QObject::connect(&metricsBar, &MetricsBarModel::itemsChanged, &metricsBarTray, &MetricsBarPresenter::setItems);
     QObject::connect(&metricsBarTray, &MetricsBarPresenter::dashboardToggleRequested, &dashboard, &DashboardWindow::toggleVisible);
     QObject::connect(&dashboard, &DashboardWindow::visibilityChanged, &metricsBarTray, &MetricsBarPresenter::setDashboardVisible);
 
     QObject::connect(&settings, &aqtruncat::AppSettings::dashboardRefreshSecondsChanged,
                      &dashboardUpdates, &SnapshotThrottle::setIntervalSeconds);
-    QObject::connect(&settings, &aqtruncat::AppSettings::networkSettingsChanged, &metrics,
-                     [&settings, &metrics] { metrics.setNetworkSelection(settings.networkSelection()); });
-
-    AutostartManager autostart;
-    auto applyAutostart = [&settings, &autostart](bool enabled) {
-        QString error;
-        if (!autostart.setEnabled(enabled, &error)) {
-            qWarning().noquote() << QStringLiteral("cannot update autostart: %1").arg(error);
-            // Keep the model/UI honest if either creation or removal failed.
-            // The nested signal is finite: the value is set to the actual
-            // filesystem state, so a second failure cannot change it again.
-            settings.setAutostartEnabled(autostart.isEnabled());
-        }
-    };
-    applyAutostart(settings.autostartEnabled());
-    QObject::connect(&settings, &aqtruncat::AppSettings::autostartEnabledChanged, &app, applyAutostart);
+    // Network selection and autostart are applied by the backend.
 
     // Created with the (lazy) Settings window, destroyed after it.
     std::unique_ptr<ProviderIntegration> claudeIntegration;
     std::unique_ptr<ProviderIntegration> codexIntegration;
     std::unique_ptr<SettingsWindow> settingsWindow;
     std::vector<aqtruncat::metrics::InterfaceMetrics> latestInterfaces;
-    QObject::connect(&metrics, &MetricSampler::snapshotReady, &app,
+    QObject::connect(&backend, &BackendClient::systemSnapshot, &app,
                      [&](const aqtruncat::metrics::SystemMetricsSnapshot &snapshot) {
                          latestInterfaces = snapshot.network.interfaces;
                          if (settingsWindow)
@@ -175,7 +162,7 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
                 QStringLiteral("claude-code"), ProviderIntegration::findAdapter(QStringLiteral("aqtruncat-claude-metric")));
             codexIntegration = std::make_unique<ProviderIntegration>(
                 QStringLiteral("codex"), ProviderIntegration::findAdapter(QStringLiteral("aqtruncat-codex-metric")));
-            settingsWindow = std::make_unique<SettingsWindow>(&settings, std::move(options), &customMetrics, nullptr,
+            settingsWindow = std::make_unique<SettingsWindow>(&settings, std::move(options), &backend, nullptr,
                                                               claudeIntegration.get(), codexIntegration.get());
             settingsWindow->setActiveRunner(activeRunner);
             settingsWindow->setAvailableInterfaces(latestInterfaces);
@@ -198,31 +185,20 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
             settingsWindow->setActiveRunner(activeRunner);
     });
 
-    CpuMonitor cpu;
-    RunnerSpeedController speed(preferences.speedMode);
     if (preferences.fpsFromCommandLine) {
         qCInfo(lcSpeed) << "fixed frame rate" << preferences.fixedFps << "fps (CPU load ignored)";
         animator.setFps(preferences.fixedFps);
     } else {
-        animator.setFps(speed.currentFps());
-        QObject::connect(&metrics, &MetricSampler::snapshotReady, &cpu,
-                         [&cpu](const aqtruncat::metrics::SystemMetricsSnapshot &snapshot) {
-                             cpu.consume(snapshot.cpu);
-                         });
-        QObject::connect(&cpu, &CpuMonitor::sampled, &speed, &RunnerSpeedController::consume);
-        QObject::connect(&speed, &RunnerSpeedController::fpsChanged, &animator,
-                         [&](int applied, int target, double raw, double smoothed) {
-            animator.setFps(applied);
-            qCDebug(lcSpeed, "cpu raw=%5.1f%% smoothed=%5.1f%% target=%2d fps applied=%2d fps",
-                    raw, smoothed, target, applied);
+        // The backend computes the speed from CPU load (one computation for
+        // every frontend); frames are animated here, with no IPC per frame.
+        animator.setFps(aqtruncat::FpsStabilizer().current());
+        QObject::connect(&backend, &BackendClient::runnerChanged, &animator, [&animator](int fps) {
+            animator.setFps(fps);
+            qCDebug(lcSpeed, "backend runner speed %2d fps", fps);
         });
-        QObject::connect(&settings, &aqtruncat::AppSettings::speedModeChanged,
-                         &speed, &RunnerSpeedController::setMode);
     }
-    // Always active: Dashboard visibility never changes sampler or runner
-    // lifecycle. In fixed-FPS mode the runner simply ignores CPU snapshots.
-    metrics.start();
-    customMetrics.start();
+    // Closing this frontend never stops the backend: other clients may use it.
+    backend.start();
 
     // Clean shutdown on SIGINT/SIGTERM.
     ::socketpair(AF_UNIX, SOCK_STREAM, 0, signalPipe);

@@ -38,9 +38,18 @@ Installation (default):
                           this source tree, be a Release build and be up to
                           date with the sources; otherwise nothing is installed
                           and you are told to run without --no-build.
+                          If that build is another AQTRunCat version than these
+                          sources, you get a warning and the question "Install
+                          the previous version X (y) or build the new version
+                          Y (N)? [y/N]": y installs the previous build as it
+                          is, N (default, also without a terminal) builds the
+                          sources.
 
   System-wide (default)  prefix /usr/local, change with --prefix=DIR:
-                           DIR/bin/aqtruncat
+                           DIR/bin/aqtruncat (tray application)
+                           DIR/bin/aqtruncatd (backend), aqtruncatctl (command line)
+                           DIR/share/dbus-1/services/io.github.psykedady.AQTRunCat.service
+                             (starts the backend on demand)
                            DIR/bin/aqtruncat-claude-metric, aqtruncat-codex-metric
                              (optional Claude Code / Codex integrations, off
                              until enabled in Settings > Integrations)
@@ -50,9 +59,10 @@ Installation (default):
                            DIR/share/doc/aqtruncat/ (README, licenses)
                            DIR/share/aqtruncat/install-manifest.txt
   --local                for the current user only, no root and no sudo:
-                           ${XDG_BIN_HOME:-~/.local/bin}/aqtruncat, aqtruncat-claude-metric,
-                             aqtruncat-codex-metric
-                           ${XDG_DATA_HOME:-~/.local/share}/applications, icons, man, doc
+                           ${XDG_BIN_HOME:-~/.local/bin}/aqtruncat, aqtruncatd, aqtruncatctl,
+                             aqtruncat-claude-metric, aqtruncat-codex-metric
+                           ${XDG_DATA_HOME:-~/.local/share}/applications, dbus-1/services,
+                             icons, man, doc
                            ${XDG_STATE_HOME:-~/.local/state}/aqtruncat/install-manifest.txt
                          Your shell files are never edited; if the bin directory
                          is not in PATH you get a warning (the menu entry and
@@ -64,8 +74,9 @@ Installation (default):
 Running AQTRunCat:
   Before files are replaced (install, update) or removed (uninstall), a running
   AQTRunCat of this installation is closed: only processes of your user whose
-  executable is exactly this installation's bin/aqtruncat get SIGTERM, the
-  same clean shutdown as "Quit AQTRunCat" in the tray menu. Nothing is matched
+  executable is exactly this installation's bin/aqtruncat (tray application)
+  or bin/aqtruncatd (backend) get SIGTERM, the same clean shutdown as "Quit
+  AQTRunCat" in the tray menu. Nothing is matched
   by name and nothing else is ever signalled (not Claude Code, not other
   programs, not an AQTRunCat started from another location). The installer
   waits up to 10 seconds; if the application has not exited by then, it stops
@@ -149,6 +160,7 @@ prefix=/usr/local
 prefix_given=0
 build_dir=""
 no_build=0
+reuse_previous_version=0
 dry_run=0
 
 set_autostart() {
@@ -270,6 +282,7 @@ else
 fi
 readonly bindir datadir manifest
 installed_bin=$bindir/aqtruncat
+installed_backend=$bindir/aqtruncatd
 # The real user's directories: with "sudo ./install.sh" that is the user who
 # ran sudo (autostart and personal data are per-user), not root.
 if [[ $EUID -eq 0 && -n ${SUDO_USER:-} && ${SUDO_USER} != root ]]; then
@@ -338,6 +351,25 @@ authenticate_sudo() { # authenticate_sudo HINT
     done
 }
 
+# Ask the real user's session bus to re-read its service files, so that the
+# backend can be D-Bus activated without logging out (dbus-broker does not
+# watch the directories). Best effort: without a session bus the clients
+# start the backend themselves.
+reload_session_bus() {
+    local address=${DBUS_SESSION_BUS_ADDRESS:-}
+    if [[ -z $address && -S /run/user/$real_uid/bus ]]; then
+        address=unix:path=/run/user/$real_uid/bus
+    fi
+    [[ -n $address ]] || return 0
+    if command -v busctl > /dev/null; then
+        as_user env DBUS_SESSION_BUS_ADDRESS="$address" busctl --user call org.freedesktop.DBus /org/freedesktop/DBus \
+            org.freedesktop.DBus ReloadConfig > /dev/null 2>&1 || true
+    elif command -v dbus-send > /dev/null; then
+        as_user env DBUS_SESSION_BUS_ADDRESS="$address" dbus-send --session --type=method_call --dest=org.freedesktop.DBus \
+            /org/freedesktop/DBus org.freedesktop.DBus.ReloadConfig > /dev/null 2>&1 || true
+    fi
+}
+
 # Run a command as the real user (the one who invoked sudo, if any).
 as_user() {
     if [[ $EUID -eq 0 && -n ${SUDO_USER:-} && ${SUDO_USER} != root ]]; then
@@ -385,8 +417,9 @@ cache_value() { # cache_value BUILD KEY -> value of KEY in BUILD/CMakeCache.txt
 }
 
 # The existing build may be installed without compiling: it belongs to this
-# source tree and the build tool has nothing left to do.
-check_reusable_build() { # check_reusable_build BUILD REQUIRE_RELEASE
+# source tree (check_build_origin) and the build tool has nothing left to do
+# (check_build_fresh).
+check_build_origin() { # check_build_origin BUILD REQUIRE_RELEASE
     local build=$1 home
     [[ -f $build/CMakeCache.txt ]] ||
         die "there is no build to reuse in $build; run the installer without --no-build"
@@ -396,7 +429,10 @@ check_reusable_build() { # check_reusable_build BUILD REQUIRE_RELEASE
     if [[ $2 == release && $(cache_value "$build" CMAKE_BUILD_TYPE) != Release ]]; then
         die "$build is not a Release build; run the installer without --no-build"
     fi
-    local pending
+}
+
+check_build_fresh() { # check_build_fresh BUILD
+    local build=$1 pending
     case $(cache_value "$build" CMAKE_GENERATOR) in
         Ninja*)
             pending=$(cmake --build "$build" -- -n 2> /dev/null) || pending=unknown
@@ -408,6 +444,46 @@ check_reusable_build() { # check_reusable_build BUILD REQUIRE_RELEASE
     esac
     [[ $pending == *"no work to do"* ]] ||
         die "the build in $build is not up to date with the sources; run the installer without --no-build"
+}
+
+# AQTRunCat version of these sources: project(VERSION) in CMakeLists.txt.
+source_version() {
+    sed -n 's/^ *VERSION \([0-9][0-9.]*\)$/\1/p' "$SCRIPT_DIR/CMakeLists.txt" | head -n 1
+}
+
+# Version of an existing build: what its aqtruncat reports, else the version
+# CMake configured it with.
+built_version() { # built_version BUILD
+    local version=""
+    if [[ -x $1/src/aqtruncat ]]; then
+        version=$("$1/src/aqtruncat" --version 2> /dev/null | awk '{print $2}') || version=""
+    fi
+    [[ -n $version ]] || version=$(cache_value "$1" CMAKE_PROJECT_VERSION)
+    printf '%s\n' "${version:-unknown}"
+}
+
+# --no-build with a build of another version than these sources: warn and
+# ask which one to install. "y" installs the previous build as it is; "N"
+# (the default, also without a terminal) builds the sources instead.
+# Returns 0 to reuse the build, 1 to build.
+choose_build_version() { # choose_build_version BUILD
+    local built source answer=""
+    built=$(built_version "$1")
+    source=$(source_version)
+    # Same version, or one that cannot be read (an incomplete build): the
+    # up-to-date check decides, as before.
+    [[ $built != "$source" && $built != unknown ]] || return 0
+    warn "the build in $1 is AQTRunCat $built, these sources are AQTRunCat $source"
+    if [[ -t 0 ]]; then
+        read -r -p "Install the previous version $built (y) or build the new version $source (N)? [y/N] " answer || answer=""
+    else
+        say "No terminal to ask: building the new version $source."
+    fi
+    if [[ $answer == [yY] || $answer == [yY][eE][sS] ]]; then
+        reuse_previous_version=1
+        return 0
+    fi
+    return 1
 }
 
 # --- running instances ----------------------------------------------------
@@ -441,18 +517,19 @@ process_uid() {
     return 1
 }
 
-# "PID UID START" for every process running this installation's binary. The
-# name only preselects candidates cheaply; the decision is the exact
-# executable path (" (deleted)" once a newer file replaced it). Processes of
-# other users are only visible to root.
+# "PID UID START" for every process running this installation's tray
+# application or backend (F4.1). The name only preselects candidates
+# cheaply; the decision is the exact executable path (" (deleted)" once a
+# newer file replaced it). Processes of other users are only visible to root.
 running_instances() {
     local dir pid comm exe
     for dir in /proc/[0-9]*; do
         pid=${dir#/proc/}
         { IFS= read -r comm < "$dir/comm"; } 2> /dev/null || continue
-        [[ $comm == aqtruncat ]] || continue
+        [[ $comm == aqtruncat || $comm == aqtruncatd ]] || continue
         exe=$(readlink -- "$dir/exe" 2> /dev/null) || continue
-        [[ $exe == "$installed_bin" || $exe == "$installed_bin (deleted)" ]] || continue
+        exe=${exe% (deleted)}
+        [[ $exe == "$installed_bin" || $exe == "$installed_backend" ]] || continue
         printf '%s %s %s\n' "$pid" "$(process_uid "$pid")" "$(process_start "$pid")"
     done
 }
@@ -647,6 +724,17 @@ print_options() {
     if [[ $action == install ]]; then
         if ((no_build)); then
             option "rebuild" "false: reuse ${build_dir:-$default_build} (--no-build; must be up to date)"
+            if [[ -f ${build_dir:-$default_build}/CMakeCache.txt ]]; then
+                local built
+                built=$(built_version "${build_dir:-$default_build}")
+                if [[ $built == "$(source_version)" ]]; then
+                    option "version" "$built (build and sources)"
+                elif [[ $built == unknown ]]; then
+                    option "version" "sources $(source_version), build unknown"
+                else
+                    option "version" "build $built, sources $(source_version): you will be asked which to install"
+                fi
+            fi
         elif [[ -n $build_dir ]]; then
             option "rebuild" "true: bring $build_dir up to date (--build-dir)"
         else
@@ -671,16 +759,22 @@ do_install() {
     choose_privileges
     work=$(mktemp -d "$tmp_base/aqtruncat-install.XXXXXX")
 
-    local build
+    local build reuse=0
     if ((no_build)); then
-        if [[ -n $build_dir ]]; then
-            build=$build_dir
-            check_reusable_build "$build" any
+        build=${build_dir:-$default_build}
+        check_build_origin "$build" "$( [[ -n $build_dir ]] && echo any || echo release)"
+        if choose_build_version "$build"; then
+            # The previous version on request is by definition behind the
+            # sources: only a build of the same version must be up to date.
+            ((reuse_previous_version)) || check_build_fresh "$build"
+            say "Reusing the build in $build (--no-build: nothing is compiled)"
+            reuse=1
         else
-            build=$default_build
-            check_reusable_build "$build" release
+            say "Building the new version instead of reusing $build"
         fi
-        say "Reusing the build in $build (--no-build: nothing is compiled)"
+    fi
+    if ((reuse)); then
+        :
     elif [[ -n $build_dir ]]; then
         [[ -f $build_dir/CMakeCache.txt ]] || die "$build_dir is not a CMake build tree"
         build=$build_dir
@@ -733,6 +827,16 @@ do_install() {
         else
             sed -i '/^TryExec=/d' "$desktop"
         fi
+    fi
+    # D-Bus activation file: the backend of this installation, by full path.
+    local service=$stage/share/dbus-1/services/io.github.psykedady.AQTRunCat.service
+    if [[ -f $service ]]; then
+        local backend_exec
+        backend_exec=$(desktop_exec_value "$installed_backend")
+        backend_exec=${backend_exec//\\/\\\\}
+        backend_exec=${backend_exec//|/\\|}
+        backend_exec=${backend_exec//&/\\&}
+        sed -i "s|^Exec=.*\$|Exec=$backend_exec|" "$service"
     fi
 
     # Destination of every staged file.
@@ -810,6 +914,8 @@ do_install() {
         fi
     done
 
+    reload_session_bus
+
     say "AQTRunCat is installed: $installed_bin"
     if [[ $scope == local && ":$PATH:" != *":$bindir:"* ]]; then
         warn "$bindir is not in your PATH. The menu entry and autostart work anyway; to run \"aqtruncat\" from a terminal, add it to PATH yourself."
@@ -858,6 +964,7 @@ do_uninstall() {
         [[ $f == "$datadir"/doc/*/* ]] && remove_empty_dir "$(dirname -- "$f")"
     done
     refresh_desktop_caches
+    reload_session_bus
 
     say "AQTRunCat ($scope) is uninstalled."
     say "Kept (delete them yourself if you no longer want them):"

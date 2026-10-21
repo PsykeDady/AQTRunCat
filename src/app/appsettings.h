@@ -50,6 +50,10 @@ public slots:
     void setMetricsBarEnabled(bool enabled);
     void setMetricsBarItems(QStringList ids);
     void restoreDefaults();
+    // Re-reads the file (written by another process: the backend, a
+    // frontend, "aqtruncat autostart") and emits the signals of the values
+    // that actually changed. Returns whether anything changed.
+    bool reload();
 
 signals:
     void runnerIdChanged(const QString &id);

@@ -33,6 +33,9 @@ the primary target is KDE Plasma 6 on Wayland.
 - **Metrics Bar** (off by default): up to 3 compact values, built-in or
   custom, as extra tray icons next to the runner.
 - **Settings** window, start at login, and a command line (`aqtruncat --help`).
+- **Backend and API**: the metrics run once per session in a small background
+  service (`aqtruncatd`) that the tray, the `aqtruncatctl` command line and
+  other programs share through a documented D-Bus API.
 
 ## Supported systems
 
@@ -89,7 +92,7 @@ updates the installation in place.
 | `-A`, `--autostart=true` | start at login (**the default**) |
 | `-na`, `--autostart=false` | do not start at login |
 | `-U`, `--uninstall` | uninstall (add `--local` for a local installation) |
-| `--no-build` | install the existing build in `~/.cache/aqtruncat/install-build` without compiling (must be up to date) |
+| `--no-build` | install the existing build in `~/.cache/aqtruncat/install-build` without compiling (must be up to date); if it is another AQTRunCat version than the sources, you are asked whether to install that previous version (y) or build the new one (N, default) |
 | `--dry-run` | show what would happen (every run starts with a summary of the effective options) |
 | `-h`, `--help` | full help |
 
@@ -113,7 +116,8 @@ entry and autostart use the full path, and your shell files are never edited.
 **A running AQTRunCat is closed first.** Before an update replaces files, or
 an uninstall removes them, the installer sends SIGTERM (the same clean exit as
 *Quit AQTRunCat*) to your AQTRunCat processes whose executable is exactly that
-installation's `bin/aqtruncat`, and waits up to 10 seconds. Nothing is matched
+installation's `bin/aqtruncat` (tray) or `bin/aqtruncatd` (backend), and
+waits up to 10 seconds. Nothing is matched
 by name, so Claude Code, other programs and an AQTRunCat started from another
 location are never touched. If it does not exit in time, the installer stops
 with an error and changes nothing; it never kills it. The build, the checks
@@ -138,8 +142,8 @@ Flatpak and AppImage are not provided yet; the reasons are in
 
 ### Build manually
 
-Requirements: CMake ≥ 3.21, a C++20 compiler, Qt ≥ 6.5 (Widgets; Test for
-the test suite), libarchive ≥ 3.0, and an installed font.
+Requirements: CMake ≥ 3.21, a C++20 compiler, Qt ≥ 6.5 (Core, DBus, Widgets;
+Test for the test suite), libarchive ≥ 3.0, and an installed font.
 
 | Distribution | Development packages |
 |---|---|
@@ -155,8 +159,10 @@ cmake --install build            # honours CMAKE_INSTALL_PREFIX and DESTDIR
 ```
 
 `-DBUILD_TESTING=OFF` skips the tests. At run time AQTRunCat needs the Qt 6
-libraries, libarchive and, for native Wayland windows, the Qt Wayland
-plugin (`qt6-wayland` / `qt6-qtwayland`); without it Qt uses XWayland.
+libraries, libarchive, a D-Bus session bus (every Linux desktop session has
+one) and, for native Wayland windows, the Qt Wayland plugin (`qt6-wayland` /
+`qt6-qtwayland`); without it Qt uses XWayland. The test suite also needs
+`dbus-run-session` (package `dbus`).
 
 ## Using AQTRunCat
 
@@ -169,7 +175,32 @@ aqtruncat runner list           # bundled and user runners
 aqtruncat runner import beagle-frames.zip
 aqtruncat metrics --watch       # metrics on the terminal
 aqtruncat autostart status      # enable | disable | status
+aqtruncat -v                    # version (also aqtruncatd, aqtruncatctl, adapters)
 ```
+
+### Backend and command line
+
+The tray application is a client: the metrics, Custom Metrics, the Claude
+Code and Codex integrations, the runner speed and the settings live in the
+backend `aqtruncatd`. It starts automatically when the tray (or any other
+client) needs it, runs once per session, and keeps running until you log out,
+also when the tray is closed. `aqtruncatctl` reads and controls the same
+backend from a terminal or a script:
+
+```bash
+aqtruncatctl status                          # backend, runner, integrations
+aqtruncatctl metrics                         # every metric, human-readable
+aqtruncatctl --json metrics cpu memory       # the API's JSON, for scripts
+aqtruncatctl watch                           # follow changes (Ctrl+C)
+aqtruncatctl settings set speedMode slow-down
+aqtruncatctl integration enable codex
+```
+
+Exit status: 0 success, 1 backend failure, 2 invalid command line, 3 backend
+unavailable, 4 request rejected. The D-Bus API
+(`io.github.psykedady.AQTRunCat1` on the session bus), its JSON schema and a
+small Python client are documented in
+[docs/F4.1-headless-backend-ipc-cli.md](docs/F4.1-headless-backend-ipc-cli.md).
 
 ### Runners
 
@@ -338,6 +369,10 @@ The runner itself is always there and is not counted.
   GNOME's always-dark top bar) can show low contrast.
 - Wayland does not let applications position windows next to the tray; the
   Dashboard and Settings are normal windows placed by the compositor.
+- The backend `aqtruncatd` stays until you log out, even with no client
+  (about 17 MB). Right after a first installation, `aqtruncatctl` may report
+  the backend as not running until the tray has started it once or you log in
+  again, if the session bus did not reload its service files.
 
 Details: [docs/M8-desktop-compatibility.md](docs/M8-desktop-compatibility.md).
 
@@ -355,5 +390,5 @@ AQTRunCat icon is original artwork.
 - [docs/](docs/): design and validation reports per milestone (runners,
   metrics, Dashboard, Settings, Custom Metrics, Metrics Bar, desktop
   compatibility, packaging, executable Custom Metrics, Claude Code and Codex
-  integrations)
+  integrations, backend/D-Bus API/`aqtruncatctl`)
 - [`tools/`](tools/): diagnostic scripts for developers (not needed by users)
