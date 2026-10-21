@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AQTRunCat Plasmoid (F4.2): presentation options of this widget only.
+     Everything the backend owns (runner, speed, network, integrations,
+     Custom Metrics) stays in AQTRunCat.ini and is changed through the
+     backend's API, never stored here. -->
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="animate" type="Bool">
+      <label>Animate the runner (off: it stands still)</label>
+      <default>true</default>
+    </entry>
+    <entry name="showBuiltin" type="Bool">
+      <label>Show the System metrics in the popup</label>
+      <default>true</default>
+    </entry>
+    <entry name="showIntegrations" type="Bool">
+      <label>Show the Integrations (Claude Code, Codex) in the popup</label>
+      <default>true</default>
+    </entry>
+    <entry name="showCustom" type="Bool">
+      <label>Show the Custom Metrics in the popup</label>
+      <default>true</default>
+    </entry>
+    <entry name="showDetails" type="Bool">
+      <label>Show detail lines (used/total, reset times)</label>
+      <default>true</default>
+    </entry>
+  </group>
+</kcfg>

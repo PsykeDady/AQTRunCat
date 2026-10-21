@@ -299,14 +299,21 @@ QJsonObject BackendService::info() const
         {QStringLiteral("schema"), aqtruncat::api::SchemaVersion},
         {QStringLiteral("service"), QStringLiteral("aqtruncatd")},
         {QStringLiteral("version"), QCoreApplication::applicationVersion()},
-        {QStringLiteral("capabilities"), QJsonArray{QStringLiteral("metrics"), QStringLiteral("metrics-delta"),
-                                                    QStringLiteral("runner"), QStringLiteral("settings"),
-                                                    QStringLiteral("set-setting"), QStringLiteral("custom-metrics"),
-                                                    QStringLiteral("integrations")}},
+        {QStringLiteral("capabilities"), capabilities()},
         {QStringLiteral("generation"), double(m_generation)},
         {QStringLiteral("startedAt"), m_startedAt.isValid() ? QJsonValue(m_startedAt.toString(Qt::ISODate)) : QJsonValue()},
         {QStringLiteral("customMetricsDirectory"), m_custom->discoveryDirectory()},
     };
+}
+
+QJsonArray BackendService::capabilities() const
+{
+    QJsonArray list{QStringLiteral("metrics"), QStringLiteral("metrics-delta"), QStringLiteral("runner"),
+                    QStringLiteral("settings"), QStringLiteral("set-setting"), QStringLiteral("custom-metrics"),
+                    QStringLiteral("integrations")};
+    if (m_config.runnerCatalog)
+        list.append(QStringLiteral("runners"));
+    return list;
 }
 
 QJsonValue BackendService::sampleTime() const
@@ -380,6 +387,15 @@ QString BackendService::GetMetrics()
 QString BackendService::GetSettings() { return compact(aqtruncat::api::settingsObject(*m_settings)); }
 QString BackendService::GetRunner() { return compact(runner()); }
 QString BackendService::GetIntegrations() { return compact(integrations()); }
+
+QString BackendService::GetRunners()
+{
+    if (!m_config.runnerCatalog) {
+        fail(aqtruncat::api::ErrorNotFound, QStringLiteral("this backend has no runner catalogue"));
+        return {};
+    }
+    return compact(m_config.runnerCatalog(m_settings->runnerId()));
+}
 
 bool BackendService::fail(const QString &name, const QString &message)
 {

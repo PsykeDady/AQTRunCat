@@ -5,6 +5,7 @@
 
 #include "api/apischema.h"
 #include "api/backendservice.h"
+#include "api/runnercatalog.h"
 
 #include <QCoreApplication>
 #include <QDBusConnection>
@@ -35,6 +36,19 @@ QString sibling(const QString &name)
 {
     const QFileInfo file(QDir(QCoreApplication::applicationDirPath()).filePath(name));
     return file.isFile() && file.isExecutable() ? file.absoluteFilePath() : QStandardPaths::findExecutable(name);
+}
+
+// Bundled runners as files (F4.2), for clients that animate them from
+// GetRunners: share/aqtruncat/runners of this installation (next to bin/),
+// else the first one in the XDG data directories.
+QString bundledRunnersRoot()
+{
+    const QString besideBinary = QDir::cleanPath(QCoreApplication::applicationDirPath()
+                                                 + QStringLiteral("/../share/aqtruncat/runners"));
+    if (QFileInfo(besideBinary).isDir())
+        return besideBinary;
+    return QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("aqtruncat/runners"),
+                                  QStandardPaths::LocateDirectory);
 }
 
 void usage(FILE *stream)
@@ -87,6 +101,10 @@ int main(int argc, char *argv[])
     config.frontendExecutable = sibling(QStringLiteral("aqtruncat"));
     config.claudeAdapter = sibling(QStringLiteral("aqtruncat-claude-metric"));
     config.codexAdapter = sibling(QStringLiteral("aqtruncat-codex-metric"));
+    const aqtruncat::RunnerService runners({bundledRunnersRoot(), aqtruncat::userRunnersDirectory()});
+    config.runnerCatalog = [&runners, defaultId = config.defaultRunnerId](const QString &requestedId) {
+        return aqtruncat::api::runnerCatalog(runners, requestedId, defaultId);
+    };
     BackendService backend(config);
 
     QDBusConnection bus = QDBusConnection::sessionBus();

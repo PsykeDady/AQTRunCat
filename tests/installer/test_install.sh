@@ -27,6 +27,7 @@ fail() {
     failures=$((failures + 1))
     printf 'FAIL: %s\n' "$*"
 }
+lacks() { ! grep -qF -- "$1" <<< "$2"; } # lacks NEEDLE TEXT
 check() { # check DESCRIPTION COMMAND...
     local description=$1
     shift
@@ -41,11 +42,30 @@ echo "\$@" >> "$work/sudo-calls"
 exit 1
 EOF
 chmod +x "$work/fakebin/sudo"
+# Plasma tools: the installer must never restart plasmashell or edit panels.
+for tool in plasmashell kquitapp6 kstart kpackagetool6 qdbus6 qdbus; do
+    printf '#!/bin/sh\necho "%s $*" >> "%s/plasma-calls"\nexit 0\n' "$tool" "$work" > "$work/fakebin/$tool"
+    chmod +x "$work/fakebin/$tool"
+done
+
+# Fake Qt 6 QML trees: KDE Plasma 6 (every module the widget imports), none.
+plasma_modules="org/kde/plasma/plasmoid org/kde/plasma/core org/kde/plasma/components org/kde/plasma/extras org/kde/plasma/workspace/dbus org/kde/kirigami org/kde/kcmutils QtQuick/Dialogs"
+fake_qml() { # fake_qml DIR VERSION [MODULE-TO-LEAVE-OUT]
+    local module
+    for module in $plasma_modules; do
+        [[ $module == "${3:-}" ]] && continue
+        mkdir -p "$1/$module"
+        echo "module ${module//\//.}" > "$1/$module/qmldir"
+    done
+    echo "$2" > "$1/org/kde/plasma/plasmoid/kde-qmlmodule.version"
+}
+fake_qml "$work/qml-plasma6" 6.8.0
+mkdir -p "$work/qml-none"
 
 # Run the installer with a clean, temporary user environment.
 run() {
     env -i PATH="$work/fakebin:/usr/local/bin:/usr/bin:/bin" HOME="$work/home" TMPDIR="$work" \
-        LANG=C.UTF-8 ${XDG_TEST_ENV:+$XDG_TEST_ENV} bash "$installer" "$@"
+        LANG=C.UTF-8 AQTRUNCAT_QML_DIRS="${QML_DIRS:-$work/qml-none}" ${XDG_TEST_ENV:+$XDG_TEST_ENV} bash "$installer" "$@"
 }
 out=""
 rc=0
@@ -57,7 +77,7 @@ capture --help
 check "--help exits 0" test "$rc" -eq 0
 for needle in "--local" "-A, --autostart=true" "-na, --autostart=false" "-U, --uninstall" \
     "ON by default" "Never removed" "Ubuntu 24.04" "sudo is used only" "Examples:" "--no-build" \
-    "aqtruncat/install-build"; do
+    "aqtruncat/install-build" "--plasmoid" "--no-plasmoid" "Add or Manage Widgets" "plasmashell is never restarted"; do
     check "--help mentions $needle" grep -qF -- "$needle" <<< "$out"
 done
 help_text=$out
@@ -66,7 +86,8 @@ check "-h equals --help" test "$out" = "$help_text"
 
 for bad in "--bogus" "-x" "--autostart=maybe" "-A -na" "--autostart=true --autostart=false" \
     "-na --autostart=true" "-U -A" "--uninstall -na" "--local --prefix=/opt/x" "--prefix=relative" \
-    "--prefix=/" "-U --build-dir=/tmp" "-U --no-build"; do
+    "--prefix=/" "-U --build-dir=/tmp" "-U --no-build" "--plasmoid --no-plasmoid" "--no-plasmoid --plasmoid" \
+    "-U --plasmoid" "--uninstall --no-plasmoid"; do
     # shellcheck disable=SC2086 # split the option list on purpose
     capture $bad
     check "\"$bad\" is a usage error (2)" test "$rc" -eq 2
@@ -119,6 +140,35 @@ XDG_TEST_ENV="AQTRUNCAT_OS_RELEASE=$work/os-release" capture --dry-run
 check "pretty name is reported" grep -qF "  distribution      = Gentoo Linux (family: unknown)" <<< "$out"
 XDG_TEST_ENV="AQTRUNCAT_OS_RELEASE=$work/missing" capture --dry-run
 check "missing os-release is unknown" grep -qF "(family: unknown)" <<< "$out"
+
+# --- Plasma widget: detection and decision (F4.2) ----------------------------
+
+plan
+check "no Plasma 6: widget left out by default" grep -qF "  plasmoid          = false (default: KDE Plasma 6 not found, missing org.kde.plasma.plasmoid" <<< "$out"
+QML_DIRS=$work/qml-plasma6 plan
+check "Plasma 6 found: widget installed by default" grep -qF "  plasmoid          = true (default: KDE Plasma 6.8.0 found)" <<< "$out"
+QML_DIRS="$work/qml-none:$work/qml-plasma6" plan
+check "every QML directory is searched" grep -qF "  plasmoid          = true (default: KDE Plasma 6.8.0 found)" <<< "$out"
+QML_DIRS=$work/qml-plasma6 plan --no-plasmoid
+check "--no-plasmoid with Plasma 6: no widget" grep -qF "  plasmoid          = false (--no-plasmoid)" <<< "$out"
+QML_DIRS=$work/qml-plasma6 plan --plasmoid
+check "--plasmoid with Plasma 6" grep -qF "  plasmoid          = true (--plasmoid: KDE Plasma 6.8.0 found)" <<< "$out"
+plan --plasmoid
+check "--plasmoid without Plasma 6 fails" test "$rc" -eq 1
+check "--plasmoid without Plasma 6 says why" grep -qF -- "--plasmoid: KDE Plasma 6 is not available" <<< "$out"
+check "--plasmoid without Plasma 6 names the packages" grep -qF "Install them with:" <<< "$out"
+check "--plasmoid without Plasma 6 suggests going without it" grep -qF "run without --plasmoid" <<< "$out"
+fake_qml "$work/qml-nodbus" 6.8.0 org/kde/plasma/workspace/dbus
+QML_DIRS=$work/qml-nodbus plan
+check "a missing module is named" grep -qF "missing org.kde.plasma.workspace.dbus)" <<< "$out"
+fake_qml "$work/qml-plasma5" 5.27.11
+QML_DIRS=$work/qml-plasma5 plan
+check "Plasma 5 is not Plasma 6" grep -qF "missing Plasma 6 (found Plasma 5.27.11))" <<< "$out"
+printf 'ID=arch\n' > "$work/os-release"
+XDG_TEST_ENV="AQTRUNCAT_OS_RELEASE=$work/os-release" capture --dry-run --plasmoid
+check "Arch: Plasma packages for pacman" grep -qF "sudo pacman -S --needed plasma-workspace" <<< "$out"
+plan -U
+check "uninstall has no widget decision" test "$(grep -c '^  plasmoid ' <<< "$out")" -eq 0
 
 # --- dependency checks (fake Qt tools) ---------------------------------------
 
@@ -195,7 +245,7 @@ if command -v script > /dev/null; then
         script -qec "bash '$installer' --local --no-build --build-dir='$old_build' -na" /dev/null 2>&1)
     check "the question names both versions" grep -qF "Install the previous version 0.9.0 (y) or build the new version $source_version (N)? [y/N]" <<< "$tty_out"
     check "y reuses the previous build without compiling" grep -qF "nothing is compiled" <<< "$tty_out"
-    check "y skips the up-to-date check" bash -c '! grep -qF "is not up to date" <<< "$1"' _ "$tty_out"
+    check "y skips the up-to-date check" lacks "is not up to date" "$tty_out"
     tty_out=$(printf '\n' | env -i PATH="$work/fakebin:/usr/local/bin:/usr/bin:/bin" HOME="$work/home" TMPDIR="$work" LANG=C.UTF-8 \
         script -qec "bash '$installer' --local --no-build --build-dir='$old_build' -na" /dev/null 2>&1)
     check "Enter (N) builds the new version" grep -qF "Building the new version instead of reusing" <<< "$tty_out"
@@ -329,6 +379,66 @@ capture --prefix="$prefix" -U
 check "system uninstall succeeds" test "$rc" -eq 0
 check "system files removed" test -z "$(find "$prefix" -type f)"
 check "system uninstall removes its autostart entry" test ! -e "$entry"
+
+# --- Plasma widget: real local and system installs (F4.2) -------------------
+
+widget=$home/.local/share/plasma/plasmoids/io.github.psykedady.aqtruncat
+# An unrelated widget and a Plasma panel layout of the user: never touched.
+other_widget=$home/.local/share/plasma/plasmoids/org.example.other
+mkdir -p "$other_widget"
+echo '{"KPlugin": {"Id": "org.example.other"}}' > "$other_widget/metadata.json"
+layout=$home/.config/plasma-org.kde.plasma.desktop-appletsrc
+printf '[Containments][1][Applets][7]\nplugin=io.github.psykedady.aqtruncat\n' > "$layout"
+cp "$layout" "$work/layout-before"
+
+QML_DIRS=$work/qml-plasma6 capture --local --build-dir="$build_dir" -na
+check "local install with Plasma 6 succeeds" test "$rc" -eq 0
+check "widget metadata installed" test -f "$widget/metadata.json"
+check "widget QML installed" test -f "$widget/contents/ui/main.qml"
+check "widget configuration schema installed" test -f "$widget/contents/config/main.xml"
+check "widget files are in the manifest" grep -qxF "$widget/contents/ui/main.qml" "$manifest"
+check "bundled runner files installed" test -f "$home/.local/share/aqtruncat/runners/cat/cat-frame-0.png"
+check "bundled runner metadata installed" test -f "$home/.local/share/aqtruncat/runners/coffee/metadata.json"
+check "the user is told how to add the widget" grep -qF "Add or Manage Widgets > AQTRunCat" <<< "$out"
+check "the widget id matches its directory" grep -qF '"Id": "io.github.psykedady.aqtruncat"' "$widget/metadata.json"
+check "the widget version is the AQTRunCat version" grep -qF "\"Version\": \"$source_version\"" "$widget/metadata.json"
+check "--local: no XDG_DATA_DIRS warning" lacks "XDG_DATA_DIRS" "$out"
+
+QML_DIRS=$work/qml-plasma6 capture --local --build-dir="$build_dir" -na
+check "updating the widget tells when Plasma uses it" grep -qF "keeps the previous version until Plasma starts again" <<< "$out"
+
+QML_DIRS=$work/qml-plasma6 capture --local --build-dir="$build_dir" -na --no-plasmoid
+check "--no-plasmoid update succeeds" test "$rc" -eq 0
+check "--no-plasmoid removes this installation's widget" test ! -e "$widget"
+check "the removal is reported" grep -qF "Plasma widget of this installation was removed" <<< "$out"
+check "the tray application stays installed" test -x "$bin"
+check "bundled runner files stay (the backend uses them)" test -f "$home/.local/share/aqtruncat/runners/cat/cat-frame-0.png"
+
+capture --local --build-dir="$build_dir" -na --plasmoid
+check "--plasmoid without Plasma 6: nothing changed" test "$rc" -eq 1
+check "--plasmoid failure installs no widget" test ! -e "$widget"
+
+QML_DIRS=$work/qml-plasma6 capture --local --build-dir="$build_dir" -na --plasmoid
+check "--plasmoid installs the widget again" test -f "$widget/metadata.json"
+capture --local -U
+check "uninstall with the widget succeeds" test "$rc" -eq 0
+check "uninstall removes the widget package" test ! -e "$widget"
+check "uninstall removes the bundled runner files" test ! -e "$home/.local/share/aqtruncat"
+check "uninstall reports the widget left on panels" grep -qF "shows as unavailable" <<< "$out"
+check "an unrelated widget is kept" test -f "$other_widget/metadata.json"
+check "the Plasma layout is never edited" cmp -s "$layout" "$work/layout-before"
+check "plasmashell and Plasma tools were never called" test ! -e "$work/plasma-calls"
+check "user runners kept with the widget" test -f "$home/.local/share/AQTRunCat/runners/mine/frame-0.png"
+rm -rf "$other_widget" "$layout"
+
+QML_DIRS=$work/qml-plasma6 capture --prefix="$prefix" --build-dir="$build_dir" -na
+check "system install with the widget" test -f "$prefix/share/plasma/plasmoids/io.github.psykedady.aqtruncat/metadata.json"
+check "a prefix Plasma does not search is reported" grep -qF "which does not contain $prefix/share" <<< "$out"
+QML_DIRS=$work/qml-plasma6 XDG_TEST_ENV="XDG_DATA_DIRS=$prefix/share:/usr/share" capture --prefix="$prefix" --build-dir="$build_dir" -na
+check "a prefix in XDG_DATA_DIRS: no warning" lacks "does not contain" "$out"
+capture --prefix="$prefix" -U
+check "system uninstall removes the widget" test -z "$(find "$prefix" -type f)"
+check "no AQTRunCat directory is left in the prefix" test ! -e "$prefix/share/plasma/plasmoids/io.github.psykedady.aqtruncat" -a ! -e "$prefix/share/aqtruncat"
 
 # --- running instances: closed before files change, nothing else touched ---
 

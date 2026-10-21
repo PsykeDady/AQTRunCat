@@ -9,6 +9,7 @@
 #include "app/dashboardwindow.h"
 #include "app/metricsbarmodel.h"
 #include "app/snapshotthrottle.h"
+#include "runnerfixture.h"
 
 #include <QApplication>
 #include <QDBusConnection>
@@ -556,6 +557,77 @@ private slots:
         QVERIFY(watch.waitForFinished(5000));
         QCOMPARE(watch.exitCode(), 0);
         stopForeignBackend();
+    }
+
+    // F4.2: the runner catalogue for frontends that cannot load runners
+    // themselves (the Plasmoid): files, playback order, colour mode and the
+    // same fallback as the Qt frontend for an unusable stored runner.
+    void runnerCatalogForOtherFrontends()
+    {
+        const QDir runners(m_root.filePath(QStringLiteral("data/AQTRunCat/runners")));
+        fixture::writeFrames(QDir(runners.filePath(QStringLiteral("mine"))),
+                             fixture::galleryNames(QStringLiteral("mine"), 3), {40, 36}, Qt::red);
+        QVERIFY(fixture::writeFile(runners.filePath(QStringLiteral("mine/metadata.json")),
+                                   R"({"displayName": "Mine", "frameOrder": [2, 0, 1, 0]})"));
+        QDir().mkpath(runners.filePath(QStringLiteral("broken")));
+        QVERIFY(fixture::writeFile(runners.filePath(QStringLiteral("broken/frame-0.png")), "not a png"));
+
+        startBackend();
+        QVERIFY(callObject(QStringLiteral("GetInfo")).value(QStringLiteral("capabilities")).toArray()
+                    .contains(QStringLiteral("runners")));
+        QJsonObject catalog = callObject(QStringLiteral("GetRunners"));
+        QCOMPARE(catalog.value(QStringLiteral("schema")).toInt(), aqtruncat::api::SchemaVersion);
+        QCOMPARE(catalog.value(QStringLiteral("defaultRunnerId")).toString(), QStringLiteral("cat"));
+        QCOMPARE(catalog.value(QStringLiteral("selected")).toString(), QStringLiteral("cat"));
+        QHash<QString, QJsonObject> byId;
+        for (const QJsonValue &value : catalog.value(QStringLiteral("runners")).toArray())
+            byId.insert(value[QStringLiteral("id")].toString(), value.toObject());
+        QVERIFY(byId.contains(QStringLiteral("cat")) && byId.contains(QStringLiteral("coffee")));
+
+        const QJsonObject cat = byId.value(QStringLiteral("cat"));
+        QCOMPARE(cat.value(QStringLiteral("source")).toString(), QStringLiteral("bundled"));
+        QVERIFY(cat.value(QStringLiteral("valid")).toBool());
+        QVERIFY(cat.value(QStringLiteral("monochrome")).toBool());
+        QCOMPARE(cat.value(QStringLiteral("frameHeight")).toInt(), 36);
+        const QJsonArray catFrames = cat.value(QStringLiteral("frames")).toArray();
+        QCOMPARE(catFrames.size(), 5);
+        for (int i = 0; i < catFrames.size(); ++i) {
+            const QString frame = catFrames.at(i).toString();
+            QVERIFY2(QFileInfo(frame).isAbsolute() && QFileInfo::exists(frame), qPrintable(frame));
+            QVERIFY(frame.endsWith(QStringLiteral("/share/aqtruncat/runners/cat/cat-frame-%1.png").arg(i)));
+        }
+        QCOMPARE(cat.value(QStringLiteral("sequence")).toArray(), (QJsonArray{0, 1, 2, 3, 4}));
+
+        const QJsonObject mine = byId.value(QStringLiteral("mine"));
+        QCOMPARE(mine.value(QStringLiteral("source")).toString(), QStringLiteral("user"));
+        QCOMPARE(mine.value(QStringLiteral("displayName")).toString(), QStringLiteral("Mine"));
+        QVERIFY(mine.value(QStringLiteral("valid")).toBool());
+        QVERIFY(!mine.value(QStringLiteral("monochrome")).toBool()); // red frames: a colour runner
+        QCOMPARE(mine.value(QStringLiteral("frameWidth")).toInt(), 40);
+        QCOMPARE(mine.value(QStringLiteral("sequence")).toArray(), (QJsonArray{2, 0, 1, 0}));
+        QVERIFY(mine.value(QStringLiteral("frames")).toArray().at(2).toString()
+                    .startsWith(runners.filePath(QStringLiteral("mine/"))));
+
+        const QJsonObject broken = byId.value(QStringLiteral("broken"));
+        QVERIFY(!broken.value(QStringLiteral("valid")).toBool());
+        QVERIFY(!broken.value(QStringLiteral("error")).toString().isEmpty());
+        QVERIFY(broken.value(QStringLiteral("frames")).toArray().isEmpty());
+
+        // The stored runner decides "selected"; an unusable one falls back.
+        SignalLog log;
+        log.subscribe();
+        QCOMPARE(call(QStringLiteral("SetSetting"), {QStringLiteral("runnerId"), QStringLiteral("\"mine\"")}).type(),
+                 QDBusMessage::ReplyMessage);
+        QTRY_VERIFY(!log.runners.isEmpty() && log.runners.last().value(QStringLiteral("runnerId")) == QLatin1String("mine"));
+        QCOMPARE(callObject(QStringLiteral("GetRunners")).value(QStringLiteral("selected")).toString(), QStringLiteral("mine"));
+        for (const QString &unusable : {QStringLiteral("broken"), QStringLiteral("gone")}) {
+            call(QStringLiteral("SetSetting"), {QStringLiteral("runnerId"), QStringLiteral("\"%1\"").arg(unusable)});
+            catalog = callObject(QStringLiteral("GetRunners"));
+            QCOMPARE(catalog.value(QStringLiteral("requested")).toString(), unusable);
+            QCOMPARE(catalog.value(QStringLiteral("selected")).toString(), QStringLiteral("cat"));
+        }
+        call(QStringLiteral("SetSetting"), {QStringLiteral("runnerId"), QStringLiteral("\"cat\"")});
+        QDir(runners.path()).removeRecursively();
     }
 
     void activationThroughTheBus()

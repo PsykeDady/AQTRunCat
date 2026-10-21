@@ -13,6 +13,9 @@ AQTRunCat includes material from the following third-party projects.
 - Modifications: none. The files are byte-for-byte copies of the upstream PNGs.
 - Use:
   - `cat` and `coffee` are compiled into the `aqtruncat` executable as bundled runners (`AQTRUNCAT_BUNDLED_RUNNERS`).
+    Since F4.2 the same unmodified files are also installed as
+    `share/aqtruncat/runners/<id>/*.png`, where the backend lists them for
+    the KDE Plasma widget (and other frontends) to animate.
   - `engine` is used only by the M1.0 tray spike.
 
 The runner metadata files in `data/runners/<id>/metadata.json` are AQTRunCat

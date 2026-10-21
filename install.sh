@@ -19,6 +19,7 @@ AQTRunCat installer - A Cute Run Cat for Linux
 
 Usage:
   ./install.sh [--local] [--no-build] [-A | --autostart=true | -na | --autostart=false]
+               [--plasmoid | --no-plasmoid]
   ./install.sh [--local] -U | --uninstall
   ./install.sh -h | --help
 
@@ -53,6 +54,9 @@ Installation (default):
                            DIR/bin/aqtruncat-claude-metric, aqtruncat-codex-metric
                              (optional Claude Code / Codex integrations, off
                              until enabled in Settings > Integrations)
+                           DIR/share/aqtruncat/runners/ (bundled runners, for the Plasmoid)
+                           DIR/share/plasma/plasmoids/io.github.psykedady.aqtruncat/
+                             (KDE Plasma 6 widget, see "Plasma widget" below)
                            DIR/share/applications/aqtruncat.desktop
                            DIR/share/icons/hicolor/*/apps/aqtruncat.{png,svg}
                            DIR/share/man/man1/aqtruncat.1
@@ -62,7 +66,8 @@ Installation (default):
                            ${XDG_BIN_HOME:-~/.local/bin}/aqtruncat, aqtruncatd, aqtruncatctl,
                              aqtruncat-claude-metric, aqtruncat-codex-metric
                            ${XDG_DATA_HOME:-~/.local/share}/applications, dbus-1/services,
-                             icons, man, doc
+                             icons, man, doc, aqtruncat/runners,
+                             plasma/plasmoids/io.github.psykedady.aqtruncat
                            ${XDG_STATE_HOME:-~/.local/state}/aqtruncat/install-manifest.txt
                          Your shell files are never edited; if the bin directory
                          is not in PATH you get a warning (the menu entry and
@@ -99,6 +104,25 @@ Autostart (start AQTRunCat at login) - ON by default:
   does. With "sudo ./install.sh" it is applied to the user who ran sudo.
   Giving both an enabling and a disabling option is an error.
 
+Plasma widget (Plasmoid, F4.2) - installed when KDE Plasma 6 is found:
+  (no option)             Plasma 6 found: the tray application and the widget;
+                          not found: the tray application only
+  --plasmoid              install the widget, also when this is not a Plasma
+                          session; fails with the missing Plasma 6 QML modules
+                          (and the packages to install) when they are absent
+  --no-plasmoid           do not install the widget (removes one installed
+                          earlier by this installation)
+  "Plasma 6 found" means the Qt 6 QML modules the widget uses: Plasma
+  (org.kde.plasma.plasmoid, components, extras, core, workspace.dbus),
+  Kirigami, KCMUtils and Qt Quick Dialogs. Nothing is built for the widget
+  (QML only) and nothing KDE is needed by the rest of AQTRunCat.
+  Installing the widget does not put it anywhere: add it yourself (panel or
+  desktop > Add or Manage Widgets > "AQTRunCat"). Panels and desktop layouts
+  are never changed and plasmashell is never restarted; a widget that is
+  already shown keeps the previous version until Plasma starts again (next
+  login). The widget and the tray application are independent: either,
+  both or none can run; autostart only concerns the tray application.
+
 Uninstallation:
   -U, --uninstall         remove the system-wide installation (prefix /usr/local
                           or --prefix=DIR)
@@ -133,6 +157,9 @@ Examples:
   ./install.sh --local             only for me, autostart on, no root
   ./install.sh --local --autostart=false
   ./install.sh --local -U          remove my --local installation
+  ./install.sh --no-plasmoid       without the Plasma widget
+  ./install.sh --local --plasmoid -na
+                                   only for me, with the widget, no tray autostart
   sudo ./install.sh --uninstall    remove the system-wide installation
 
 Exit status: 0 success, 1 failure, 2 invalid command line.
@@ -162,6 +189,8 @@ build_dir=""
 no_build=0
 reuse_previous_version=0
 dry_run=0
+plasmoid=""        # "", true or false (command line)
+plasmoid_option=""
 
 set_autostart() {
     if [[ -n $autostart && $autostart != "$1" ]]; then
@@ -183,6 +212,15 @@ for arg in "$@"; do
         --build-dir=*) build_dir=${arg#--build-dir=} ;;
         --no-build) no_build=1 ;;
         --dry-run) dry_run=1 ;;
+        --plasmoid | --no-plasmoid)
+            value=true
+            [[ $arg == --no-plasmoid ]] && value=false
+            if [[ -n $plasmoid && $plasmoid != "$value" ]]; then
+                usage_error "conflicting options: $plasmoid_option and $arg"
+            fi
+            plasmoid=$value
+            plasmoid_option=$arg
+            ;;
         *) usage_error "unknown option \"$arg\"" ;;
     esac
 done
@@ -195,6 +233,9 @@ if [[ $action == uninstall && -n $build_dir ]]; then
 fi
 if [[ $action == uninstall && $no_build == 1 ]]; then
     usage_error "--no-build only applies to installation"
+fi
+if [[ $action == uninstall && -n $plasmoid ]]; then
+    usage_error "$plasmoid_option only applies to installation (uninstalling removes this installation's widget, if any)"
 fi
 if [[ $scope == local && $prefix_given == 1 ]]; then
     usage_error "--prefix is for system-wide installation; --local uses the XDG directories"
@@ -618,6 +659,107 @@ qt_version() {
     return 1
 }
 
+# --- Plasma widget (F4.2) -------------------------------------------------
+
+readonly PLASMOID_ID=io.github.psykedady.aqtruncat
+# Qt 6 QML modules the widget imports (contents/ui/*.qml).
+readonly PLASMOID_QML_MODULES="org/kde/plasma/plasmoid org/kde/plasma/core org/kde/plasma/components org/kde/plasma/extras org/kde/plasma/workspace/dbus org/kde/kirigami org/kde/kcmutils QtQuick/Dialogs"
+
+# Qt 6 QML import directories: AQTRUNCAT_QML_DIRS (colon separated; tests),
+# else Qt's QT_INSTALL_QML and the usual distribution locations.
+qml_dirs() {
+    if [[ -n ${AQTRUNCAT_QML_DIRS+set} ]]; then
+        tr ':' '\n' <<< "$AQTRUNCAT_QML_DIRS"
+        return 0
+    fi
+    local tool dir
+    for tool in qtpaths6 /usr/lib/qt6/bin/qtpaths /usr/lib64/qt6/bin/qtpaths; do
+        command -v "$tool" > /dev/null 2>&1 || continue
+        if dir=$("$tool" --query QT_INSTALL_QML 2> /dev/null) && [[ $dir == /* ]]; then
+            printf '%s\n' "$dir"
+        fi
+        break
+    done
+    printf '%s\n' /usr/lib/qt6/qml /usr/lib64/qt6/qml /usr/lib/x86_64-linux-gnu/qt6/qml /usr/lib/aarch64-linux-gnu/qt6/qml
+}
+
+# Plasma 6 is "found" when every module of PLASMOID_QML_MODULES is: the
+# widget needs nothing else (no build, no library). Fills plasma_missing
+# (module names) and plasma_version (libplasma's, when it says).
+plasma_missing=()
+plasma_version=""
+detect_plasma() {
+    plasma_missing=()
+    plasma_version=""
+    local -a dirs=()
+    local module dir found
+    mapfile -t dirs < <(qml_dirs)
+    for module in $PLASMOID_QML_MODULES; do
+        found=""
+        for dir in "${dirs[@]}"; do
+            if [[ -n $dir && -f $dir/$module/qmldir ]]; then
+                found=$dir
+                break
+            fi
+        done
+        if [[ -z $found ]]; then
+            plasma_missing+=("${module//\//.}")
+        elif [[ $module == org/kde/plasma/plasmoid && -r $found/$module/kde-qmlmodule.version ]]; then
+            { IFS= read -r plasma_version < "$found/$module/kde-qmlmodule.version"; } 2> /dev/null || plasma_version=""
+        fi
+    done
+    if ((${#plasma_missing[@]} == 0)) && [[ -n $plasma_version && ${plasma_version%%.*} != 6 ]]; then
+        plasma_missing+=("Plasma 6 (found Plasma $plasma_version)")
+    fi
+}
+
+plasma_deps_command() {
+    case $family in
+        arch) echo "sudo pacman -S --needed plasma-workspace libplasma kirigami kcmutils qt6-declarative" ;;
+        fedora) echo "sudo dnf install plasma-workspace libplasma kf6-kirigami kf6-kcmutils qt6-qtdeclarative" ;;
+        debian) echo "sudo apt install plasma-workspace libplasma6 qml6-module-org-kde-kirigami qml6-module-org-kde-kcmutils qml6-module-qtquick-dialogs" ;;
+        *) echo "install KDE Plasma 6 (plasma-workspace) with its QML modules (Kirigami, KCMUtils) and Qt 6 Quick Dialogs" ;;
+    esac
+}
+
+# install_plasmoid: true | false | missing (--plasmoid without Plasma 6),
+# plasmoid_reason: why, for the printed options.
+install_plasmoid=false
+plasmoid_reason=""
+decide_plasmoid() {
+    detect_plasma
+    local missing=""
+    ((${#plasma_missing[@]} == 0)) || missing=$(printf '%s, ' "${plasma_missing[@]}")
+    missing=${missing%, }
+    if [[ $plasmoid == false ]]; then
+        install_plasmoid=false
+        plasmoid_reason="false (--no-plasmoid)"
+    elif [[ -z $missing ]]; then
+        install_plasmoid=true
+        plasmoid_reason="true (${plasmoid_option:-default}: KDE Plasma ${plasma_version:-6} found)"
+    elif [[ $plasmoid == true ]]; then
+        install_plasmoid=missing
+        plasmoid_reason="requested (--plasmoid) but KDE Plasma 6 is missing: $missing"
+    else
+        install_plasmoid=false
+        plasmoid_reason="false (default: KDE Plasma 6 not found, missing $missing)"
+    fi
+}
+
+# Plasma finds widgets in $XDG_DATA_HOME and $XDG_DATA_DIRS; the backend's
+# D-Bus activation file is found the same way.
+data_dir_searched() {
+    local dir
+    if [[ $scope == local ]]; then
+        return 0
+    fi
+    local IFS=:
+    for dir in ${XDG_DATA_DIRS:-/usr/local/share:/usr/share}; do
+        [[ $(clean_path "$dir") == "$datadir" ]] && return 0
+    done
+    return 1
+}
+
 check_build_dependencies() {
     local missing=()
     command -v cmake > /dev/null || missing+=("cmake")
@@ -699,6 +841,33 @@ remove_empty_dir() {
     "${SUDO[@]}" rmdir -- "$dir" 2> /dev/null || true
 }
 
+# Empty directories that belong to AQTRunCat alone, deepest first, for the
+# given removed files: its documentation, share/aqtruncat (bundled runners)
+# and its Plasma widget package. Shared parents (share/plasma, …) are kept.
+remove_owned_dirs() {
+    local f dir root
+    local -a dirs=()
+    for f in "$@"; do
+        local -a roots=("$datadir/aqtruncat" "$datadir/plasma/plasmoids/$PLASMOID_ID")
+        if [[ $f == "$datadir"/doc/*/* ]]; then
+            root=${f#"$datadir"/doc/}
+            roots+=("$datadir/doc/${root%%/*}")
+        fi
+        for root in "${roots[@]}"; do
+            [[ $f == "$root"/* ]] || continue
+            dir=$(dirname -- "$f")
+            while [[ $dir == "$root" || $dir == "$root"/* ]]; do
+                dirs+=("$dir")
+                dir=$(dirname -- "$dir")
+            done
+        done
+    done
+    ((${#dirs[@]})) || return 0
+    while IFS= read -r dir; do
+        remove_empty_dir "$dir"
+    done < <(printf '%s\n' "${dirs[@]}" | sort -u | awk '{ print length, $0 }' | sort -rn | cut -d' ' -f2-)
+}
+
 # The desktop entry declares no MIME types, so no desktop database needs
 # updating; only an existing hicolor icon cache is refreshed.
 refresh_desktop_caches() {
@@ -741,6 +910,7 @@ print_options() {
             option "rebuild" "true: from scratch in $default_build (default)"
         fi
         option "autostart" "$autostart (${autostart_option:-default})"
+        option "plasmoid" "$plasmoid_reason"
     fi
     option "dry run" "$( ((dry_run)) && echo true || echo false)"
     option "binary" "$installed_bin"
@@ -813,6 +983,21 @@ do_install() {
     done
     [[ -x $stage/bin/aqtruncat ]] || die "the staged tree has no bin/aqtruncat"
 
+    # Plasma widget (F4.2): part of every build (QML files only); kept or
+    # left out here, so that --no-build installs exactly what was decided.
+    local staged_plasmoid=$stage/share/plasma/plasmoids/$PLASMOID_ID
+    if [[ $install_plasmoid == true && ! -f $staged_plasmoid/metadata.json ]]; then
+        if [[ $plasmoid == true ]]; then
+            die "--plasmoid: the build in $build has no Plasma widget (an older AQTRunCat version); nothing was changed"
+        fi
+        warn "the build in $build has no Plasma widget (an older AQTRunCat version); installing without it"
+        install_plasmoid=false
+    fi
+    if [[ $install_plasmoid != true && -d $stage/share/plasma ]]; then
+        rm -rf -- "$staged_plasmoid"
+        rmdir -p -- "$stage/share/plasma/plasmoids" 2> /dev/null || true
+    fi
+
     # Menu entry: start the binary by its full path (bin may not be in PATH).
     local desktop=$stage/share/applications/aqtruncat.desktop
     if [[ -f $desktop ]]; then
@@ -856,6 +1041,7 @@ do_install() {
 
     # Files of a previous installation that are no longer installed.
     local -a stale=()
+    local had_plasmoid=0
     if [[ -f $manifest ]]; then
         check_manifest
         local old
@@ -864,6 +1050,7 @@ do_install() {
             for t in "${targets[@]}"; do [[ $t == "$old" ]] && { keep=1; break; }; done
             ((keep)) || stale+=("$old")
         done < <(read_manifest)
+        grep -qxF "$datadir/plasma/plasmoids/$PLASMOID_ID/metadata.json" "$manifest" && had_plasmoid=1
         say "Updating the existing installation ($manifest)"
     fi
 
@@ -883,6 +1070,7 @@ do_install() {
         fi
     done
     for target in "${stale[@]}"; do remove_file "$target"; done
+    remove_owned_dirs "${stale[@]}"
 
     local list=$work/manifest
     {
@@ -917,6 +1105,18 @@ do_install() {
     reload_session_bus
 
     say "AQTRunCat is installed: $installed_bin"
+    if [[ $install_plasmoid == true ]]; then
+        say "Plasma widget installed: $datadir/plasma/plasmoids/$PLASMOID_ID"
+        say "  Add it yourself: right-click a panel or the desktop > Add or Manage Widgets > AQTRunCat."
+        if ((had_plasmoid)); then
+            say "  A widget already on a panel keeps the previous version until Plasma starts again (next login); plasmashell is not restarted."
+        fi
+        if ! data_dir_searched; then
+            warn "Plasma looks for widgets (and D-Bus for the backend) in XDG_DATA_DIRS=${XDG_DATA_DIRS:-/usr/local/share:/usr/share}, which does not contain $datadir: add it to XDG_DATA_DIRS of your session, or install with the default prefix or --local"
+        fi
+    elif ((had_plasmoid)); then
+        say "The Plasma widget of this installation was removed (a widget still on a panel shows as unavailable until you remove it)."
+    fi
     if [[ $scope == local && ":$PATH:" != *":$bindir:"* ]]; then
         warn "$bindir is not in your PATH. The menu entry and autostart work anyway; to run \"aqtruncat\" from a terminal, add it to PATH yourself."
     fi
@@ -958,15 +1158,15 @@ do_uninstall() {
     local f
     for f in "${files[@]}"; do remove_file "$f"; done
     "${SUDO[@]}" rm -f -- "$manifest"
+    remove_owned_dirs "${files[@]}"
     remove_empty_dir "$(dirname -- "$manifest")"
-    # Directories that belong to AQTRunCat alone (its documentation).
-    for f in "${files[@]}"; do
-        [[ $f == "$datadir"/doc/*/* ]] && remove_empty_dir "$(dirname -- "$f")"
-    done
     refresh_desktop_caches
     reload_session_bus
 
     say "AQTRunCat ($scope) is uninstalled."
+    if printf '%s\n' "${files[@]}" | grep -qxF "$datadir/plasma/plasmoids/$PLASMOID_ID/metadata.json"; then
+        say "The Plasma widget was removed too: an AQTRunCat widget still on a panel or the desktop shows as unavailable; remove it there (Plasma's layout is not edited)."
+    fi
     say "Kept (delete them yourself if you no longer want them):"
     say "  settings:                    $config_home/AQTRunCat"
     say "  user runners, Custom Metrics: $data_home/AQTRunCat"
@@ -974,7 +1174,13 @@ do_uninstall() {
 
 # --- main -----------------------------------------------------------------
 
+[[ $action != install ]] || decide_plasmoid
 print_options
+if [[ $install_plasmoid == missing ]]; then
+    say "The Plasma widget needs the Qt 6 QML modules of KDE Plasma 6. Detected: $os_name (family: $family). Install them with:"
+    say "  $(plasma_deps_command)"
+    die "--plasmoid: KDE Plasma 6 is not available (missing ${plasmoid_reason##*missing: }); run without --plasmoid to install AQTRunCat without the widget"
+fi
 if ((dry_run)); then
     if [[ $action == uninstall && -f $manifest ]]; then
         check_manifest

@@ -123,6 +123,17 @@ add_library(aqtruncat_api STATIC
 target_link_libraries(aqtruncat_api PUBLIC aqtruncat_engine Qt6::Core Qt6::DBus)
 target_compile_options(aqtruncat_api PRIVATE -Wall -Wextra -Wpedantic)
 
+# F4.2: runner selection (shared with the Qt frontend) and the GetRunners
+# catalogue. Needs QtGui through the runner library, so it stays out of
+# aqtruncat_api: only aqtruncatd and the Qt frontend link it.
+add_library(aqtruncat_runner_catalog STATIC
+    api/runnercatalog.cpp
+    api/runnercatalog.h
+    app/runnerselection.cpp
+    app/runnerselection.h)
+target_link_libraries(aqtruncat_runner_catalog PUBLIC aqtruncat_api aqtruncat_runner)
+target_compile_options(aqtruncat_runner_catalog PRIVATE -Wall -Wextra -Wpedantic)
+
 # Desktop frontend (Qt Widgets / SNI tray): Dashboard, Settings, Metrics
 # Bar, runner presentation. Since F4.1 it consumes the backend over D-Bus.
 add_library(aqtruncat_desktop STATIC
@@ -138,15 +149,13 @@ add_library(aqtruncat_desktop STATIC
     app/metricsbarrenderer.h
     app/runnerpresentation.cpp
     app/runnerpresentation.h
-    app/runnerselection.cpp
-    app/runnerselection.h
     app/runnerpreviewwidget.cpp
     app/runnerpreviewwidget.h
     app/settingswindow.cpp
     app/settingswindow.h
     app/traypresenter.cpp
     app/traypresenter.h)
-target_link_libraries(aqtruncat_desktop PUBLIC aqtruncat_api aqtruncat_engine aqtruncat_runner Qt6::Widgets)
+target_link_libraries(aqtruncat_desktop PUBLIC aqtruncat_api aqtruncat_engine aqtruncat_runner_catalog Qt6::Widgets)
 target_compile_options(aqtruncat_desktop PRIVATE -Wall -Wextra -Wpedantic)
 
 qt_add_executable(aqtruncat
@@ -190,10 +199,24 @@ if(bundled_metadata)
     qt_add_resources(aqtruncat bundled_runner_metadata PREFIX /runners BASE "${metadata_root}" FILES ${bundled_metadata})
 endif()
 
+# F4.2: the same bundled runners as plain files, share/aqtruncat/runners/<id>/,
+# for frontends outside this executable (the Plasmoid loads the frames that
+# GetRunners lists). Also copied into the build tree next to src/, so that a
+# build-tree aqtruncatd finds them as ../share/aqtruncat/runners.
+foreach(runner IN LISTS AQTRUNCAT_BUNDLED_RUNNERS)
+    file(GLOB frames "${frames_root}/${runner}/*.png")
+    set(runner_files ${frames})
+    if(EXISTS "${metadata_root}/${runner}/metadata.json")
+        list(APPEND runner_files "${metadata_root}/${runner}/metadata.json")
+    endif()
+    install(FILES ${runner_files} DESTINATION ${CMAKE_INSTALL_DATADIR}/aqtruncat/runners/${runner})
+    file(COPY ${runner_files} DESTINATION "${PROJECT_BINARY_DIR}/share/aqtruncat/runners/${runner}")
+endforeach()
+
 # The backend (F4.1): one per user session, D-Bus activated, headless.
 # (After AQTRUNCAT_DEFAULT_RUNNER is defined.)
 qt_add_executable(aqtruncatd daemon/main.cpp)
-target_link_libraries(aqtruncatd PRIVATE aqtruncat_api Qt6::Core Qt6::DBus)
+target_link_libraries(aqtruncatd PRIVATE aqtruncat_api aqtruncat_runner_catalog Qt6::Core Qt6::DBus)
 target_compile_options(aqtruncatd PRIVATE -Wall -Wextra -Wpedantic)
 target_compile_definitions(aqtruncatd PRIVATE
     AQTRUNCAT_VERSION="${PROJECT_VERSION}"

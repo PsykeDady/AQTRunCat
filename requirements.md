@@ -4,9 +4,9 @@ This document defines the AQTRunCat feature roadmap after completion of the
 M0–M9 project roadmap. M0–M9 are complete and remain the historical and
 architectural foundation for this work.
 
-F1, F2, F3 and F4.1 are complete. F4.2, F5 and F6 are not started;
-recording them here does not imply that they are currently available or
-supported.
+F1, F2, F3 and F4 (F4.1 and F4.2) are complete. F5, F6 and F7 are not
+started; recording them here does not imply that they are currently
+available or supported.
 
 The post-project roadmap is:
 
@@ -16,6 +16,7 @@ The post-project roadmap is:
     F4  Backend Independence (F4.1) and KDE Plasma Plasmoid (F4.2)
     F5  Additional Built-in Metrics
     F6  Hover Information
+    F7  Additional Built-in Animated Runners
 
 
 ## Development Baseline and Branching
@@ -57,7 +58,7 @@ Rule (user decision, 2026-10-21):
   F4.1 → 1.4.1, F4.2 → 1.4.2; F5.1 → 1.5.1, and so on.
 - After the seventh feature the version moves to **2.0.0**.
 
-Current version: **1.4.1** (F4.1 complete). Earlier states were never
+Current version: **1.4.2** (F4.2 complete). Earlier states were never
 released under their own number (the project stayed at 0.0.1 until F4.1).
 
 
@@ -492,7 +493,7 @@ F4 is divided into two parts:
   (complete): AQTRunCat becomes a reusable local metric service with one
   authoritative backend per session, a documented IPC API and a reference
   CLI.
-- **F4.2 — Native KDE Plasma Plasmoid** (not started): a Plasma frontend that
+- **F4.2 — Native KDE Plasma Plasmoid** (complete): a Plasma frontend that
   consumes the F4.1 API.
 
 F4.1 is a mandatory prerequisite for F4.2.
@@ -674,6 +675,79 @@ The generic Qt/SNI frontend must remain fully supported when the Plasmoid is
 installed.
 
 
+#### Implemented Behaviour (F4.2 complete, 2026-10-21)
+
+Record, design and validation: `docs/F4.2-plasma-plasmoid.md`. Normative:
+
+- Form: a **QML-only Plasma 6 package** (`plasmoid/package`, id
+  `io.github.psykedady.aqtruncat`, `KPackageStructure` `Plasma/Applet`,
+  `X-Plasma-API-Minimum-Version` 6.0) installed to
+  `share/plasma/plasmoids/io.github.psykedady.aqtruncat/`. No native code
+  in plasmashell and no build dependency; it works from `/usr`,
+  `/usr/local` and `--local` alike (a C++ QML/applet plugin would not be
+  found by plasmashell outside Qt's own directories).
+- Frontend only: no sampling, no provider files, no command execution, no
+  scheduler, no settings store of its own. `BackendClient.qml` talks to the
+  F4.1 API with Plasma's QML D-Bus module
+  (`org.kde.plasma.workspace.dbus`): asynchronous calls only, D-Bus
+  activation, signal deltas by generation (a gap or a lower generation
+  takes `GetState`), 3 s grace then "unavailable", retries at 3 s doubling
+  to 30 s, "incompatible" for another major API, degraded mode for a
+  backend without the `runners` capability. With the popup closed metric
+  deltas are not parsed; opening it takes `GetMetrics`.
+- API extension (compatible, schema 1): `GetRunners` with capability
+  `runners` — runner catalogue with absolute frame files, playback
+  `sequence`, `monochrome`, frame size, validity and the `selected` runner
+  (same fallback as the tray). Bundled runners are also installed as files
+  in `share/aqtruncat/runners/<id>/`. The catalogue lives in
+  `aqtruncat_runner_catalog` (QtGui for PNG validation), linked only by
+  `aqtruncatd` and the tray; `aqtruncat_api` and `aqtruncatctl` stay
+  QtCore + QtDBus. `aqtruncatd` still needs no graphical session.
+- Compact representation: the runner only, sized from the panel thickness
+  and the runner's aspect ratio (horizontal and vertical panels, desktop),
+  transparent; frames painted once per size/colour/screen scale into
+  Canvases and switched by a local timer at the backend's fps; monochrome
+  runners tinted with the theme's text colour (source-in, as the tray).
+- Expanded representation: a Plasma popup (`PlasmaExtras.Representation`,
+  list with section headers) with System, Integrations and Custom Metrics
+  by the backend's `category` only; values, details, bars only with a
+  normalized value, multi-value items (Claude/Codex windows) with reset
+  lines and warnings; pending/unavailable/error/warning shown as such,
+  never as zero or as an invented percentage.
+- Configuration: page "AQTRunCat" changes the shared settings through the
+  API (runner, speed, network, integrations and live updates, Custom
+  Metrics files), immediately, kept in sync by `SettingsChanged`; page
+  "Appearance" holds widget-only options in Plasma's configuration
+  (`animate`, `showBuiltin`, `showIntegrations`, `showCustom`,
+  `showDetails`). Start at login, Metrics Bar and Dashboard refresh remain
+  tray settings.
+- Coexistence: tray and widget are independent clients of one backend;
+  installing or adding either never enables the other; autostart concerns
+  the tray only.
+- Installation (F4.2.1): `install.sh` installs the widget when Plasma 6's
+  QML modules are found (none needed elsewhere), `--no-plasmoid` skips or
+  removes it, `--plasmoid` requests it and fails with the missing modules
+  and the distribution's package command when they are absent; system,
+  `--local`, dry run, manifest ownership, safe uninstall (only its own
+  files and empty directories), `--no-build` and the version question are
+  preserved. The installer never adds the widget to a panel, never edits
+  Plasma's configuration and never restarts plasmashell; it warns when a
+  system prefix is not in `XDG_DATA_DIRS`.
+- Packaging: part of the main package, weak dependency on
+  `plasma-workspace` (PKGBUILD optdepends, RPM/Debian Suggests).
+- Tests: `plasmoidlogic` (qmltestrunner), `plasmoidclient` (the real
+  `BackendClient.qml` against the real backend on a private bus with
+  activation), `plasmoidpackage` (metadata, structure, configuration,
+  frontend-only rules, loading in `plasmoidviewer` in horizontal and
+  vertical panels and on the desktop), `backendipc` (`GetRunners`),
+  installer and `packaging-versions` checks.
+- Runtime: validated on Plasma 6.8 / Wayland in `plasmoidviewer` windows
+  on a private bus (loading, signals, one backend with two widgets and the
+  tray, settings and runner changes, backend restart, CPU); adding the
+  widget to the user's real panel and opening the popup by click are left
+  for manual verification (the user's session was not modified).
+
+
 ## F5 — Additional Built-in Metrics
 
 Evaluate and add additional built-in metrics:
@@ -770,6 +844,22 @@ presentation conventions:
 
 Reuse the already sampled CPU and memory information. Do not create another
 polling mechanism solely for hover information.
+
+
+## F7 — Additional Built-in Animated Runners
+
+Add two official built-in runners, shipped with AQTRunCat like Cat and
+Coffee Cup:
+
+- Walking Goose;
+- Crazy Dancing Parrot.
+
+They are built-in runners, separate from user (custom) runners, and follow
+the existing runner format, selection and presentation in every frontend
+(tray, Plasmoid, `GetRunners`).
+
+Status: NOT STARTED. Implementation is blocked until the user provides the
+final animation assets.
 
 
 ## General Principles for Post-Project Features

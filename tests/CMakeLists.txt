@@ -165,6 +165,7 @@ add_test(NAME apischema COMMAND tst_apischema)
 find_program(AQTRUNCAT_DBUS_RUN_SESSION dbus-run-session)
 qt_add_executable(tst_backendipc tst_backendipc.cpp)
 target_link_libraries(tst_backendipc PRIVATE aqtruncat_desktop Qt6::Test Qt6::Widgets Qt6::DBus)
+target_include_directories(tst_backendipc PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(tst_backendipc PRIVATE -Wall -Wextra -Wpedantic)
 target_compile_definitions(tst_backendipc PRIVATE
     AQTRUNCAT_DAEMON="$<TARGET_FILE:aqtruncatd>"
@@ -192,4 +193,78 @@ if(AQTRUNCAT_DBUS_RUN_SESSION)
     set_tests_properties(backendipc PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 else()
     message(STATUS "dbus-run-session not found: the backendipc test is not registered")
+endif()
+
+# F4.2: the KDE Plasma widget (plasmoid/package). Its pure functions with
+# qmltestrunner; its D-Bus client against the build's backend, activated
+# by a private bus; the package itself (metadata, structure, loading in
+# plasmoidviewer when the Plasma SDK is there). Each part is registered
+# only when its tools exist: AQTRunCat itself needs none of them.
+set(plasmoid_package "${PROJECT_SOURCE_DIR}/plasmoid/package")
+find_program(AQTRUNCAT_QMLTESTRUNNER NAMES qmltestrunner6 qmltestrunner
+             HINTS "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}" "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_LIBEXECS}")
+if(AQTRUNCAT_QMLTESTRUNNER)
+    add_test(NAME plasmoidlogic COMMAND ${AQTRUNCAT_QMLTESTRUNNER} -input ${CMAKE_CURRENT_SOURCE_DIR}/plasmoid/tst_logic.qml)
+    set_tests_properties(plasmoidlogic PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+else()
+    message(STATUS "qmltestrunner not found: the plasmoidlogic test is not registered")
+endif()
+
+find_package(Qt6 6.5 QUIET COMPONENTS Qml)
+if(Qt6Qml_FOUND AND AQTRUNCAT_DBUS_RUN_SESSION)
+    set(plasmoid_home "${CMAKE_CURRENT_BINARY_DIR}/plasmoidclient-home")
+    set(plasmoid_bus_dir "${CMAKE_CURRENT_BINARY_DIR}/plasmoidclient-bus")
+    # Activation through a wrapper that fails while the test's flag exists.
+    file(GENERATE OUTPUT "${plasmoid_bus_dir}/aqtruncatd-wrapper"
+         CONTENT "#!/bin/sh\n[ -e '${plasmoid_home}/activation-disabled' ] && exit 1\nexec '$<TARGET_FILE:aqtruncatd>' \"$@\"\n"
+         FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE)
+    file(WRITE "${plasmoid_bus_dir}/services/io.github.psykedady.AQTRunCat.service"
+         "[D-BUS Service]\nName=io.github.psykedady.AQTRunCat\nExec=${plasmoid_bus_dir}/aqtruncatd-wrapper\n")
+    file(WRITE "${plasmoid_bus_dir}/session.conf" "<!DOCTYPE busconfig PUBLIC \"-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN\"
+ \"http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd\">
+<busconfig>
+  <type>session</type>
+  <listen>unix:tmpdir=/tmp</listen>
+  <auth>EXTERNAL</auth>
+  <servicedir>${plasmoid_bus_dir}/services</servicedir>
+  <policy context=\"default\">
+    <allow send_destination=\"*\" eavesdrop=\"true\"/>
+    <allow eavesdrop=\"true\"/>
+    <allow own=\"*\"/>
+  </policy>
+</busconfig>
+")
+    qt_add_executable(tst_plasmoidclient tst_plasmoidclient.cpp)
+    target_link_libraries(tst_plasmoidclient PRIVATE aqtruncat_api Qt6::Gui Qt6::Qml Qt6::Test Qt6::DBus)
+    target_compile_options(tst_plasmoidclient PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_definitions(tst_plasmoidclient PRIVATE
+        AQTRUNCAT_PLASMOID_PACKAGE="${plasmoid_package}"
+        AQTRUNCAT_DAEMON="$<TARGET_FILE:aqtruncatd>"
+        AQTRUNCAT_CTL="$<TARGET_FILE:aqtruncatctl>"
+        AQTRUNCAT_TEST_HOME="${plasmoid_home}")
+    add_dependencies(tst_plasmoidclient aqtruncatd aqtruncatctl)
+    add_test(NAME plasmoidclient COMMAND ${AQTRUNCAT_DBUS_RUN_SESSION} --config-file=${plasmoid_bus_dir}/session.conf
+             -- $<TARGET_FILE:tst_plasmoidclient>)
+    # The bus (and so the activated backend) gets the test's home: never
+    # the real user's settings, data, Claude Code or Codex directories.
+    set_tests_properties(plasmoidclient PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;HOME=${plasmoid_home};XDG_CONFIG_HOME=${plasmoid_home}/config;XDG_DATA_HOME=${plasmoid_home}/data;XDG_CACHE_HOME=${plasmoid_home}/cache;XDG_STATE_HOME=${plasmoid_home}/state;XDG_RUNTIME_DIR=${plasmoid_home}/runtime;CLAUDE_CONFIG_DIR=${plasmoid_home}/no-claude;CODEX_HOME=${plasmoid_home}/no-codex")
+else()
+    message(STATUS "Qt Qml or dbus-run-session not found: the plasmoidclient test is not registered")
+endif()
+
+qt_add_executable(tst_plasmoidpackage tst_plasmoidpackage.cpp)
+target_link_libraries(tst_plasmoidpackage PRIVATE Qt6::Core Qt6::Test)
+target_compile_options(tst_plasmoidpackage PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(tst_plasmoidpackage PRIVATE
+    AQTRUNCAT_PLASMOID_PACKAGE="${plasmoid_package}"
+    AQTRUNCAT_DAEMON="$<TARGET_FILE:aqtruncatd>"
+    AQTRUNCAT_TEST_VERSION="${PROJECT_VERSION}")
+add_dependencies(tst_plasmoidpackage aqtruncatd)
+if(AQTRUNCAT_DBUS_RUN_SESSION)
+    # The same bus without service directories as backendipc.
+    add_test(NAME plasmoidpackage COMMAND ${AQTRUNCAT_DBUS_RUN_SESSION} --config-file=${backendipc_bus}
+             -- $<TARGET_FILE:tst_plasmoidpackage>)
+else()
+    add_test(NAME plasmoidpackage COMMAND tst_plasmoidpackage)
 endif()

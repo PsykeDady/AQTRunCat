@@ -1,4 +1,4 @@
-.TH AQTRUNCAT 1 "2026-10-21" "AQTRunCat 1.4.1" "User Commands"
+.TH AQTRUNCAT 1 "2026-10-21" "AQTRunCat 1.4.2" "User Commands"
 .SH NAME
 aqtruncat \- A Cute Run Cat for Linux: CPU\-driven tray runner with system metrics
 .SH SYNOPSIS
@@ -56,6 +56,13 @@ reads and controls the same backend (see
 The D\-Bus API is
 .B io.github.psykedady.AQTRunCat1
 on the session bus.
+.PP
+On KDE Plasma 6 the same backend also feeds the
+.B AQTRunCat
+widget (Plasmoid
+.BR io.github.psykedady.aqtruncat ),
+added from Add or Manage Widgets. The widget and the tray application are
+independent frontends: either, both or neither can run.
 .SH COMMANDS
 .TP
 .B run

@@ -1,3 +1,10 @@
+aqtruncat (1.4.2-1) unstable; urgency=medium
+
+  * F4.2: native KDE Plasma 6 widget (Plasmoid), a client of the backend;
+    bundled runners also installed as files; GetRunners in the D-Bus API.
+
+ -- AQTRunCat maintainers <maintainers@aqtruncat.invalid>  Wed, 21 Oct 2026 20:00:00 +0200
+
 aqtruncat (1.4.1-1) unstable; urgency=medium
 
   * F1-F4.1: Custom Metrics v2, Claude Code and Codex integrations, backend

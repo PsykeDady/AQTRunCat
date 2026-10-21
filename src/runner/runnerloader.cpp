@@ -215,6 +215,7 @@ RunnerLoadResult loadRunner(const QString &directory, const QString &id, RunnerS
         }
         runner.frameSize = image.size();
         runner.frames.append(image.convertToFormat(QImage::Format_ARGB32_Premultiplied));
+        runner.frameFiles.append(framesDir->absoluteFilePath(name));
     }
 
     checkNumbering(files, runner);

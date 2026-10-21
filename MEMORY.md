@@ -14,18 +14,45 @@
 > instance before replacing it (§13).
 > Precedence when sources disagree: **actual code/tests > this MEMORY (frozen
 > decisions §5) > docs/M*.md > historical prompts**. `requirements.md` is now
-> the **Post-Project Features** document (F1–F6), the current source for
+> the **Post-Project Features** document (F1–F7), the current source for
 > future work; the former M0–M9 normative spec it contained was replaced by
 > the user on 2026-10-10 (see §0 and §13).
 >
 > First instruction you will likely receive: *"Read MEMORY.md and continue
 > AQTRunCat."* → **the initial roadmap M0–M9 is COMPLETE; M9 concluded it.**
-> AQTRunCat is in post-project development. The roadmap features are F1–F6 in
-> requirements.md (§13 here). **F1, F2, F3 and F4.1 are COMPLETE (F4.1
-> headless backend `aqtruncatd` + D-Bus API + `aqtruncatctl`, implemented
-> and validated on 2026-10-21, uncommitted at that time). F4.2 (Plasmoid),
-> F5 and F6 are NOT STARTED; do not start any of them without an explicit
-> user instruction.**
+> AQTRunCat is in post-project development. The roadmap features are F1–F7 in
+> requirements.md (§13 here). **F1, F2, F3 and F4 (F4.1 headless backend +
+> D-Bus API + CLI; F4.2 native KDE Plasma 6 Plasmoid) are COMPLETE. F4.1 was
+> committed by the user (c9a7b87); F4.2 was implemented and validated on
+> 2026-10-21 on branch `feature/f4`, uncommitted at that time (the user owns
+> every Git write). F5, F6 and F7 are NOT STARTED; do not start any of them
+> without an explicit user instruction. F7 (Walking Goose, Crazy Dancing
+> Parrot) is blocked until the user provides the final assets.** Version
+> **1.4.2** (versioning rule in §1).
+>
+> Handoff state at the end of F4.2 (2026-10-21):
+> - Plasmoid record: `docs/F4.2-plasma-plasmoid.md`; summary in §13 (F4.2)
+>   and frozen decisions in §5 (F4.2 block).
+> - Left for the user to verify by hand (their real Plasma session was never
+>   modified): add the widget to a real panel/desktop, open the popup by
+>   click, look in a vertical/auto-hide panel, CPU inside plasmashell.
+> - Open questions for the user: (a) resolved by F7's existence: "after the
+>   7th feature → 2.0.0" now matches F1–F7 (confirm); (b) the `--no-build`
+>   version question is in English like the rest of install.sh — the user
+>   wrote it in Italian; confirm the language.
+> - The user installed F4.1 system-wide in `/usr/local` on 2026-10-21 10:28
+>   (1.4.1 era); its `aqtruncatd` runs on the real session bus. Never touch
+>   it; tests must not depend on it (the test buses have no service
+>   directories, or only the build's wrapper).
+> - Lesson (2026-10-21): never use `dbus-run-session` with its DEFAULT
+>   config for experiments — it activates the machine's portals, gvfs,
+>   ksecretd, a11y in the private bus (orphans had to be stopped by PID).
+>   Always `--config-file=build/tests/backendipc-bus.conf` (no service dirs)
+>   and unset WAYLAND_DISPLAY/DISPLAY for offscreen runs. The shell sandbox
+>   cannot reach the user's AT-SPI bus (connection refused): AT-SPI driving
+>   of test windows is not available here.
+> - Last verified: clean build (fresh dir) 0 warnings, ctest 45/45,
+>   `packaging-versions` 1.4.2, shellcheck clean, `git diff --check` clean.
 
 ---
 
@@ -85,12 +112,13 @@
 ## 1. Project identity
 
 - Name **AQTRunCat**, tagline **"A Cute Run Cat for Linux"**, executable
-  **`aqtruncat`**, version **1.4.1** (CMake `PROJECT_VERSION`; was 0.0.1 until
-  F4.1). Versioning rule (user, 2026-10-21; requirements.md "Versioning"):
+  **`aqtruncat`**, version **1.4.2** (CMake `PROJECT_VERSION`; was 0.0.1 until
+  F4.1; 1.4.2 = F4.2). Versioning rule (user, 2026-10-21; requirements.md "Versioning"):
   1.0.0 = M0–M9; each completed feature F<n> raises the minor (F4 → 1.4.x),
   each completed sub-feature the patch (F4.1 → 1.4.1, F4.2 → 1.4.2); after
   the 7th feature → 2.0.0. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
-  debian/changelog and the man page together (`packaging-versions` test).
+  debian/changelog, the man page and `plasmoid/package/metadata.json`
+  (KPlugin.Version) together (`packaging-versions` test).
   All executables accept `-v`/`--version`; the tray menus show "AQTRunCat
   <version>" (disabled item above Quit). `install.sh --no-build` compares the
   build's version (`<build>/src/aqtruncat --version`, else
@@ -104,8 +132,8 @@
 - Stack: C++20, Qt 6 (Widgets/Gui/Core/Test), CMake ≥ 3.21, libarchive ≥ 3.0.
 - Primary target: Arch Linux, **KDE Plasma 6 + Wayland**. Avoid KDE-specific
   dependencies in the generic application (no KDE Frameworks or LayerShellQt).
-  Planned F4.2 adds an optional native Plasmoid alongside, never in place of,
-  that portable baseline. Metrics core must not depend on Qt GUI, KDE or
+  F4.2 added an optional native Plasmoid (QML only) alongside, never in place
+  of, that portable baseline. Metrics core must not depend on Qt GUI, KDE or
   Wayland.
 - Philosophy: **"Compatibility, not bug compatibility."** Keep useful RunCat
   Neo compatibility (runner assets, Custom Metrics JSON, animation intent) but
@@ -133,18 +161,25 @@ F1 COMPLETE   Custom Metrics v2 / Executable Custom Metrics
 F2 COMPLETE   Claude Code integration: usage quotas 5h/week (revised 2026-10-20), adapter over F1
 F3 COMPLETE   Codex integration: usage limits per window (local sessions + opt-in live app-server read), adapter over F1
 F4.1 COMPLETE Headless backend aqtruncatd (QtCore+QtDBus), D-Bus API io.github.psykedady.AQTRunCat1 (api 1, schema 1), CLI aqtruncatctl; tray = client
-POST-PROJECT  F4.2 Plasmoid, F5, F6 (requirements.md), NOT STARTED, need an explicit instruction
+F4.2 COMPLETE Native KDE Plasma 6 Plasmoid io.github.psykedady.aqtruncat (QML package, client of the API), GetRunners/"runners", install.sh --plasmoid/--no-plasmoid
+POST-PROJECT  F5, F6, F7 (requirements.md), NOT STARTED, need an explicit instruction (F7 blocked on the user's assets)
 ```
 
 - Build: `cmake -S . -B build && cmake --build build && ctest --test-dir build`.
   Clean build: **0 warnings** (`-Wall -Wextra -Wpedantic` on all targets).
-- Tests: **40 ctest suites (38 Qt Test suites + Bash `installer` and
-  `packaging-versions`), all passing** on the host (2026-10-20); containers
-  skip 4 Qt cases (locale ×2, root permissions ×2).
+- Tests: **45 ctest suites, all passing** on the host (2026-10-21, after
+  F4.2: + `plasmoidlogic` qmltestrunner 15, `plasmoidclient` 10,
+  `plasmoidpackage` 9, `backendipc` 12, installer 275 checks); containers
+  skip 4 Qt cases (locale ×2, root permissions ×2). The plasmoid suites
+  register only when qmltestrunner / Qt Qml / dbus-run-session exist;
+  `loadsInPlasma` skips without plasmoidviewer.
 - Dependencies: Qt 6.5+ (`Widgets`, `Test`; dev machine has 6.11.2), libarchive
   ≥ 3.0 (CMake `FindLibArchive`; configure fails with an explanatory message if
   missing). At runtime on Plasma, Qt's KDE platform theme loads ~28 KF6 libs
-  (not a build dependency).
+  (not a build dependency). F4.2 widget: no build dependency; at runtime
+  Plasma 6 QML modules (plasma-workspace, libplasma, Kirigami, KCMUtils, Qt
+  Quick Dialogs); its tests optionally use qmltestrunner, Qt6::Qml and
+  plasmoidviewer (plasma-sdk).
 - CLI: `aqtruncat [run|runner list|runner import|runner remove|metrics|autostart]` (§6).
 - Install: `cmake --install` (GNUInstallDirs) is the single source of truth;
   `install.sh` (system /usr/local with sudo only for copies, or `--local` XDG
@@ -185,7 +220,8 @@ POST-PROJECT  F4.2 Plasmoid, F5, F6 (requirements.md), NOT STARTED, need an expl
 - M1.0 spike kept behind `-DAQTRUNCAT_BUILD_SPIKES=ON` (default OFF).
 
 Dev machine (where all runtime validation happened): Arch, kernel 7.2.4-zen2,
-Plasma/KWin 6.7.5, KF 6.30, Qt 6.11.2, libarchive 3.8.9, i7-11390H (8 threads),
+Plasma/KWin 6.7.5, KF 6.30, Qt 6.11.2 (upgraded by 2026-10-21, F4.2: kernel
+7.2.10-zen1, Plasma 6.8.0, KF 6.31, Qt 6.12.0, plasma-sdk 6.8.0), libarchive 3.8.9, i7-11390H (8 threads),
 two NVMe (root ext4 on nvme0n1p7, /home ext4 on nvme1n1p2 with ecryptfs home),
 zram swap, Wi-Fi `wlan0`, `docker0`; eDP-1 1920×1080 at scale 1.25 (tray here)
 + HDMI 1.0; panel thickness 33/34; Breeze Light. `clamd` (ClamAV) is in a
@@ -210,6 +246,15 @@ Custom Metrics, no CPU monitor, no autostart in the frontend). The diagram
 below is the pre-F4.1 single-process view: the sampler/CpuMonitor/speed half
 now lives in aqtruncatd, the RunnerAnimator/TrayPresenter half in the tray.
 `aqtruncatctl` (`src/ctl/main.cpp`) is the reference CLI client.
+
+**Since F4.2** the KDE Plasma 6 widget (`plasmoid/package`, installed to
+`share/plasma/plasmoids/io.github.psykedady.aqtruncat`) is a third, QML-only
+client: `BackendClient.qml` (Plasma's `org.kde.plasma.workspace.dbus`) keeps
+state/deltas/runner/settings/integrations, `RunnerView.qml` animates the
+frames listed by `GetRunners` locally at the received fps,
+`FullRepresentation.qml` is the Plasma popup. `aqtruncatd` gets the
+catalogue from `Config::runnerCatalog` (set in `daemon/main.cpp` with the
+bundled runners at `<bindir>/../share/aqtruncat/runners`).
 
 ```text
                      src/app/main.cpp  (parse → dispatch only)
@@ -245,7 +290,8 @@ Static libraries (see `src/CMakeLists.txt`):
 | `aqtruncat_api` (F4.1) | `api/`: apischema, BackendService, BackendClient | engine, Qt6::DBus |
 | `aqtruncat_desktop` | `app/` UI only: trayapp, Dashboard/Settings/preview, Metrics Bar model/renderer/presenter, tray presenter | api, engine, runner, Qt6::Widgets |
 | `aqtruncat` (exe) | `app/`: main, trayapp, logging; bundled runners as qrc | desktop, CLI + Qt6::Widgets |
-| `aqtruncatd` / `aqtruncatctl` (exe, F4.1) | `daemon/main.cpp`, `ctl/main.cpp` | api (QtCore + QtDBus only) |
+| `aqtruncat_runner_catalog` (F4.2) | `api/runnercatalog`, `app/runnerselection`: GetRunners payload and the start-up runner fallback | api, runner (QtGui) |
+| `aqtruncatd` / `aqtruncatctl` (exe, F4.1) | `daemon/main.cpp`, `ctl/main.cpp` | aqtruncatd: api + runner_catalog (QtCore, QtDBus, QtGui for PNG decoding only, no QGuiApplication); aqtruncatctl: api (QtCore + QtDBus only) |
 
 Key components:
 
@@ -606,6 +652,11 @@ Key components:
 | Public API (F4.1) | `io.github.psykedady.AQTRunCat1` at `/io/github/psykedady/AQTRunCat`, JSON strings, api 1 in the interface name, additive changes raise `schema`; deltas with generation+1, clients resync on gaps | stable contract for third-party clients |
 | API safety (F4.1) | no method runs client-supplied commands; integrations take known ids + fixed adapter args; no credentials/provider files/env exposed | security requirement |
 | Packages | Arch/RPM/DEB recipes in packaging/, versions checked by ctest `packaging-versions`; Flatpak/AppImage deferred | M9 evaluation |
+| Plasmoid form (F4.2) | QML-only Plasma package, no C++ plugin, D-Bus via `org.kde.plasma.workspace.dbus`, async calls only | a native plugin is not found by plasmashell from /usr/local or --local; no native code in plasmashell |
+| Plasmoid role (F4.2) | frontend only: no sampling, provider files, commands, scheduler or own settings store; shared settings via SetSetting & co. (immediate), widget options in Plasma's KConfig only | single engine (F4.1); no competing configuration |
+| Runner catalogue (F4.2) | `GetRunners`/capability `runners`, schema 1, frames as absolute files + `sequence`, `selected` = tray's start-up fallback; bundled runners also installed as files; QtGui kept out of aqtruncat_api/aqtruncatctl | no frames over IPC; generic for non-Qt clients |
+| Plasmoid install (F4.2) | default when Plasma 6 QML modules exist; `--plasmoid` fails without them; `--no-plasmoid` skips/removes; never edit panels, never restart plasmashell, never add an instance | user requirement F4.2.1; installing ≠ activating |
+| Plasmoid packaging (F4.2) | inside the main package, weak dependency on plasma-workspace | smallest maintainable; non-KDE users get no Plasma deps |
 
 ---
 
@@ -785,7 +836,16 @@ latter under `dbus-run-session` with isolated XDG: registration/version/single
 instance, deltas, classification, settings both ways, shared backend,
 frontend exit, backend restart, start fallback, CLI text/JSON/exit codes,
 D-Bus activation on a private dbus-daemon); installer 208 checks. Runtime on
-Plasma 6 Wayland (isolated XDG, real session bus): see the F4.1 doc §13.
+Plasma 6 Wayland (isolated XDG, real session bus): see the F4.1 doc §14.
+After the 1.4.1 follow-up (same day): installer 217 checks (+ `--no-build`
+version mismatch: dry-run, no terminal → build, `y` via `script` pty →
+reuse, Enter → build), `metricsbarpresenter` checks the version menu item of
+both menus (`TrayPresenter::menu()` accessor), `backendipc` checks
+`aqtruncatctl -v/--version`; 42/42. `backendipc` runs under
+`dbus-run-session --config-file=<build>/tests/backendipc-bus.conf` (a
+session bus WITHOUT service directories): with the default session config
+an AQTRunCat installed in /usr/local was D-Bus activated inside the test and
+`frontendRecoversFromABackendRestart` failed deterministically.
 
 Automated (40 ctest suites: 38 Qt suites + 2 Bash suites, 0 warnings, verified 2026-10-20 after F3 — new `codexusage` 17 and `codexintegration` 6, installer 198 checks (later in the day: warnings + suite isolation, 40/40 in 5 consecutive rebuild-then-test cycles); before that, after the F2 revision — new `claudeusage` 19 and `claudestatusline` 12, `claudecodeintegration` 12, `claudecodemetric` 28 (now `--context`), custommetric 22, commandmetric 13, dashboard 14, metricsbarmodel 17, appsettings 14, installer 189 checks; earlier: 36 suites verified 2026-10-16 after F2; the per-suite table below predates F1 — F1 added `commandmetric` 10 and `commandmetricsservice` 11, and raised custommetric 16, dashboard 11, metricsbarmodel 16, metricsbarrenderer 23; F2 added `claudecodemetric` 28 and `claudecodeintegration` 6 (QtTest totals incl. data rows/init/cleanup) and +2 each to commandmetric/commandmetricsservice; tests never read the real
 `/proc`; fixtures are text strings + temporary `/sys` trees; archives built
@@ -864,6 +924,7 @@ PID-exact cleanup; Ctrl+C safe (exit 130); `--help`.
 | `test-cpu-runtime.sh [--out DIR]` | real load idle → half → full → recovery with `run --verbose`; per-phase raw CPU, applied FPS, changes; NewIcon count of the **runner** item (M7: picked by tooltip "AQTRunCat —" when the Metrics Bar adds more items) | changing sampling/smoothing/stabiliser/CPU pipeline (e.g. M4 shared sampler!) |
 | `cycle-runners.sh [--fps N] [--duration S] [ID…]` | shows every valid runner (from `runner list`) in the tray at fixed FPS; honours `XDG_DATA_HOME` | runner/loader/tray changes |
 | `test-metrics-runtime.sh [--download-url URL] [--disk-dir DIR] [--disk-mib N]` | `metrics --watch` through baseline → CPU load → optional download → disk write (fsync, temp file removed) → recovery | metrics changes |
+| `plasmoid-preview.sh [--runner ID] [--build DIR] [--out DIR]` (F4.2) | offscreen PNGs (Breeze light + dark) of the Plasmoid popup and the runner at panel sizes, real `BackendClient`/`FullRepresentation`/`RunnerView` against the build's backend on a private bus (no service dirs), isolated XDG, demo Custom Metrics + fake Claude/Codex integrations; `QT_SCALE_FACTOR=2` for HiDPI | Plasmoid UI changes, doc screenshots |
 
 Spike-only (M1.0 reproduction, spike binary): `spike/m1-tray/tools/perf.py`
 (CPU/RSS of spike, plasmashell, kwin, bus), `dbus_count.py` (SNI traffic).
@@ -1238,25 +1299,75 @@ create or switch branches, commit or push without explicit permission.
     drives adapters directly (backend observes the adapter files);
     updatedAt null for system metrics; native packages not rebuilt in
     containers.
-- **F4.2 — KDE Plasma Plasmoid (NOT STARTED)**: will be a client of the
-  F4.1 API (requirements F4.2, F4.2.1 Installation, F4.2.2 Plasma
-  Integration). Original intent: an additional native Plasma frontend
-  that runs **in parallel** with the generic application and **never replaces
-  the generic Qt/SNI frontend** (which stays fully supported, also on Plasma);
-  both reuse the same core (metrics, settings, runner state, models,
-  configuration, application logic) without duplicating business logic.
-  - F4.2.1 install: `install.sh` detects a compatible Plasma; if detected the
-    Plasmoid is installed **by default** alongside the app; `--no-plasmoid`
-    disables it, `--plasmoid` requests it explicitly when Plasma is not
-    detected (if dependencies/compatibility are satisfied); documented in
-    `--help`; works with system-wide and `--local`; uninstall removes the
-    Plasmoid only when it belongs to the installation being removed, never
-    other widgets or user data; all existing installer guarantees (manifest,
-    user data preservation, autostart) keep applying.
-  - F4.2.2 integration: behave like a normal Plasma widget, with a native
-    Plasma popup comparable to the Network/Wi-Fi Plasmoid; integrate with the
-    panel, popup behaviour, Plasma themes, panel sizing, orientation where
-    practical and Plasma configuration conventions.
+- **F4.2 — Native KDE Plasma 6 Plasmoid — COMPLETE (2026-10-21,
+  uncommitted at that time)**. Full record: `docs/F4.2-plasma-plasmoid.md`
+  (screenshots `docs/F4.2-plasma-plasmoid/*.png`, offscreen previews);
+  normative summary in requirements.md (F4.2 "Implemented Behaviour").
+  Original intent kept: additive, parallel to the Qt/SNI frontend, a
+  client of the F4.1 API, no duplicated business logic.
+  - Decision: **QML-only Plasma package** (`plasmoid/package`, id
+    `io.github.psykedady.aqtruncat`) over a C++ QML/applet plugin: plasmashell
+    searches only Qt's own plugin/QML dirs, so a native part would not load
+    from `/usr/local` or `--local`; QML also keeps native code out of
+    plasmashell and needs no build dependency. D-Bus from QML through
+    plasma-workspace's `org.kde.plasma.workspace.dbus` (verified API:
+    `SessionBus.asyncCall({service,path,iface,member,arguments,signature})`
+    → reply with `isError/error.name/error.message/values` (values wrapped
+    as `{value: …}`); `SignalWatcher` calls `dbus<Signal>(args)` functions
+    on itself (uint64 arrives as `{value: n}`); `DBusServiceWatcher`
+    `registered`). Arguments typed with `new DBus.string(…)` /
+    `new DBus.bool(…)` and a signature like `"(ss)"`.
+  - API extension: `GetRunners` + capability `runners` (see §3, §5). Bundled
+    runners also installed as files (`share/aqtruncat/runners/<id>/`, the
+    same unmodified PNGs + metadata; build tree copy in
+    `build/share/aqtruncat/runners`); `aqtruncatd` finds them at
+    `<bindir>/../share/aqtruncat/runners`, else XDG data dirs.
+  - Rendering findings: `Kirigami.Icon` does NOT tint PNG files with
+    `isMask` and rounds to icon sizes (`roundToIconSize`); `MultiEffect`
+    renders nothing without GPU (offscreen/software). Used: one `Canvas`
+    per frame, `drawImage` + `globalCompositeOperation = "source-in"` fill
+    (same as the tray), painted in device pixels (HiDPI ok at 2×), repaint
+    on size/colour/`Screen.devicePixelRatio`; the timer only toggles
+    visibility.
+  - QML pitfalls met: a component property bound to an id with the same
+    name (`client: client`) binds to itself (ids renamed: `backend`);
+    `scale`/`action` are existing (FINAL) properties; moc cannot parse raw
+    string literals with `)"` inside (use escaped strings in Q_OBJECT
+    files); an async reply can arrive after the item is destroyed (guard
+    `client` null); a `ScrollView` + wrapping delegates gave a
+    `rightPadding` binding loop only on the real compositor (fixed with
+    `contentWidth: availableWidth - margins`, the Plasma applets' pattern);
+    ctest's `plasmoidviewer` needs `-c org.kde.panel` to create the compact
+    representation (plain plasmoidviewer shows the full one).
+  - Install: `install.sh` decides `plasmoid` (dry-run line `plasmoid = …`):
+    Plasma 6 = every QML module the widget imports exists (`qmldir` under
+    QT_INSTALL_QML or usual dirs; test override `AQTRUNCAT_QML_DIRS`) and
+    `org/kde/plasma/plasmoid/kde-qmlmodule.version` is 6.x. Staged files
+    filtered (works with `--no-build`); `--plasmoid` without Plasma → exit 1
+    with missing modules + distro package command; `--no-plasmoid` removes a
+    previously installed widget (stale manifest entries); empty owned dirs
+    removed (`remove_owned_dirs`: doc/<name>, share/aqtruncat,
+    plasmoids/<id>); warning when a system datadir is not in XDG_DATA_DIRS;
+    never calls plasmashell/kpackagetool/kquitapp (test fakes record calls).
+    CMake option `AQTRUNCAT_INSTALL_PLASMOID` (ON).
+  - Packages: same package; PKGBUILD optdepends plasma-workspace, RPM and
+    Debian `Suggests: plasma-workspace`; RPM %files gained
+    `%{_datadir}/%{name}/` and the plasmoid dir.
+  - Validation: offscreen previews (Breeze light/dark via
+    `QT_QPA_PLATFORMTHEME=kde` + kdeglobals, scale 1 and 2);
+    `plasmoidviewer` on the real Wayland compositor with a private bus:
+    loads in horizontal/vertical panel containment and desktop with zero
+    QML messages; startup = 1 GetState + 1 GetRunners; one backend with two
+    widgets + tray; MetricsChanged 10–12 / 10 s regardless of clients;
+    runner change from CLI → one GetRunners per widget; backend restart →
+    widgets and tray retry and reconnect. CPU: viewer 0.23–0.30 %, backend
+    0.07–0.10 %, tray (no SNI host) 0.07 %. Not done (user's session not
+    touched): real panel add, popup by click, CPU inside plasmashell.
+  - Limitations: activation only (QML cannot start processes); no
+    translations; `symbol` icons not shown; tray Settings window not
+    reachable from the widget; no runner-list change signal; auto-hide
+    panels keep animating; `org.kde.plasma.workspace.dbus` is a
+    plasma-workspace (not Frameworks) module.
 - **F5 — Additional Built-in Metrics**: system uptime (F5.1, prefer direct
   interfaces); GPU metrics (F5.2: utilization, VRAM, temperature…,
   vendor/driver differences, graceful degradation); FPS metrics for gaming
@@ -1269,6 +1380,10 @@ create or switch branches, commit or push without explicit permission.
   `/etc/os-release` when available, distribution-specific files, fallbacks;
   unknown/unavailable instead of failure). All keep the valid / pending /
   unavailable / error distinction and the existing metric architecture.
+- **F7 — Additional Built-in Animated Runners (NOT STARTED, blocked)**:
+  Walking Goose and Crazy Dancing Parrot as official built-in runners
+  (like Cat/Coffee, separate from user runners); blocked until the user
+  provides the final animation assets (user, 2026-10-21).
 - **F6 — Hover Information**: hovering the tray/applet item shows a compact
   summary of at least CPU and memory usage without opening the Dashboard, in
   both the generic SNI frontend (tray tooltip) and the Plasma frontend
@@ -1316,7 +1431,7 @@ runner readability require a measured design decision before implementation.
 ## 14. Important files map
 
 ```text
-requirements.md                Post-Project Features F1–F6 and feature/base → feature/fN branch model (user document, current source for future work; replaced the M0–M9 spec on 2026-10-10 and was reorganized on 2026-10-13). Former §-references below (e.g. §5.4, §8, §12) point to that M0–M9 spec, whose decisions are kept in §5 here and docs/M*.md:
+requirements.md                Post-Project Features F1–F7 and feature/base → feature/fN branch model (user document, current source for future work; replaced the M0–M9 spec on 2026-10-10 and was reorganized on 2026-10-13). Former §-references below (e.g. §5.4, §8, §12) point to that M0–M9 spec, whose decisions are kept in §5 here and docs/M*.md:
                                §9 metrics, §13a CLI, §20 tools, §24 milestones (status), §26 source control
 THIRD_PARTY_NOTICES.md         RunCat Neo frame provenance (Apache-2.0)
 docs/M0-upstream-analysis.md   upstream behaviour (runners, metrics, Custom Metrics schema §6, Linux risks)
@@ -1356,6 +1471,11 @@ src/api/                       F4.1 public API: apischema (identity, versions, J
 src/daemon/main.cpp, src/ctl/main.cpp   F4.1 aqtruncatd backend and aqtruncatctl CLI
 data/io.github.psykedady.AQTRunCat.service.in   D-Bus activation file template (Exec=@AQTRUNCAT_DBUS_EXEC@)
 docs/F4.1-headless-backend-ipc-cli.md   F4.1 architecture, lifecycle, complete API contract, CLI, security, performance, limits (+ Python client example dir)
+plasmoid/package/              F4.2 KDE Plasma 6 widget (QML only): metadata.json, contents/code/logic.js (pure, tested), contents/config/{main.xml,config.qml}, contents/ui/{main,BackendClient,CompactRepresentation,RunnerView,FullRepresentation,MetricDelegate,configGeneral,configAppearance}.qml
+src/api/runnercatalog.*        F4.2 GetRunners payload (lib aqtruncat_runner_catalog with app/runnerselection.*; QtGui; linked by aqtruncatd and the tray only)
+docs/F4.2-plasma-plasmoid.md   F4.2 strategy, package, IPC, compact/popup, settings, coexistence, install/packaging, security, perf, tests, runtime validation, limits (+ screenshots dir)
+tests/tst_plasmoidclient.cpp, tests/tst_plasmoidpackage.cpp, tests/plasmoid/tst_logic.qml   F4.2 tests (client on a private bus with activation wrapper; package/plasmoidviewer; qmltestrunner)
+tools/plasmoid-preview.{sh,qml}   offscreen popup/runner previews with demo data (light/dark PNG), private bus, isolated XDG
 data/runners/<id>/metadata.json   AQTRunCat-authored metadata for bundled runners
 third_party/runcatneo/         upstream LICENSE + frames (cat, coffee bundled; engine spike-only)
 tests/                         Qt Test suites (tst_*.cpp), including F1 deterministic command helper/service cases and F2 Claude fixtures (synthetic registry/transcripts/fake /proc)

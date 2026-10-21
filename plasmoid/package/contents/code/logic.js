@@ -1,0 +1,297 @@
+// AQTRunCat Plasmoid (F4.2): pure functions over the backend API payloads
+// (docs/F4.1-headless-backend-ipc-cli.md). No Plasma, no D-Bus, no I/O:
+// the QML files call these, and tests/plasmoid/tst_logic.qml tests them.
+.pragma library
+
+var ApiVersion = 1;
+var ServiceName = "io.github.psykedady.AQTRunCat";
+var ObjectPath = "/io/github/psykedady/AQTRunCat";
+var InterfaceName = "io.github.psykedady.AQTRunCat1";
+
+var Categories = ["builtin", "integration", "custom"];
+var States = ["ok", "pending", "unavailable", "error"];
+
+// Values from org.kde.plasma.workspace.dbus arrive wrapped ({value: …}) or
+// as String objects; give back the plain value.
+function unwrap(value) {
+    if (value !== null && typeof value === "object") {
+        if ("value" in value)
+            return value.value;
+        if (value instanceof String)
+            return value.toString();
+    }
+    return value;
+}
+
+// JSON text (possibly wrapped) to an object; null when it is not JSON.
+function parse(value) {
+    var text = unwrap(value);
+    if (typeof text !== "string" && !(text instanceof String))
+        return null;
+    try {
+        return JSON.parse(String(text));
+    } catch (e) {
+        return null;
+    }
+}
+
+// The API says: treat an unknown state as "error".
+function stateOf(metric) {
+    var state = metric ? metric.state : undefined;
+    return States.indexOf(state) >= 0 ? state : "error";
+}
+
+// Only the backend's classification counts (never the title or the icon);
+// an unknown category is shown with the custom metrics.
+function categoryOf(metric) {
+    var category = metric ? metric.category : undefined;
+    return Categories.indexOf(category) >= 0 ? category : "custom";
+}
+
+// Number in 0…1 for a progress bar, or null: missing values never become 0.
+function fraction(value) {
+    if (typeof value !== "number" || !isFinite(value))
+        return null;
+    return Math.max(0, Math.min(1, value));
+}
+
+// Text of the value column. A metric without a valid value never shows a
+// number: "…" while waiting, "—" when unavailable or in error.
+function valueText(metric) {
+    var state = stateOf(metric);
+    if (state === "pending")
+        return "…";
+    if (state !== "ok")
+        return "—";
+    var text = metric.formattedValue;
+    return typeof text === "string" && text.length > 0 ? text : "—";
+}
+
+// Secondary line: the backend's message for pending/unavailable/error,
+// otherwise the detail.
+function detailText(metric) {
+    var state = stateOf(metric);
+    if (state !== "ok") {
+        if (typeof metric.message === "string" && metric.message.length > 0)
+            return metric.message;
+        return state === "pending" ? "Waiting for data" : state === "unavailable" ? "Unavailable" : "Error";
+    }
+    return typeof metric.detail === "string" ? metric.detail : "";
+}
+
+function itemRows(metric) {
+    var items = metric && Array.isArray(metric.items) ? metric.items : [];
+    var rows = [];
+    for (var i = 0; i < items.length; ++i) {
+        var item = items[i] || {};
+        var formatted = typeof item.formattedValue === "string" ? item.formattedValue : "";
+        rows.push({
+            title: typeof item.title === "string" ? item.title : "",
+            value: formatted.length > 0 ? formatted : "—",
+            detail: typeof item.detail === "string" ? item.detail : "",
+            fraction: fraction(item.normalized),
+            warning: item.warning === true
+        });
+    }
+    return rows;
+}
+
+// Theme icon name or file URL of a metric icon, "" when there is none
+// ("symbol" icons are SF Symbols names: no Plasma equivalent).
+function iconSource(metric) {
+    var icon = metric ? metric.icon : null;
+    if (!icon || typeof icon !== "object")
+        return "";
+    if (icon.type === "file") {
+        var file = typeof icon.resolved === "string" && icon.resolved.length ? icon.resolved : icon.value;
+        return typeof file === "string" && file.charAt(0) === "/" ? fileUrl(file) : "";
+    }
+    if (icon.type === "theme")
+        return typeof icon.value === "string" ? icon.value : "";
+    return "";
+}
+
+// One flat row per metric for a ListModel. Nested items travel as JSON
+// text, so that an unchanged metric compares equal and its delegate stays.
+function metricRow(metric) {
+    var f = fraction(metric.normalized);
+    var row = {
+        metricId: String(metric.id),
+        category: categoryOf(metric),
+        title: typeof metric.title === "string" ? metric.title : String(metric.id),
+        state: stateOf(metric),
+        value: valueText(metric),
+        detail: detailText(metric),
+        hasFraction: stateOf(metric) === "ok" && f !== null,
+        fraction: f === null ? 0 : f,
+        warning: false,
+        icon: iconSource(metric),
+        itemsJson: "[]"
+    };
+    var items = itemRows(metric);
+    if (items.length === 1 && row.state === "ok") {
+        // A single value: one row, not the same value twice. Its own title
+        // (when it says more than the metric's) goes in the detail line.
+        var item = items[0];
+        row.value = item.value;
+        row.hasFraction = item.fraction !== null;
+        row.fraction = item.fraction === null ? 0 : item.fraction;
+        row.warning = item.warning;
+        var parts = [];
+        if (item.title.length > 0 && item.title !== row.title)
+            parts.push(item.title);
+        if (item.detail.length > 0)
+            parts.push(item.detail);
+        else if (row.detail.length > 0)
+            parts.push(row.detail);
+        row.detail = parts.join(" · ");
+    } else {
+        row.itemsJson = JSON.stringify(items);
+    }
+    return row;
+}
+
+// Rows grouped by category (built-in, integrations, custom), API order kept
+// inside each group; hidden categories are left out.
+function metricRows(metrics, shown) {
+    var groups = { builtin: [], integration: [], custom: [] };
+    for (var i = 0; i < metrics.length; ++i) {
+        var row = metricRow(metrics[i]);
+        groups[row.category].push(row);
+    }
+    var rows = [];
+    for (var c = 0; c < Categories.length; ++c) {
+        var category = Categories[c];
+        if (shown && shown[category] === false)
+            continue;
+        rows = rows.concat(groups[category]);
+    }
+    return rows;
+}
+
+// Brings a ListModel to rows with the least changes: same ids in the same
+// order only update the roles that differ (delegates stay), anything else
+// rebuilds it.
+function syncModel(model, rows) {
+    var same = model.count === rows.length;
+    for (var i = 0; same && i < rows.length; ++i)
+        same = model.get(i).metricId === rows[i].metricId;
+    if (!same) {
+        model.clear();
+        for (var j = 0; j < rows.length; ++j)
+            model.append(rows[j]);
+        return;
+    }
+    for (var k = 0; k < rows.length; ++k) {
+        var current = model.get(k);
+        for (var key in rows[k]) {
+            if (current[key] !== rows[k][key])
+                model.setProperty(k, key, rows[k][key]);
+        }
+    }
+}
+
+// MetricsChanged against the client's generation (API §6):
+//   "ignore"  the same generation again (already in the state);
+//   "apply"   the next one: apply the delta;
+//   "resync"  a gap, or a lower one (a restarted backend): take GetState.
+function deltaAction(current, generation) {
+    if (generation === current)
+        return "ignore";
+    if (generation === current + 1)
+        return "apply";
+    return "resync";
+}
+
+// Applies a delta to metrics (array in API order). Returns the new array,
+// or null when the delta cannot be applied (unknown ids in "order"): the
+// caller then takes GetState.
+function applyDelta(metrics, changes) {
+    var byId = {};
+    var i;
+    for (i = 0; i < metrics.length; ++i)
+        byId[metrics[i].id] = metrics[i];
+    var changed = Array.isArray(changes.metrics) ? changes.metrics : [];
+    for (i = 0; i < changed.length; ++i)
+        byId[changed[i].id] = changed[i];
+    var removed = Array.isArray(changes.removed) ? changes.removed : [];
+    for (i = 0; i < removed.length; ++i)
+        delete byId[removed[i]];
+    var order = Array.isArray(changes.order) ? changes.order : null;
+    if (!order)
+        return null;
+    var result = [];
+    for (i = 0; i < order.length; ++i) {
+        if (!(order[i] in byId))
+            return null;
+        result.push(byId[order[i]]);
+    }
+    return result;
+}
+
+function hasCapability(info, name) {
+    return !!info && Array.isArray(info.capabilities) && info.capabilities.indexOf(name) >= 0;
+}
+
+// file:// URL of an absolute path; every component is percent-encoded
+// ("#", "?" and spaces are valid in file names).
+function fileUrl(path) {
+    var parts = String(path).split("/");
+    for (var i = 0; i < parts.length; ++i)
+        parts[i] = encodeURIComponent(parts[i]);
+    return "file://" + parts.join("/");
+}
+
+// The runner to show from a GetRunners payload: the "selected" one when it
+// is valid, else null (the widget then shows its icon). Frames as URLs.
+function runnerToShow(catalog) {
+    if (!catalog || !Array.isArray(catalog.runners))
+        return null;
+    for (var i = 0; i < catalog.runners.length; ++i) {
+        var runner = catalog.runners[i];
+        if (runner.id !== catalog.selected || runner.valid !== true)
+            continue;
+        if (!Array.isArray(runner.frames) || runner.frames.length === 0)
+            return null;
+        var count = runner.frames.length;
+        var sequence = [];
+        var raw = Array.isArray(runner.sequence) ? runner.sequence : [];
+        for (var j = 0; j < raw.length; ++j) {
+            if (typeof raw[j] === "number" && raw[j] >= 0 && raw[j] < count)
+                sequence.push(raw[j]);
+        }
+        if (sequence.length === 0) {
+            for (var k = 0; k < count; ++k)
+                sequence.push(k);
+        }
+        var frames = [];
+        for (var f = 0; f < count; ++f)
+            frames.push(fileUrl(runner.frames[f]));
+        return {
+            id: runner.id,
+            displayName: runner.displayName || runner.id,
+            monochrome: runner.monochrome !== false,
+            aspect: runner.frameWidth > 0 && runner.frameHeight > 0 ? runner.frameWidth / runner.frameHeight : 1,
+            frames: frames,
+            sequence: sequence
+        };
+    }
+    return null;
+}
+
+// Timer interval of the local animation for the fps the backend computed.
+function frameInterval(fps) {
+    if (typeof fps !== "number" || !(fps > 0))
+        return 0;
+    return Math.max(16, Math.round(1000 / fps));
+}
+
+// Text of a D-Bus error from the backend, without its D-Bus name.
+function errorText(reply) {
+    if (!reply)
+        return "";
+    var error = reply.error;
+    if (error && typeof error.message === "string" && error.message.length)
+        return error.message;
+    return error && typeof error.name === "string" ? error.name : "unknown error";
+}

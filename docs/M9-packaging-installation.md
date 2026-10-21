@@ -20,6 +20,16 @@ TESTED**, **NOT APPLICABLE**. Evidenze: **[OSS]** eseguito/misurato,
 > sono stati ricostruiti nei container dopo F4.1. Dettagli:
 > [F4.1-headless-backend-ipc-cli.md](F4.1-headless-backend-ipc-cli.md) §10.
 
+> **Nota F4.2 (2026-10-21).** Da F4.2 c'è anche il widget KDE Plasma 6
+> (`share/plasma/plasmoids/io.github.psykedady.aqtruncat/`, solo QML) e i
+> runner bundled come file (`share/aqtruncat/runners/`). `install.sh` installa
+> il widget quando trova Plasma 6 (`--plasmoid` / `--no-plasmoid` per
+> deciderlo), non tocca mai pannelli né plasmashell, e la disinstallazione
+> rimuove anche le cartelle vuote del widget e dei runner. I pacchetti lo
+> includono con una dipendenza debole da `plasma-workspace` (optdepends /
+> Suggests). Nessuna dipendenza KDE è stata aggiunta al resto di AQTRunCat.
+> Dettagli: [F4.2-plasma-plasmoid.md](F4.2-plasma-plasmoid.md) §9–10.
+
 ## 1. Riepilogo
 
 | Canale | Stato | Evidenza |

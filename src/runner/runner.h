@@ -25,6 +25,7 @@ struct Runner {
     QString path;        // directory the frames were loaded from
 
     QList<QImage> frames;  // decoded once at load time, all frameSize
+    QStringList frameFiles; // the file of each frame (same index as frames)
     QList<int> sequence;   // playback order as indices into frames
     QSize frameSize;       // any aspect ratio; upstream runners are N×36
     bool monochrome = true; // template semantics: alpha kept, colour from the panel

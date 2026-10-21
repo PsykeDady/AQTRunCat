@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(AQTRunCat
-    VERSION 1.4.1
+    VERSION 1.4.2
     DESCRIPTION "A Cute Run Cat for Linux"
     LANGUAGES CXX)
 
@@ -45,7 +45,8 @@ if(BUILD_TESTING)
 endif()
 
 # Desktop integration and documentation. Bundled runners are compiled into the
-# executable, so there are no runtime data files to install.
+# executable; since F4.2 they are also installed as files (src/CMakeLists.txt)
+# for frontends outside it.
 install(FILES data/aqtruncat.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES data/aqtruncat.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 # F4.1: D-Bus activation of the backend on the session bus (found through
@@ -56,6 +57,14 @@ configure_file(data/io.github.psykedady.AQTRunCat.service.in
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.psykedady.AQTRunCat.service
         DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services)
 install(DIRECTORY data/icons/hicolor DESTINATION ${CMAKE_INSTALL_DATADIR}/icons)
+# F4.2: the KDE Plasma 6 widget, a QML-only Plasma package (nothing to
+# build, no KDE build dependency). Plasma finds it through XDG_DATA_DIRS;
+# install.sh leaves it out without Plasma 6 or with --no-plasmoid.
+option(AQTRUNCAT_INSTALL_PLASMOID "Install the KDE Plasma 6 widget (QML files only)" ON)
+if(AQTRUNCAT_INSTALL_PLASMOID)
+    install(DIRECTORY plasmoid/package/
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/plasma/plasmoids/io.github.psykedady.aqtruncat)
+endif()
 install(FILES README.md LICENSE THIRD_PARTY_NOTICES.md DESTINATION ${CMAKE_INSTALL_DOCDIR})
 install(FILES third_party/runcatneo/LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR} RENAME LICENSE.RunCatNeo)
 

@@ -36,6 +36,9 @@ the primary target is KDE Plasma 6 on Wayland.
 - **Backend and API**: the metrics run once per session in a small background
   service (`aqtruncatd`) that the tray, the `aqtruncatctl` command line and
   other programs share through a documented D-Bus API.
+- **KDE Plasma 6 widget**: the same runner and metrics as a native Plasma
+  widget (Plasmoid) for panels and the desktop, with a Plasma popup; it can
+  replace the tray icon or sit next to it.
 
 ## Supported systems
 
@@ -92,6 +95,7 @@ updates the installation in place.
 | `-A`, `--autostart=true` | start at login (**the default**) |
 | `-na`, `--autostart=false` | do not start at login |
 | `-U`, `--uninstall` | uninstall (add `--local` for a local installation) |
+| `--plasmoid` / `--no-plasmoid` | install the KDE Plasma 6 widget even outside Plasma (fails, with the packages to install, if Plasma 6's QML modules are missing) / never install it; by default it is installed when Plasma 6 is found |
 | `--no-build` | install the existing build in `~/.cache/aqtruncat/install-build` without compiling (must be up to date); if it is another AQTRunCat version than the sources, you are asked whether to install that previous version (y) or build the new one (N, default) |
 | `--dry-run` | show what would happen (every run starts with a summary of the effective options) |
 | `-h`, `--help` | full help |
@@ -201,6 +205,27 @@ unavailable, 4 request rejected. The D-Bus API
 (`io.github.psykedady.AQTRunCat1` on the session bus), its JSON schema and a
 small Python client are documented in
 [docs/F4.1-headless-backend-ipc-cli.md](docs/F4.1-headless-backend-ipc-cli.md).
+
+### KDE Plasma widget
+
+When KDE Plasma 6 is found, the installer also installs the AQTRunCat widget
+(`share/plasma/plasmoids/io.github.psykedady.aqtruncat`; native packages
+ship it too). Installing it does not put it anywhere: right-click a panel or
+the desktop, choose **Add or Manage Widgets…**, search for **AQTRunCat** and
+drag it where you want it. The installer never edits your panels and never
+restarts Plasma; a widget already on a panel picks up an update at the next
+login.
+
+In a panel the widget shows the runner, sized to the panel (horizontal or
+vertical) and coloured like the theme's text; a click opens a Plasma popup
+with the System metrics, the Claude Code and Codex integrations and your
+Custom Metrics. Its configuration has two pages: **AQTRunCat** changes the
+shared settings (runner, speed, network, integrations, Custom Metrics files;
+the same ones as the tray's Settings and `aqtruncatctl`), **Appearance** has
+the widget's own options. The widget is a client of the same backend: it
+works without the tray, next to it, or in several copies, and nothing is
+sampled twice. Details:
+[docs/F4.2-plasma-plasmoid.md](docs/F4.2-plasma-plasmoid.md).
 
 ### Runners
 
@@ -373,6 +398,9 @@ The runner itself is always there and is not counted.
   (about 17 MB). Right after a first installation, `aqtruncatctl` may report
   the backend as not running until the tray has started it once or you log in
   again, if the session bus did not reload its service files.
+- The Plasma widget starts the backend only through D-Bus activation; it
+  cannot open the tray's Settings window (start at login, Metrics Bar and
+  Dashboard refresh are set there or with `aqtruncatctl`).
 
 Details: [docs/M8-desktop-compatibility.md](docs/M8-desktop-compatibility.md).
 
@@ -390,5 +418,5 @@ AQTRunCat icon is original artwork.
 - [docs/](docs/): design and validation reports per milestone (runners,
   metrics, Dashboard, Settings, Custom Metrics, Metrics Bar, desktop
   compatibility, packaging, executable Custom Metrics, Claude Code and Codex
-  integrations, backend/D-Bus API/`aqtruncatctl`)
+  integrations, backend/D-Bus API/`aqtruncatctl`, KDE Plasma widget)
 - [`tools/`](tools/): diagnostic scripts for developers (not needed by users)

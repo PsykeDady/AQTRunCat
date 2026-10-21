@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "PsykeDady"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "Animated runner whose speed follows the CPU load, with system metrics, Claude Code and Codex usage and Custom Metrics from the AQTRunCat backend",
+        "EnabledByDefault": true,
+        "Icon": "aqtruncat",
+        "Id": "io.github.psykedady.aqtruncat",
+        "License": "Apache-2.0",
+        "Name": "AQTRunCat",
+        "Version": "1.4.2",
+        "Website": "https://github.com/PsykeDady/AQTRunCat"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

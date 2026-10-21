@@ -15,6 +15,7 @@
 #include <QObject>
 #include <QTimer>
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -47,6 +48,10 @@ public:
         QString codexAdapter;
         std::string homePath;
         bool manageAutostart = true;
+        // F4.2: GetRunners payload for the stored runner id (runnercatalog.h).
+        // Unset: no "runners" capability (the catalogue needs QtGui, which
+        // only aqtruncatd links).
+        std::function<QJsonObject(const QString &requestedId)> runnerCatalog;
     };
 
     explicit BackendService(Config config, QObject *parent = nullptr);
@@ -64,6 +69,7 @@ public:
     QJsonArray metrics() const { return m_metrics; }
     QJsonObject runner() const;
     QJsonArray integrations() const;
+    QJsonArray capabilities() const;
     // CLOCK_MONOTONIC seconds of the latest system sample, null before it.
     QJsonValue sampleTime() const;
     quint64 generation() const { return m_generation; }
@@ -75,6 +81,7 @@ public slots:
     Q_SCRIPTABLE QString GetSettings();
     Q_SCRIPTABLE QString GetRunner();
     Q_SCRIPTABLE QString GetIntegrations();
+    Q_SCRIPTABLE QString GetRunners();
     Q_SCRIPTABLE void SetSetting(const QString &key, const QString &jsonValue);
     Q_SCRIPTABLE void RegisterCustomMetric(const QString &path);
     Q_SCRIPTABLE void UnregisterCustomMetric(const QString &path);
