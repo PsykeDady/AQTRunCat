@@ -12,16 +12,45 @@ AQTRunCat includes material from the following third-party projects.
 - Files: `third_party/runcatneo/runners/{cat,coffee,engine}/*.png`
 - Modifications: none. The files are byte-for-byte copies of the upstream PNGs.
 - Use:
-  - `cat` and `coffee` are compiled into the `aqtruncat` executable as bundled runners (`AQTRUNCAT_BUNDLED_RUNNERS`).
+  - `cat`, `coffee` and (since 1.7.4) `engine` are compiled into the `aqtruncat` executable as bundled runners (`AQTRUNCAT_BUNDLED_RUNNERS`).
     Since F4.2 the same unmodified files are also installed as
     `share/aqtruncat/runners/<id>/*.png`, where the backend lists them for
     the KDE Plasma widget (and other frontends) to animate.
-  - `engine` is used only by the M1.0 tray spike.
+  - The M1.0 tray spike also uses `engine`.
 
-The runner metadata files in `data/runners/<id>/metadata.json` are AQTRunCat
+The runner metadata files in `data/runners/<id>/metadata.json` (also for
+`walkinggoose` and `partyparrot`) are AQTRunCat
 files. They only describe the frames above: name, author and monochrome
 rendering, taken from RunCat Neo's English runner names and its built-in
 `isTemplate = true`.
 
 The RunCat and RunCat Neo names, application icon and branding are not part
 of this grant (Apache-2.0 §6) and are not used as AQTRunCat branding.
+
+## Party Parrot runner frames
+
+- Source: the "Party Parrot" internet meme (GIF with sunglasses,
+  `partyparrt-30.gif`, downloaded from Tenor).
+- Original author: not verifiable.
+- License: unknown. Included by the explicit decision of the AQTRunCat
+  maintainer (2026-10-22); no license is claimed for these files.
+- Files: `third_party/partyparrot/runners/parrot/*.png`.
+- Modifications: cropped, decoloured to a monochrome outline and scaled to
+  50×36 (details in `third_party/partyparrot/README.md`).
+- Use: built-in runner `partyparrot` ("Party Parrot", since 1.7.3),
+  compiled into `aqtruncat` and installed as
+  `share/aqtruncat/runners/partyparrot/`.
+
+## Walking Goose runner frames
+
+- Source: GIF of a walking cartoon goose (`funny-as-hell.gif`, downloaded
+  from Tenor).
+- Original author: not verifiable.
+- License: unknown. Included by the explicit decision of the AQTRunCat
+  maintainer (2026-10-22); no license is claimed for these files.
+- Files: `third_party/walkinggoose/runners/goose/*.png`.
+- Modifications: shadow removed, decoloured to a monochrome outline and
+  scaled to 24×36 (details in `third_party/walkinggoose/README.md`).
+- Use: built-in runner `walkinggoose` ("Walking Goose", since 1.7.3),
+  compiled into `aqtruncat` and installed as
+  `share/aqtruncat/runners/walkinggoose/`.

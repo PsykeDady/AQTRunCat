@@ -29,6 +29,7 @@
 #include <QTest>
 
 #include <csignal>
+#include <tuple>
 
 namespace {
 
@@ -664,6 +665,27 @@ private slots:
         for (const QJsonValue &value : catalog.value(QStringLiteral("runners")).toArray())
             byId.insert(value[QStringLiteral("id")].toString(), value.toObject());
         QVERIFY(byId.contains(QStringLiteral("cat")) && byId.contains(QStringLiteral("coffee")));
+        // F7: the new built-in runners, listed like Cat and Coffee.
+        for (const auto &[id, name, frames, width] : {std::tuple{QStringLiteral("walkinggoose"), QStringLiteral("Walking Goose"), 6, 24},
+                                                      std::tuple{QStringLiteral("partyparrot"), QStringLiteral("Party Parrot"), 10, 50},
+                                                      std::tuple{QStringLiteral("engine"), QStringLiteral("Engine"), 10, 83}}) {
+            const QJsonObject runner = byId.value(id);
+            QCOMPARE(runner.value(QStringLiteral("source")).toString(), QStringLiteral("bundled"));
+            QCOMPARE(runner.value(QStringLiteral("displayName")).toString(), name);
+            QVERIFY(runner.value(QStringLiteral("valid")).toBool());
+            QVERIFY(runner.value(QStringLiteral("monochrome")).toBool());
+            QCOMPARE(runner.value(QStringLiteral("frameWidth")).toInt(), width);
+            QCOMPARE(runner.value(QStringLiteral("frameHeight")).toInt(), 36);
+            const QJsonArray files = runner.value(QStringLiteral("frames")).toArray();
+            QCOMPARE(files.size(), frames);
+            QJsonArray sequence;
+            for (int i = 0; i < frames; ++i) {
+                sequence.append(i);
+                QVERIFY(QFileInfo::exists(files.at(i).toString()));
+                QVERIFY(files.at(i).toString().contains(QStringLiteral("/share/aqtruncat/runners/%1/").arg(id)));
+            }
+            QCOMPARE(runner.value(QStringLiteral("sequence")).toArray(), sequence);
+        }
 
         const QJsonObject cat = byId.value(QStringLiteral("cat"));
         QCOMPARE(cat.value(QStringLiteral("source")).toString(), QStringLiteral("bundled"));

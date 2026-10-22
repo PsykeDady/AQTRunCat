@@ -383,6 +383,12 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(jsonProperty(widget.get(), "runnerCatalog")[QStringLiteral("selected")].toString(),
                                   QStringLiteral("coffee"), 5000);
         QCOMPARE(jsonProperty(widget.get(), "runner")[QStringLiteral("runnerId")].toString(), QStringLiteral("coffee"));
+        // F7: the new built-in runners the same way.
+        for (const QString &id : {QStringLiteral("walkinggoose"), QStringLiteral("partyparrot"), QStringLiteral("engine")}) {
+            QCOMPARE(ctl({QStringLiteral("settings"), QStringLiteral("set"), QStringLiteral("runnerId"), id}), 0);
+            QTRY_COMPARE_WITH_TIMEOUT(jsonProperty(widget.get(), "runnerCatalog")[QStringLiteral("selected")].toString(), id, 5000);
+            QCOMPARE(jsonProperty(widget.get(), "runner")[QStringLiteral("runnerId")].toString(), id);
+        }
 
         // Rejected writes come back as errors, nothing changes.
         QVERIFY(QMetaObject::invokeMethod(widget.get(), "setSetting", Q_ARG(QVariant, QStringLiteral("speedMode")),

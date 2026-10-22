@@ -11,7 +11,7 @@
 # fixed quota windows, one of them not computable). Nothing reads the real
 # Claude Code or Codex data.
 #
-# Usage: tools/plasmoid-preview.sh [--runner cat|coffee] [--build DIR] [--out DIR]
+# Usage: tools/plasmoid-preview.sh [--runner cat|coffee|walkinggoose|partyparrot|engine] [--build DIR] [--out DIR]
 #   --build defaults to <repo>/build, --out to the current directory.
 # Writes plasmoid-light.png and plasmoid-dark.png. Needs qml6 (Qt
 # Declarative), Kirigami, Plasma's QML modules and dbus-run-session.

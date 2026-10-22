@@ -4,9 +4,8 @@ This document defines the AQTRunCat feature roadmap after completion of the
 M0–M9 project roadmap. M0–M9 are complete and remain the historical and
 architectural foundation for this work.
 
-F1, F2, F3, F4 (F4.1 and F4.2), F5 and F6 are complete. F7 is not
-started; recording it here does not imply that it is currently available or
-supported.
+F1, F2, F3, F4 (F4.1 and F4.2), F5, F6 and F7 are complete. Version 2.0.0
+is a separate release milestone after the user's acceptance of F7.
 
 The post-project roadmap is:
 
@@ -54,7 +53,7 @@ Rule (user decision, 2026-10-21):
 - `1.0.0` is the completed M0–M9 project roadmap.
 - Each completed post-project feature raises the **minor** version:
   F1 → 1.1.0, F2 → 1.2.0, F3 → 1.3.0, F4 → 1.4.x, F5 → 1.5.x,
-  F6 → 1.6.x (F6.1–F6.3 → 1.6.3), …
+  F6 → 1.6.x (F6.1–F6.3 → 1.6.3), F7 → 1.7.x (F7.1–F7.4 → 1.7.4).
 - Each completed sub-feature raises the **patch** version within its feature:
   F4.1 → 1.4.1, F4.2 → 1.4.2; F5.1 → 1.5.1, and so on.
 - After the seventh feature (F7) the version moves to **2.0.0** (confirmed
@@ -957,202 +956,113 @@ clean build without warnings and the whole test suite passing.
 
 ## F7 — Additional Built-in Animated Runners
 
-Status: NOT STARTED — BLOCKED on the final animation assets of the goose
-and the parrot. F7 is the last
-planned feature milestone before 2.0.0. Requirements recorded on
-2026-10-21 and restored in full on 2026-10-22 (documentation only: nothing
-is implemented, no asset exists in the repository).
+Status: COMPLETE (2026-10-22, version 1.7.4: F7.1 Walking Goose, F7.2
+Party Parrot, F7.3 shared integration, packaging and validation, F7.4
+Engine). Record
+and validation: `docs/F7-additional-built-in-runners.md`. Version 2.0.0 is
+a separate release milestone, considered after the user has validated and
+accepted F7.
 
 Add three official built-in runners, shipped with AQTRunCat like Cat and
-Coffee:
+Coffee: Walking Goose, Party Parrot and Engine. They are built-in runners (not
+Custom Metrics, not user runners, not plugins) and follow the existing
+runner format, selection and presentation in every frontend (tray,
+Plasmoid, `GetRunners`).
 
-- Walking Goose (new artwork);
-- Crazy Dancing Parrot (new artwork);
-- Engine (RunCat Neo's `engine` runner, already in the repository; added
-  to F7 by the user on 2026-10-22).
-
-They are built-in runners, separate from user (custom) runners, and follow
-the existing runner format, selection and presentation in every frontend
-(tray, Plasmoid, `GetRunners`).
-
-### Proposed Sub-features
-
-These are documentation milestones, not completed implementations:
-
-    F7.1  Walking Goose
-    F7.2  Crazy Dancing Parrot
-    F7.3  Engine (promote the existing RunCat Neo frames to a built-in runner)
-    F7.4  Shared asset integration, packaging and validation
-
-The sections after F7.3 (asset preparation, architecture, settings,
-installation) are requirements shared by all three runners and belong to
-F7.4.
+    F7.1  Walking Goose                                        → 1.7.1
+    F7.2  Party Parrot                                         → 1.7.2
+    F7.3  Shared integration, packaging and validation         → 1.7.3
+    F7.4  Engine (RunCat Neo)                                  → 1.7.4
 
 ### F7.1 — Walking Goose
 
-- A cartoon goose walking, as a frame-based animation in the existing
-  runner format, with a recognizable walking cycle.
-- Transparent-background PNG frames; a simple, readable style suitable for
-  a small tray icon or Plasma panel.
-- Supports the existing runner animation controls where applicable (speed
-  following CPU load, Normal/Slow-down, the widget's "Animate the runner"
-  option, fixed `--fps`).
-- Integrated in the existing built-in runner selection; works in the Qt
-  system tray and in the KDE Plasma 6 Plasmoid.
+- Runner id `walkinggoose`, display name **Walking Goose**.
+- A cartoon goose walking: 6 frames, 24×36 px, monochrome outline on a
+  transparent background, played in file order and looped.
+- Asset (approved by the user on 2026-10-22):
+  `third_party/walkinggoose/runners/goose/goose-frame-{0..5}.png`, derived
+  from a walking-goose GIF found on Tenor (shadow removed, line art only,
+  beak and feet solid, one common crop, scaled); original author not
+  verifiable, license unknown, included by the user's explicit decision.
+  Known limit: the beak is drawn frontally, so at this size it reads as a
+  dark band under the eye.
 
-### F7.2 — Crazy Dancing Parrot
+### F7.2 — Party Parrot
 
-- A colourful cartoon parrot dancing energetically, as a frame-based
-  animation with transparent-background PNG frames and a lively, looping
-  dance cycle.
-- Readable at small icon sizes; consistent style and proportions across
-  frames.
-- Integrated in the existing built-in runner selection; works in the Qt
-  system tray and in the Plasmoid; existing animation behaviour and
-  controls preserved.
+- Runner id `partyparrot`, display name **Party Parrot**.
+- The Party Parrot meme dancing (with sunglasses): 10 frames, 50×36 px,
+  monochrome outline on a transparent background, played in file order and
+  looped.
+- Asset (approved by the user on 2026-10-22, outline variant chosen out of
+  silhouette / outline / cut-out):
+  `third_party/partyparrot/runners/parrot/parrot-frame-{0..9}.png`, derived
+  from the Party Parrot GIF found on Tenor (decoloured, line art only, one
+  common crop, scaled); original author not verifiable, license unknown,
+  included by the user's explicit decision. The user chose a monochrome
+  runner (it follows the panel's text colour) instead of the colourful one
+  first planned.
 
-### F7.3 — Engine
+### F7.3 — Shared Integration, Packaging and Validation
 
-- RunCat Neo's `engine` runner (a piston and crank: 10 frames, 83×36 px,
-  monochrome/template), one of RunCat Neo's eight built-in runners.
-- Its frames are already in the repository, unmodified:
-  `third_party/runcatneo/runners/engine/engine-frame-{0..9}.png` (Apache-2.0,
-  recorded in `THIRD_PARTY_NOTICES.md`, which today says they are used only
-  by the M1.0 tray spike). It is **not blocked** by the asset dependency
-  below and needs no new artwork.
-- Becomes an official built-in runner like Cat and Coffee: an AQTRunCat
-  `data/runners/engine/metadata.json` (`displayName` "Engine", `author`
-  Kyome22, `type` `monochrome`, as for Cat and Coffee), the id `engine`
-  added to `AQTRUNCAT_BUNDLED_RUNNERS`, installed under
-  `share/aqtruncat/runners/engine/`; `THIRD_PARTY_NOTICES.md` updated to
-  the new use; the files stay byte-for-byte copies.
-- Known limit to validate, not to work around silently: the frame is wide
-  (aspect ≈ 2.3:1). Plasma's square tray slot shrinks it to about 22×10 px
-  (`docs/M0-upstream-analysis.md`, `docs/M1-tray-spike.md`,
-  `docs/M2-runner-system.md` §11: "at the limit" of readability); horizontal and
-  vertical Plasmoid panels keep its aspect ratio. Any change to the frames
-  (cropping the empty left margin, rescaling) is a modification of
-  third-party files and needs the user's approval and a note in
-  `THIRD_PARTY_NOTICES.md`.
-- An existing user runner with the id `engine` keeps precedence (user >
-  bundled), as for every built-in runner.
+- **One list**: `AQTRUNCAT_BUNDLED_RUNNERS` (`src/CMakeLists.txt`) is the
+  only list of built-in runners: `cat;coffee;walkinggoose;partyparrot;engine`.
+  Each id's frames come from `third_party/runcatneo/runners/<id>` or, for
+  the F7 runners, from their own folder (`runner_frames_<id>`); the
+  installed directory name is the runner id. A build tree configured
+  before F7 (cached `cat;coffee`) follows the new default; a customised
+  list is kept.
+- **Metadata**: `data/runners/walkinggoose/metadata.json` and
+  `data/runners/partyparrot/metadata.json` (display name, author
+  "Unknown …", `type: monochrome`).
+- **Everything else is unchanged and generic**: the frames are compiled
+  into `aqtruncat` (`:/runners/<id>/`) and installed under
+  `share/aqtruncat/runners/<id>/`; `RunnerService`, the Settings runner
+  selector, `aqtruncat runner list`, the backend's `GetRunners` catalogue
+  and the Plasmoid discover them from those directories. No D-Bus API
+  change, no new animation engine, timer or sampling; frames are decoded
+  once per runner, as for Cat and Coffee.
+- **Animation**: speed follows the CPU as for every runner (10–40 FPS,
+  Normal/Slow-down, `--fps`); the GIFs' own timing (Party Parrot 0.04 s,
+  Walking Goose 0.10 s per frame) is not reproduced, by design.
+- **Selection and persistence**: the shared `runnerId` setting; Cat stays
+  the default; Restore Defaults returns to Cat. A saved runner missing from
+  an installation falls back to the default and the setting is repaired; a
+  present but broken one falls back for the session and the setting is
+  kept; `--runner ID` for a missing or broken runner is an error.
+- **Packaging**: system and `--local` installs, native packages and the
+  uninstaller handle the new files like Cat and Coffee (everything under
+  `share/aqtruncat/`); the Debian `copyright` lists the new folders with
+  "License: unknown"; `THIRD_PARTY_NOTICES.md` and each folder's README
+  state the provenance.
 
-### Asset Preparation and Integration (F7.1, F7.2; part of F7.4)
+### F7.4 — Engine
 
-The final graphical assets of the goose and the parrot are **not available
-yet** (Engine's frames exist, see F7.3). The user provides or
-approves the definitive animation frames before implementation.
+- Runner id `engine`, display name **Engine**: RunCat Neo's piston-and-crank
+  runner, 10 frames, 83×36 px, monochrome, frames unmodified from
+  `third_party/runcatneo/runners/engine/` (Apache-2.0, already in the
+  repository for the M1.0 spike; `THIRD_PARTY_NOTICES.md` updated).
+  Metadata `data/runners/engine/metadata.json` (author Kyome22). Added by
+  the user after F7.1–F7.3 (2026-10-22); its frames are found through the
+  RunCat Neo default folder, so only the list entry and the metadata were
+  needed.
+- Known limit, accepted: the frame is wide (≈ 2.3:1), so Plasma's square
+  tray slot draws it at about 22×10 px and a vertical Plasma panel makes it
+  low (≈ 34×15 px in a 34 px panel); horizontal panels keep its size.
 
-Expected asset characteristics:
+### Acceptance Criteria (met)
 
-- PNG, transparent background;
-- about 4–8 frames per runner as an initial target, adjustable for the
-  quality of the animation;
-- one canvas size and a consistent alignment within each runner;
-- a limited, readable palette; no background or decorative elements;
-- a smooth loop.
-
-Rules until then:
-
-- no substitute or generated graphics;
-- no temporary placeholder sprites presented as final assets;
-- no third-party sprites downloaded without the user's explicit approval
-  (any approved third-party asset is recorded in `THIRD_PARTY_NOTICES.md`
-  with repository, commit, original path and licence, and must be
-  compatible with Apache-2.0);
-- F7.1 and F7.2 are not ready for implementation until the assets are
-  available.
-
-When the assets are supplied, inspect the existing runner asset pipeline
-and adapt them to its conventions (the ones Engine already follows): frame
-files `<id>-frame-<n>.png`, a
-`metadata.json` with `displayName`, `author` and `type` (`monochrome`
-frames are tinted with the panel's text colour, `color` frames are shown
-unchanged — a colourful parrot needs `color`), the runner id added to
-`AQTRUNCAT_BUNDLED_RUNNERS` (compiled into `aqtruncat` and installed as
-files under `share/aqtruncat/runners/<id>/` for the backend's `GetRunners`
-and the Plasmoid). Proposed ids `goose` and `parrot` (to be confirmed with
-the assets).
-
-### Architecture and Compatibility (F7.4)
-
-- Official built-in runners: not Custom Metrics, not user (custom) runners,
-  not external plugins.
-- Reuse the existing runner model, loader, animator, settings and selection
-  (`RunnerService`, `RunnerAnimator`, the shared `runnerId` setting, the
-  start-up runner fallback); no new animation engine unless demonstrably
-  necessary.
-- Cat stays the default runner; Cat, Coffee, user runners and the user >
-  bundled precedence keep their behaviour.
-- The backend lists them through the existing runner catalogue
-  (`GetRunners`, capability `runners`); the Qt frontend and the Plasmoid
-  discover and render them the same way. D-Bus API compatibility preserved
-  (no new method is expected).
-- No change to the metric sampling frequency; no extra CPU, memory or
-  wake-up cost beyond that of an equivalent runner (frames prepared once,
-  animation timer as today).
-
-### Settings and User Experience (F7.4)
-
-- Walking Goose, Crazy Dancing Parrot and Engine appear in the existing runner
-  selectors (tray Settings, Plasmoid configuration) and in `aqtruncat
-  runner list`, with the same recognizable names everywhere;
-  `aqtruncatctl status` shows the selected id as for any runner.
-- Selecting one changes the animation through the existing behaviour; the
-  choice persists in the existing settings and across restarts.
-- Correct rendering in horizontal and vertical Plasma panels and in the
-  tray (aspect ratio, light/dark themes), with the existing scaling and
-  animation settings.
-
-### Installation, Packaging and Tests (F7.4)
-
-When F7 is implemented:
-
-- the assets are part of every supported installation (system-wide and
-  `--local` `install.sh`, native packages) and available to the Plasmoid
-  through the backend's runner catalogue, as for Cat and Coffee;
-- installer, uninstall, dry run, cached build and `--no-build` behaviour
-  unchanged;
-- missing or invalid assets fail gracefully (the existing runner
-  validation and fallback: a saved runner that is missing falls back to the
-  default), never a crash;
-- automated tests for discovery, asset availability, selection,
-  persistence and packaging; Qt tray and Plasma rendering validated; clean
-  build and the relevant suites passing.
-
-### Dependencies
-
-- The final frames of the goose and the parrot, provided or approved by
-  the user (blocking for F7.1, F7.2 and therefore for completing F7).
-  Engine (F7.3) has its frames and could be implemented on its own, but
-  only on the user's explicit instruction.
-- The licence and attribution of the assets (the user's own work, or
-  third-party assets approved by the user and recorded in
-  `THIRD_PARTY_NOTICES.md`).
-
-### Acceptance Criteria
-
-F7 is complete only when:
-
-1. the goose and the parrot ship with the final, user-approved assets, and
-   Engine with the unmodified RunCat Neo frames (or user-approved changes);
-2. they are listed, selectable and persistent in the tray and the
-   Plasmoid (and listed by `aqtruncat runner list`), with the same names;
-3. they render correctly in the tray and in horizontal/vertical Plasma
-   panels, in light and dark themes, at the existing speeds (for Engine:
-   tray readability at its wide aspect checked and reported);
-4. Cat (default), Coffee and user runners behave as before;
-5. installation, packaging and uninstallation include and remove them like
-   the existing built-in runners;
-6. the automated tests above pass with a clean build without warnings.
-
-### Versioning
-
-By the rule above the sub-features would raise the patch within 1.7
-(F7.1 → 1.7.1 … F7.4 → 1.7.4), and 2.0.0 follows once F7 is
-implemented and validated. Whether the completed F7 is first released as
-1.7.x or directly as 2.0.0 is left to the user. The current version is not
-changed by recording F7.
+1. The three runners ship with the approved assets (Engine unmodified).
+2. They are listed, selectable and persistent in the tray, the Plasmoid
+   and `aqtruncat runner list`, with the same names.
+3. They render in the tray and in horizontal and vertical Plasma panels,
+   light and dark, at the existing speeds (isolated validation; the real
+   session is a manual check).
+4. Cat (default), Coffee and user runners behave as before.
+5. Installation, packaging and uninstallation include and remove them like
+   the existing built-in runners.
+6. Automated tests cover discovery, frames, order, names, selection,
+   persistence, `GetRunners`, the Plasmoid's runner logic, installation and
+   fallbacks; clean build without warnings.
 
 
 ## General Principles for Post-Project Features

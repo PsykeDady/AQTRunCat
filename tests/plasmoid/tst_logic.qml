@@ -247,6 +247,32 @@ TestCase {
         compare(unordered.monochrome, false);
     }
 
+    // F7: the new built-in runners as GetRunners lists them; the goose is
+    // the first one taller than wide (the panel sizes the runner by aspect).
+    function test_f7RunnersToShow() {
+        const frames = (id, prefix, n) => Array.from({ length: n }, (_, i) => "/usr/share/aqtruncat/runners/" + id + "/" + prefix + "-frame-" + i + ".png");
+        const catalog = {
+            schema: 1, selected: "walkinggoose", defaultRunnerId: "cat",
+            runners: [
+                { id: "walkinggoose", displayName: "Walking Goose", source: "bundled", valid: true, monochrome: true,
+                  frameWidth: 24, frameHeight: 36, frames: frames("walkinggoose", "goose", 6), sequence: [0, 1, 2, 3, 4, 5] },
+                { id: "partyparrot", displayName: "Party Parrot", source: "bundled", valid: true, monochrome: true,
+                  frameWidth: 50, frameHeight: 36, frames: frames("partyparrot", "parrot", 10), sequence: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] }
+            ]
+        };
+        const goose = Logic.runnerToShow(catalog);
+        compare(goose.displayName, "Walking Goose");
+        compare(goose.monochrome, true);
+        compare(goose.aspect, 24 / 36);
+        compare(goose.sequence, [0, 1, 2, 3, 4, 5]);
+        compare(goose.frames[5], "file:///usr/share/aqtruncat/runners/walkinggoose/goose-frame-5.png");
+        const parrot = Logic.runnerToShow(Object.assign({}, catalog, { selected: "partyparrot" }));
+        compare(parrot.displayName, "Party Parrot");
+        compare(parrot.aspect, 50 / 36);
+        compare(parrot.frames.length, 10);
+        compare(parrot.sequence[9], 9);
+    }
+
     function test_frameInterval() {
         compare(Logic.frameInterval(10), 100);
         compare(Logic.frameInterval(11), 91);

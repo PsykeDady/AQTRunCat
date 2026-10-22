@@ -1,7 +1,7 @@
 # Build: packaging/make-source-tarball.sh ~/rpmbuild/SOURCES
 #        rpmbuild -ba packaging/rpm/aqtruncat.spec
 Name:           aqtruncat
-Version:        1.6.3
+Version:        1.7.4
 Release:        1%{?dist}
 Summary:        A Cute Run Cat for Linux
 
@@ -66,6 +66,9 @@ export QT_QPA_PLATFORM=offscreen
 %{_docdir}/%{name}/
 
 %changelog
+* Thu Oct 22 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 1.7.4-1
+- F7: Walking Goose, Party Parrot and Engine built-in runners.
+
 * Thu Oct 22 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 1.6.3-1
 - F6: hover information: CPU, RAM and swap summary in the tray tooltip and
   in the Plasma widget's tooltip; more details in the Metrics Bar tooltips.

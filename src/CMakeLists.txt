@@ -188,9 +188,22 @@ target_compile_options(aqtruncat PRIVATE -Wall -Wextra -Wpedantic)
 install(TARGETS aqtruncat RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # Bundled runners, compiled in as :/runners/<id>/…: frames from third_party
-# (upstream files, unmodified, see THIRD_PARTY_NOTICES.md) and AQTRunCat's own
-# metadata.json from data/runners/<id>/.
-set(AQTRUNCAT_BUNDLED_RUNNERS "cat;coffee" CACHE STRING "Runner ids shipped inside the executable")
+# (see THIRD_PARTY_NOTICES.md) and AQTRunCat's own metadata.json from
+# data/runners/<id>/. F7 added Walking Goose, Party Parrot and Engine.
+set(aqtruncat_default_runners "cat;coffee;walkinggoose;partyparrot;engine")
+# A build tree configured before a runner was added keeps a cached list:
+# follow the new default unless the cached list was customised (the cached
+# default it was set from; "cat;coffee" before F7 recorded it).
+if(DEFINED CACHE{AQTRUNCAT_BUNDLED_RUNNERS_DEFAULT})
+    set(previous_default_runners "${AQTRUNCAT_BUNDLED_RUNNERS_DEFAULT}")
+else()
+    set(previous_default_runners "cat;coffee")
+endif()
+if(NOT DEFINED CACHE{AQTRUNCAT_BUNDLED_RUNNERS}
+   OR AQTRUNCAT_BUNDLED_RUNNERS STREQUAL previous_default_runners)
+    set(AQTRUNCAT_BUNDLED_RUNNERS "${aqtruncat_default_runners}" CACHE STRING "Runner ids shipped inside the executable" FORCE)
+endif()
+set(AQTRUNCAT_BUNDLED_RUNNERS_DEFAULT "${aqtruncat_default_runners}" CACHE INTERNAL "default of AQTRUNCAT_BUNDLED_RUNNERS")
 set(AQTRUNCAT_DEFAULT_RUNNER "cat" CACHE STRING "Runner shown when none is requested")
 if(NOT AQTRUNCAT_DEFAULT_RUNNER IN_LIST AQTRUNCAT_BUNDLED_RUNNERS)
     message(FATAL_ERROR "AQTRUNCAT_DEFAULT_RUNNER '${AQTRUNCAT_DEFAULT_RUNNER}' is not in AQTRUNCAT_BUNDLED_RUNNERS")
@@ -199,38 +212,40 @@ target_compile_definitions(aqtruncat PRIVATE
     AQTRUNCAT_VERSION="${PROJECT_VERSION}"
     AQTRUNCAT_DEFAULT_RUNNER="${AQTRUNCAT_DEFAULT_RUNNER}")
 
-set(frames_root "${PROJECT_SOURCE_DIR}/third_party/runcatneo/runners")
+# Where the frames of each runner are: RunCat Neo's runners by id, the F7
+# runners in their own third_party folders (the runner id is the installed
+# directory name, whatever the source folder is called).
+set(runner_frames_walkinggoose "${PROJECT_SOURCE_DIR}/third_party/walkinggoose/runners/goose")
+set(runner_frames_partyparrot "${PROJECT_SOURCE_DIR}/third_party/partyparrot/runners/parrot")
 set(metadata_root "${PROJECT_SOURCE_DIR}/data/runners")
-set(bundled_frames "")
 set(bundled_metadata "")
 foreach(runner IN LISTS AQTRUNCAT_BUNDLED_RUNNERS)
-    file(GLOB frames "${frames_root}/${runner}/*.png")
-    if(NOT frames)
-        message(FATAL_ERROR "bundled runner '${runner}' has no frames in ${frames_root}/${runner}")
+    if(DEFINED runner_frames_${runner})
+        set(frames_dir "${runner_frames_${runner}}")
+    else()
+        set(frames_dir "${PROJECT_SOURCE_DIR}/third_party/runcatneo/runners/${runner}")
     endif()
-    list(APPEND bundled_frames ${frames})
+    file(GLOB frames "${frames_dir}/*.png")
+    if(NOT frames)
+        message(FATAL_ERROR "bundled runner '${runner}' has no frames in ${frames_dir}")
+    endif()
+    qt_add_resources(aqtruncat bundled_runner_${runner} PREFIX /runners/${runner} BASE "${frames_dir}" FILES ${frames})
+    set(runner_files ${frames})
     if(EXISTS "${metadata_root}/${runner}/metadata.json")
         list(APPEND bundled_metadata "${metadata_root}/${runner}/metadata.json")
+        list(APPEND runner_files "${metadata_root}/${runner}/metadata.json")
     endif()
+    # F4.2: the same files under share/aqtruncat/runners/<id>/, for frontends
+    # outside this executable (the Plasmoid loads the frames that GetRunners
+    # lists); also copied into the build tree next to src/, so that a
+    # build-tree aqtruncatd finds them as ../share/aqtruncat/runners.
+    install(FILES ${runner_files} DESTINATION ${CMAKE_INSTALL_DATADIR}/aqtruncat/runners/${runner})
+    file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/share/aqtruncat/runners/${runner}")
+    file(COPY ${runner_files} DESTINATION "${PROJECT_BINARY_DIR}/share/aqtruncat/runners/${runner}")
 endforeach()
-qt_add_resources(aqtruncat bundled_runner_frames PREFIX /runners BASE "${frames_root}" FILES ${bundled_frames})
 if(bundled_metadata)
     qt_add_resources(aqtruncat bundled_runner_metadata PREFIX /runners BASE "${metadata_root}" FILES ${bundled_metadata})
 endif()
-
-# F4.2: the same bundled runners as plain files, share/aqtruncat/runners/<id>/,
-# for frontends outside this executable (the Plasmoid loads the frames that
-# GetRunners lists). Also copied into the build tree next to src/, so that a
-# build-tree aqtruncatd finds them as ../share/aqtruncat/runners.
-foreach(runner IN LISTS AQTRUNCAT_BUNDLED_RUNNERS)
-    file(GLOB frames "${frames_root}/${runner}/*.png")
-    set(runner_files ${frames})
-    if(EXISTS "${metadata_root}/${runner}/metadata.json")
-        list(APPEND runner_files "${metadata_root}/${runner}/metadata.json")
-    endif()
-    install(FILES ${runner_files} DESTINATION ${CMAKE_INSTALL_DATADIR}/aqtruncat/runners/${runner})
-    file(COPY ${runner_files} DESTINATION "${PROJECT_BINARY_DIR}/share/aqtruncat/runners/${runner}")
-endforeach()
 
 # The backend (F4.1): one per user session, D-Bus activated, headless.
 # (After AQTRUNCAT_DEFAULT_RUNNER is defined.)

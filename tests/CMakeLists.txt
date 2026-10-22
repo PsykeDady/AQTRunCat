@@ -44,6 +44,18 @@ target_link_libraries(tst_updatesservice PRIVATE aqtruncat_engine Qt6::Test)
 target_compile_options(tst_updatesservice PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME updatesservice COMMAND tst_updatesservice)
 
+# F7: the bundled runners as built and installed (real frames and metadata),
+# the application's runner list, selection, persistence and fallbacks.
+qt_add_executable(tst_bundledrunners tst_bundledrunners.cpp)
+target_link_libraries(tst_bundledrunners PRIVATE aqtruncat_runner_catalog aqtruncat_engine Qt6::Test)
+target_compile_options(tst_bundledrunners PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(tst_bundledrunners PRIVATE
+    AQTRUNCAT_BUILD_RUNNERS="${PROJECT_BINARY_DIR}/share/aqtruncat/runners"
+    AQTRUNCAT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+    AQTRUNCAT_APP="$<TARGET_FILE:aqtruncat>")
+add_dependencies(tst_bundledrunners aqtruncat)
+add_test(NAME bundledrunners COMMAND tst_bundledrunners)
+
 # F6 hover summary of the Qt tray (CPU, RAM, swap, backend states).
 qt_add_executable(tst_hoversummary tst_hoversummary.cpp)
 target_link_libraries(tst_hoversummary PRIVATE aqtruncat_engine Qt6::Test)

@@ -35,13 +35,14 @@
 > `feature/f6`; the user owns every Git write): CPU/RAM/swap summary in the
 > tray tooltip and in the Plasmoid's native tooltip, metric details in the
 > Metrics Bar tooltips and in the popup rows (§13 F6, §5 F6 block,
-> `docs/F6-hover-information.md`).** F7 is NOT STARTED and blocked until
-> the user provides the final assets (Walking Goose, Crazy Dancing Parrot);
-> do not start it without an explicit user instruction (its full
-> requirements, sub-features F7.1–F7.4 (Engine added by the user as
-> F7.3), acceptance criteria and asset
-> blocker were restored in requirements.md on 2026-10-22, documentation
-> only; §13 F7). Version **1.6.3** (F6.1–F6.3; versioning rule in §1).
+> `docs/F6-hover-information.md`).** The user committed F6 (c84b3f7).
+> **F7 (Additional Built-in Animated Runners) is COMPLETE (2026-10-22,
+> uncommitted; the user owns every Git write): Walking Goose
+> (`walkinggoose`), Party Parrot (`partyparrot`) and Engine (`engine`, F7.4,
+> added by the user after 1.7.3) are built-in runners (§13 F7,
+> `docs/F7-additional-built-in-runners.md`).** Version **1.7.4**
+> (F7.1–F7.4). 2.0.0 is a separate milestone after the user's acceptance:
+> do not start it without an explicit instruction.
 >
 > Handoff state at the end of F6 (2026-10-22):
 > - Last verified: clean build (fresh dir) 0 warnings, ctest **52/52**
@@ -184,9 +185,9 @@
 ## 1. Project identity
 
 - Name **AQTRunCat**, tagline **"A Cute Run Cat for Linux"**, executable
-  **`aqtruncat`**, version **1.6.3** (CMake `PROJECT_VERSION`; was 0.0.1 until
+  **`aqtruncat`**, version **1.7.4** (CMake `PROJECT_VERSION`; was 0.0.1 until
   F4.1; 1.4.2 = F4.2; 1.5.6 = F5 with its six sub-features F5.1–F5.6;
-  1.6.3 = F6 with F6.1–F6.3). Versioning rule (user, 2026-10-21; requirements.md "Versioning"):
+  1.6.3 = F6 with F6.1–F6.3; 1.7.4 = F7 with F7.1–F7.4). Versioning rule (user, 2026-10-21; requirements.md "Versioning"):
   1.0.0 = M0–M9; each completed feature F<n> raises the minor (F4 → 1.4.x),
   each completed sub-feature the patch (F4.1 → 1.4.1, F4.2 → 1.4.2); after
   the 7th feature → 2.0.0. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
@@ -236,12 +237,16 @@ F3 COMPLETE   Codex integration: usage limits per window (local sessions + opt-i
 F4.1 COMPLETE Headless backend aqtruncatd (QtCore+QtDBus), D-Bus API io.github.psykedady.AQTRunCat1 (api 1, schema 1), CLI aqtruncatctl; tray = client
 F4.2 COMPLETE Native KDE Plasma 6 Plasmoid io.github.psykedady.aqtruncat (QML package, client of the API), GetRunners/"runners", install.sh --plasmoid/--no-plasmoid
 F5 COMPLETE   Additional Built-in Metrics: uptime, GPU (per device), FPS (MangoHud log), package/Flatpak updates (read-only, local metadata by default), kernel, distribution; API schema 2
+F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (partyparrot), Engine (engine) (1.7.4)
 F6 COMPLETE   Hover Information: CPU/RAM/swap summary in the tray tooltip and the Plasmoid's native tooltip; Metrics Bar/popup details (1.6.3)
-POST-PROJECT  F7 (requirements.md), NOT STARTED, needs an explicit instruction (blocked on the user's assets)
+NEXT          2.0.0 release milestone, only on the user's instruction (after accepting F7)
 ```
 
 - Build: `cmake -S . -B build && cmake --build build && ctest --test-dir build`.
   Clean build: **0 warnings** (`-Wall -Wextra -Wpedantic` on all targets).
+- Tests (2026-10-22, after F7): **53 ctest suites, all passing** (new
+  `bundledrunners`; extended backendipc, plasmoidclient, plasmoidlogic 26,
+  installer).
 - Tests (2026-10-22, after F6): **52 ctest suites, all passing** (new
   `hoversummary` 8; extended metricsbarpresenter 14, metricsbarmodel 21,
   plasmoidlogic 25, plasmoidclient 12).
@@ -696,7 +701,7 @@ Key components:
 | Formatting | binary units, 1 decimal, `std::to_chars` (locale-independent) | QCoreApplication sets the system locale (Italian comma) |
 | Runner precedence | user > bundled; same-root dup id → first in natural order wins + note | |
 | Explicit `--runner` missing/invalid | error, never fallback | default runner may fall back with a warning |
-| Bundled runners | `cat` (default) + `coffee` only | don't add more without being asked (F7 is that request: `goose`/`parrot`, blocked until the user supplies the final frames, and `engine` from the existing RunCat Neo frames) |
+| Bundled runners | `cat` (default), `coffee`, `walkinggoose`, `partyparrot`, `engine` (F7) | don't add more without being asked |
 | XDG | runners: `$XDG_DATA_HOME/AQTRunCat/runners/`; settings: `$XDG_CONFIG_HOME/AQTRunCat/AQTRunCat.ini`; autostart: `$XDG_CONFIG_HOME/autostart/aqtruncat.desktop` | Qt/XDG standard locations, data and config separate |
 | Custom Metrics snapshot contract (M6, preserved by F1) | external RunCat Neo JSON snapshots; `formattedValue` stays opaque; snapshot sources run no commands/providers/scheduler | compatibility with existing producers; F1 deliberately adds a separate command-backed source while retaining this snapshot contract |
 | Custom Metrics command contract (F1) | explicit `source.type=command`; required `id`, `title`, `executable`; direct executable + ≤256 args, no shell/elevation; scalar UTF-8 stdout; prefix/suffix and optional normalized range | invalid/malformed config is never executed or treated as snapshot |
@@ -851,8 +856,11 @@ Gallery has no frame order field. Some assets contain duplicate frames
   (`beagle-frames` → `beagle`).
 
 **Locations & precedence**: bundled = Qt resources `:/runners/<id>/` (frames
-from `third_party/runcatneo/runners/<id>/`, metadata from `data/runners/<id>/`;
-CMake cache vars `AQTRUNCAT_BUNDLED_RUNNERS="cat;coffee"`,
+from `third_party/runcatneo/runners/<id>/`, since F7 per id
+`runner_frames_<id>` for `walkinggoose`/`partyparrot`; metadata from
+`data/runners/<id>/`; CMake cache vars
+`AQTRUNCAT_BUNDLED_RUNNERS="cat;coffee;walkinggoose;partyparrot;engine"` (migrated
+from an old cache unless customised),
 `AQTRUNCAT_DEFAULT_RUNNER="cat"`, configure fails if default not bundled);
 user = `$XDG_DATA_HOME/AQTRunCat/runners/` (default `~/.local/share/...`).
 User overrides bundled with same id. Default runner missing/invalid → first
@@ -1183,8 +1191,9 @@ RunCat Neo custom runner names (§11).
 M0–M9 are complete; M9 concluded the initial roadmap. `requirements.md`
 ("AQTRunCat — Post-Project Features") is the current source for future work
 and supersedes the earlier F1–F4 post-project ordering. **F1, F2, F3, F4
-(F4.1, F4.2), F5 and F6 are COMPLETE. F7 is NOT STARTED (blocked on the
-user's assets); do not start it without an explicit user instruction.**
+(F4.1, F4.2), F5 and F6 are COMPLETE. F7 is NOT STARTED (assets approved on
+2026-10-22, no longer blocked); do not start it without an explicit user
+instruction.**
 
 Development baseline: future post-project work starts from `feature/base`.
 Each feature branch (`feature/f1`, `feature/f2`, `feature/f3`, …) is created
@@ -1521,53 +1530,62 @@ create or switch branches, commit or push without explicit permission.
     0.150 % / 21.8 MiB; one check round ≈ 1.8 s CPU in children (pacman
     -Qu with gpg ≈ 0.7 s, 4 flatpak calls ≈ 1 s) → ≈ 0.05 % hourly.
   - Limitations: see §11 items 23–26 and the F5 doc §17.
-- **F7 — Additional Built-in Animated Runners (NOT STARTED, BLOCKED on
-  assets)**: the last feature milestone before 2.0.0. Requirements recorded
-  2026-10-21, restored in full in requirements.md on 2026-10-22
-  (documentation only; nothing implemented, no asset in the repo).
-  - Proposed sub-features (documentation milestones): F7.1 Walking Goose,
-    F7.2 Crazy Dancing Parrot, F7.3 **Engine** (added by the user on
-    2026-10-22: promote RunCat Neo's `engine` — 10 frames 83×36,
-    monochrome, already in `third_party/runcatneo/runners/engine/`, so far
-    used only by the M1.0 spike — to an official built-in runner), F7.4
-    shared asset integration, packaging and validation. The shared
-    sections (assets, architecture, settings, installation) are unnumbered
-    and belong to F7.4.
-  - Engine specifics: `data/runners/engine/metadata.json` (displayName
-    "Engine", author Kyome22, type monochrome), id in
-    `AQTRUNCAT_BUNDLED_RUNNERS`, installed under share; update
-    THIRD_PARTY_NOTICES.md ("engine used only by the spike" → built-in);
-    frames stay byte-for-byte (cropping/rescaling = modifying third-party
-    files: ask first). Not blocked by assets; implement it alone only on
-    explicit instruction. Known limit to validate and report: ≈ 2.3:1, about
-    22×10 px in Plasma's square tray slot ("at the limit", M2 §11);
-    Plasmoid panels keep the aspect.
-  - Runners: official built-ins like Cat/Coffee (not Custom Metrics, not
-    user runners, not plugins); goose = cartoon walking cycle, parrot =
-    colourful energetic dance loop; transparent PNG frames, ~4–8 per runner,
-    one canvas size and alignment, limited palette, no background, smooth
-    loop, readable in tray/panel; same names in every frontend.
-  - Blocker (goose and parrot only): the user provides or approves the
-    final frames. Until then:
-    no generated/substitute graphics, no placeholders presented as final,
-    no third-party sprites without explicit approval (approved ones go in
-    THIRD_PARTY_NOTICES.md, Apache-2.0 compatible); do not mark F7 ready.
-  - Integration when unblocked: existing pipeline — frames
-    `<id>-frame-<n>.png` + `metadata.json` (`displayName`, `author`, `type`
-    monochrome|color; the parrot needs `color`), id added to
-    `AQTRUNCAT_BUNDLED_RUNNERS` (qrc in `aqtruncat` + installed under
-    `share/aqtruncat/runners/<id>/` for `GetRunners`/Plasmoid); proposed
-    ids `goose`, `parrot`; Cat stays default; no new animation engine, no
-    API change expected, no sampling change.
-  - Acceptance: final approved assets; listed/selectable/persistent in tray
-    and Plasmoid (+ `aqtruncat runner list`); correct in tray and
-    horizontal/vertical panels, light/dark; Cat/Coffee/user runners
-    unchanged; installed/packaged/uninstalled like the existing built-ins;
-    tests for discovery, assets, selection, persistence, packaging; clean
-    build.
-  - Versioning open decision (ask the user): F7.1–F7.4 → 1.7.1–1.7.4 by the
-    rule, then 2.0.0 after validation — or the completed F7 directly as
-    2.0.0. Recording F7 changed no version (still 1.6.3).
+- **F7 — Additional Built-in Animated Runners — COMPLETE (2026-10-22,
+  1.7.4, uncommitted; the user committed F6 as c84b3f7)**: record
+  `docs/F7-additional-built-in-runners.md`.
+  - F7.1 Walking Goose (`walkinggoose`, 6 frames 24×36) → 1.7.1, F7.2 Party
+    Parrot (`partyparrot`, 10 frames 50×36) → 1.7.2, F7.3 shared
+    integration/packaging/validation → 1.7.3 (the user's F7 brief; it
+    replaced the earlier documentation numbering, renamed "Crazy Dancing
+    Parrot" to "Party Parrot", chose ids `walkinggoose`/`partyparrot`
+    instead of the proposed `goose`/`parrot`, and excluded Engine).
+  - Assets (user-approved 2026-10-22, not modified by F7):
+    `third_party/walkinggoose/runners/goose/goose-frame-{0..5}.png`,
+    `third_party/partyparrot/runners/parrot/parrot-frame-{0..9}.png`;
+    monochrome outlines derived from Tenor GIFs (author not verifiable,
+    licence unknown, included by the user's decision; provenance, GIF
+    SHA-256 and exact processing in each folder's README.md and
+    THIRD_PARTY_NOTICES.md; reusable ImageMagick pipeline for the user:
+    `~/Codici/bash/gif2runner.sh`, outside the repo). Goose processing
+    detail: opaque white background/body, the dark brown (49,43,37) both
+    edges lines and fills the shadow → opening to remove thick shadow,
+    orange beak/feet solid, specks < 150 px below y 160 dropped (rules
+    "contains black" and "size only" failed: shadow has black pixels; the
+    eye is small).
+  - Integration: only `src/CMakeLists.txt` + metadata. One list
+    `AQTRUNCAT_BUNDLED_RUNNERS` = `cat;coffee;walkinggoose;partyparrot;engine`;
+    per-id frames dir `runner_frames_<id>` (F7 folders), fallback
+    `third_party/runcatneo/runners/<id>`; one `qt_add_resources` per runner
+    (PREFIX `/runners/<id>`), install + build-tree copy to
+    `share/aqtruncat/runners/<id>/`; the installed dir name is the id.
+    Cache migration: `AQTRUNCAT_BUNDLED_RUNNERS_DEFAULT` (INTERNAL) records
+    the default; a cached value equal to the previous default (or
+    `cat;coffee` when unrecorded) follows the new default, a customised
+    list is kept. `data/runners/{walkinggoose,partyparrot}/metadata.json`
+    (type monochrome, author "Unknown (…via Tenor)").
+  - No change to backend/API/`GetRunners`, tray, Plasmoid QML, animator,
+    sampling; speed follows CPU (GIF timings not reproduced, by design).
+  - Packaging: share/aqtruncat already covered everywhere; Debian
+    `copyright` stanza for the two folders "License: unknown".
+  - Tests: new `bundledrunners` (real installed files vs sources, list,
+    selection, persistence, Restore Defaults, missing/broken fallbacks);
+    `backendipc` GetRunners, `plasmoidclient` selection, `plasmoidlogic`
+    `test_f7RunnersToShow`, installer checks. ctest 53/53, clean build 0
+    warnings.
+  - Runtime (isolated): tray with saved runnerId each runner + fake SNI
+    host (≈10 fps, F6 tooltip names the runner); plasmoid-preview
+    `--runner walkinggoose|partyparrot` (panels 22/34/48 h, 34/48 v).
+  - F7.4 Engine (`engine`, 1.7.4; the F7 brief had excluded it, then the
+    user asked "metti anche engine"): RunCat Neo frames unmodified via the
+    RunCat Neo fallback folder, `data/runners/engine/metadata.json`
+    (Kyome22), THIRD_PARTY_NOTICES updated (no longer spike-only), tests
+    extended; cache migration updated the existing build by itself.
+    Accepted limit: ≈ 22×10 px in Plasma's square tray slot, ≈ 34×15 px in
+    a 34 px vertical panel.
+  - Manual checks left: real tray/Plasmoid with the new runners (a
+    Plasmoid only needs the 1.7.4 backend installed; its QML is unchanged).
+  - Next: 2.0.0 is a separate milestone after the user accepts F7; do not
+    start it without an instruction.
 - **F6 — Hover Information — COMPLETE (2026-10-22, 1.6.3, uncommitted on
   `feature/f6`)**: record `docs/F6-hover-information.md`.
   - F6.1 tray: `hover::summaryLines`/`runnerToolTip` (`src/app/
@@ -1677,6 +1695,9 @@ tests/tst_plasmoidclient.cpp, tests/tst_plasmoidpackage.cpp, tests/plasmoid/tst_
 tools/plasmoid-preview.{sh,qml}   offscreen popup/runner previews with demo data (light/dark PNG), private bus, isolated XDG (F5: update checks off)
 src/metrics/{uptime,systeminfo,gpu,fps,packageupdates}.*   F5 Qt-free sources: /proc/uptime, uname + os-release, DRM/sysfs/NVML GPUs, MangoHud log reader, update-check parsers/commands
 src/app/updatesservice.*, boundedprocess.*, processgroup.h   F5 backend update checks (two non-overlapping jobs), bounded subprocess (shared process-group rules with F1)
+docs/F7-additional-built-in-runners.md   F7 assets, CMake integration/cache migration, selection, packaging, tests, isolated runtime, deferred Engine, manual checks
+third_party/{walkinggoose,partyparrot}/   F7 runner frames (derived from Tenor GIFs, licence unknown, user's decision) + README provenance
+tests/tst_bundledrunners.cpp   F7 real bundled runners: files, list, selection, persistence, fallbacks
 src/app/hoversummary.*   F6 hover summary (CPU/RAM/swap lines, backend states, whenText), QtCore only
 docs/F6-hover-information.md   F6 existing tooltips, shared format, tray/Plasmoid/details, API unchanged, performance, tests, isolated runtime validation, manual checks
 docs/F5-additional-built-in-metrics.md   F5 investigation, ids/sources/units, GPU/FPS/updates semantics, API/CLI/UI, settings, performance, security, tests, runtime validation, limits (+ images dir)

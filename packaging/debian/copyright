@@ -11,6 +11,15 @@ License: Apache-2.0
 Comment: RunCat Neo runner frames, unmodified (see THIRD_PARTY_NOTICES.md).
  The RunCat names, icon and branding are not part of this grant.
 
+Files: third_party/walkinggoose/* third_party/partyparrot/*
+Copyright: unknown (internet GIFs via Tenor; original authors not verifiable)
+License: unknown
+Comment: Walking Goose and Party Parrot runner frames, derived from GIFs
+ found on Tenor (cropped, decoloured to a monochrome outline, scaled).
+ Their license could not be verified; they are included by the explicit
+ decision of the AQTRunCat maintainer, and no license is claimed for them.
+ See THIRD_PARTY_NOTICES.md and third_party/*/README.md.
+
 License: Apache-2.0
  Licensed under the Apache License, Version 2.0 (the "License"); you may not
  use this file except in compliance with the License. You may obtain a copy of

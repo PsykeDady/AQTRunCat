@@ -21,7 +21,8 @@ the primary target is KDE Plasma 6 on Wayland.
 - **CPU-driven runner**: 10 FPS when idle, up to 40 FPS at full load (or the
   reverse with "Slow down under load"). Monochrome runners follow the panel
   text colour in light and dark themes.
-- **Runners**: Cat (default) and Coffee are built in; import any
+- **Runners**: Cat (default), Coffee, Walking Goose, Party Parrot and Engine
+  are built in; import any
   [RunCat Runner Gallery](https://github.com/runcat-dev/RunnerGallery) ZIP.
 - **Dashboard**: CPU, memory, swap, network, Root/Home storage and disk
   activity, read directly from `/proc`, `/sys` and `statvfs`; uptime, every
@@ -260,7 +261,25 @@ sampled twice. Details:
 
 ### Runners
 
-Bundled runners: Cat and Coffee. Import a Runner Gallery `*-frames.zip` with
+Bundled runners (id in parentheses, for `aqtruncat run --runner ID` and the
+`runnerId` setting):
+
+| Runner | Frames | Size | Origin |
+|---|---|---|---|
+| Cat (`cat`, default) | 5 | 56×36 | RunCat Neo, Apache-2.0 |
+| Coffee (`coffee`) | 10 | 38×36 | RunCat Neo, Apache-2.0 |
+| Walking Goose (`walkinggoose`) | 6 | 24×36 | a walking-goose GIF from Tenor, as a monochrome outline |
+| Party Parrot (`partyparrot`) | 10 | 50×36 | the Party Parrot meme GIF from Tenor, as a monochrome outline |
+| Engine (`engine`) | 10 | 83×36 | RunCat Neo, Apache-2.0 |
+
+All five follow the panel's text colour and the CPU-driven speed. Walking
+Goose and Party Parrot come from internet GIFs whose original authors and
+license could not be verified; they are included by the maintainer's
+decision and no license is claimed for them (see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). Engine is wide: in a
+square tray slot it is drawn small (about 22×10 px on Plasma).
+
+Import a Runner Gallery `*-frames.zip` with
 `aqtruncat runner import FILE.zip` (validated and extracted safely; nothing is
 installed if anything is wrong) or put a folder of PNG frames into
 `~/.local/share/AQTRunCat/runners/<id>/`. Choose the runner in Settings.
@@ -487,5 +506,6 @@ AQTRunCat icon is original artwork.
   metrics, Dashboard, Settings, Custom Metrics, Metrics Bar, desktop
   compatibility, packaging, executable Custom Metrics, Claude Code and Codex
   integrations, backend/D-Bus API/`aqtruncatctl`, KDE Plasma widget,
-  additional built-in metrics, hover information)
+  additional built-in metrics, hover information, additional built-in
+  runners)
 - [`tools/`](tools/): diagnostic scripts for developers (not needed by users)
