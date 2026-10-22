@@ -230,6 +230,13 @@ void BackendClient::reportUnavailable()
     snapshot.memory.status = missing;
     snapshot.network.status = missing;
     snapshot.diskIo.status = missing;
+    snapshot.uptime.status = missing;
+    snapshot.gpu.status = missing;
+    snapshot.fps.status = missing;
+    snapshot.packageUpdates.status = missing;
+    snapshot.flatpakUpdates.status = missing;
+    snapshot.kernel.status = missing;
+    snapshot.distribution.status = missing;
     // The storage rows the frontend already shows must not keep old values.
     for (const QJsonValue &value : std::as_const(m_metrics)) {
         const QJsonObject metric = value.toObject();

@@ -30,6 +30,20 @@ foreach(name memory network storage diskio metricsformat compactformat)
     target_compile_options(tst_${name} PRIVATE -Wall -Wextra -Wpedantic)
     add_test(NAME ${name} COMMAND tst_${name})
 endforeach()
+# F5 built-in metrics: uptime, kernel/distribution, GPU (fake sysfs, fake
+# NVML), FPS (fake MangoHud logs) and update-check parsing.
+foreach(name uptime systeminfo gpu fps packageupdates)
+    qt_add_executable(tst_${name} tst_${name}.cpp)
+    target_link_libraries(tst_${name} PRIVATE aqtruncat_metrics Qt6::Test)
+    target_compile_options(tst_${name} PRIVATE -Wall -Wextra -Wpedantic)
+    add_test(NAME ${name} COMMAND tst_${name})
+endforeach()
+# F5 update checks with fake tools in a private PATH and a fake root.
+qt_add_executable(tst_updatesservice tst_updatesservice.cpp)
+target_link_libraries(tst_updatesservice PRIVATE aqtruncat_engine Qt6::Test)
+target_compile_options(tst_updatesservice PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME updatesservice COMMAND tst_updatesservice)
+
 qt_add_executable(tst_systemmetrics tst_systemmetrics.cpp)
 target_link_libraries(tst_systemmetrics PRIVATE aqtruncat_cli aqtruncat_metrics Qt6::Test)
 target_compile_options(tst_systemmetrics PRIVATE -Wall -Wextra -Wpedantic)

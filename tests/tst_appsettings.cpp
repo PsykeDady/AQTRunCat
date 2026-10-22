@@ -191,6 +191,74 @@ private slots:
         QCOMPARE(raw.allKeys(), QStringList{QStringLiteral("customMetrics/files")});
     }
 
+    void f5SettingsDefaultsValidationAndPersistence()
+    {
+        QTemporaryDir temporary;
+        const QString file = temporary.filePath(QStringLiteral("settings.ini"));
+        {
+            AppSettings settings(QStringLiteral("cat"), file);
+            QCOMPARE(settings.gpuDevice(), QStringLiteral("auto"));
+            QCOMPARE(settings.fpsSource(), QStringLiteral("mangohud"));
+            QCOMPARE(settings.updatesIntervalMinutes(), 60);
+            QVERIFY(!settings.updatesRemoteRefresh()); // remote metadata is opt-in
+            QVERIFY(!QFile::exists(file)); // defaults are not written
+
+            QSignalSpy changed(&settings, &AppSettings::systemMetricsSettingsChanged);
+            settings.setGpuDevice(QStringLiteral("0000:03:00.0"));
+            settings.setGpuDevice(QStringLiteral("../../etc")); // rejected
+            settings.setGpuDevice(QStringLiteral("0000:03:00.0")); // unchanged: no signal
+            settings.setFpsSource(QStringLiteral("off"));
+            settings.setFpsSource(QStringLiteral("gamescope")); // unknown: rejected
+            settings.setUpdatesIntervalMinutes(180);
+            settings.setUpdatesIntervalMinutes(7); // not offered: rejected
+            settings.setUpdatesRemoteRefresh(true);
+            QCOMPARE(changed.count(), 4);
+            QCOMPARE(settings.gpuDevice(), QStringLiteral("0000:03:00.0"));
+            QCOMPARE(settings.fpsSource(), QStringLiteral("off"));
+            QCOMPARE(settings.updatesIntervalMinutes(), 180);
+        }
+        AppSettings again(QStringLiteral("cat"), file);
+        QCOMPARE(again.gpuDevice(), QStringLiteral("0000:03:00.0"));
+        QCOMPARE(again.fpsSource(), QStringLiteral("off"));
+        QCOMPARE(again.updatesIntervalMinutes(), 180);
+        QVERIFY(again.updatesRemoteRefresh());
+
+        // Another writer (CLI, Plasmoid through the backend) and reload.
+        AppSettings other(QStringLiteral("cat"), file);
+        other.setUpdatesIntervalMinutes(0);
+        QSignalSpy reloaded(&again, &AppSettings::systemMetricsSettingsChanged);
+        QVERIFY(again.reload());
+        QCOMPARE(reloaded.count(), 1);
+        QCOMPARE(again.updatesIntervalMinutes(), 0);
+
+        again.restoreDefaults();
+        QCOMPARE(again.gpuDevice(), QStringLiteral("auto"));
+        QCOMPARE(again.fpsSource(), QStringLiteral("mangohud"));
+        QCOMPARE(again.updatesIntervalMinutes(), 60);
+        QVERIFY(!again.updatesRemoteRefresh());
+    }
+
+    void f5HandEditedValuesFallBack()
+    {
+        QTemporaryDir temporary;
+        const QString file = temporary.filePath(QStringLiteral("settings.ini"));
+        {
+            QSettings raw(file, QSettings::IniFormat);
+            raw.setValue(QStringLiteral("gpu/device"), QStringLiteral("card0; rm -rf"));
+            raw.setValue(QStringLiteral("fps/source"), QStringLiteral("inject"));
+            raw.setValue(QStringLiteral("updates/intervalMinutes"), 1);
+            raw.setValue(QStringLiteral("metricsBar/items"), QStringList{QStringLiteral("gpu.temperature"),
+                                                                         QStringLiteral("kernel"), QStringLiteral("fps")});
+        }
+        AppSettings settings(QStringLiteral("cat"), file);
+        QCOMPARE(settings.gpuDevice(), QStringLiteral("auto"));
+        QCOMPARE(settings.fpsSource(), QStringLiteral("mangohud"));
+        QCOMPARE(settings.updatesIntervalMinutes(), 60);
+        // Text-only metrics never take a Metrics Bar slot.
+        QCOMPARE(settings.metricsBarItems(), (QStringList{QStringLiteral("gpu.temperature"), QStringLiteral("fps")}));
+        QVERIFY(AppSettings::isValidGpuDevice(QStringLiteral("platform:fd5a0000.gpu")));
+    }
+
     void commandLineOverridesDoNotMutatePersistence()
     {
         QTemporaryDir temporary;

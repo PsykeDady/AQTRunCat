@@ -23,6 +23,15 @@ const QList<BuiltInMetric> &builtInMetrics()
         {QStringLiteral("storage.home"), QStringLiteral("Home storage"), QStringLiteral("HOME")},
         {QStringLiteral("disk.read"), QStringLiteral("Disk read"), QStringLiteral("DSK↓")},
         {QStringLiteral("disk.write"), QStringLiteral("Disk write"), QStringLiteral("DSK↑")},
+        // F5. The three GPU entries follow the selected GPU (setting
+        // gpuDevice); kernel and distribution are text and not offered.
+        {QStringLiteral("uptime"), QStringLiteral("Uptime"), QStringLiteral("UP")},
+        {QStringLiteral("gpu.utilization"), QStringLiteral("GPU utilization"), QStringLiteral("GPU")},
+        {QStringLiteral("gpu.memory"), QStringLiteral("GPU memory"), QStringLiteral("VRAM")},
+        {QStringLiteral("gpu.temperature"), QStringLiteral("GPU temperature"), QStringLiteral("GPU°")},
+        {QStringLiteral("fps"), QStringLiteral("FPS"), QStringLiteral("FPS")},
+        {QStringLiteral("updates.packages"), QStringLiteral("Package updates"), QStringLiteral("UPD")},
+        {QStringLiteral("updates.flatpak"), QStringLiteral("Flatpak updates"), QStringLiteral("FLAT")},
     };
     return metrics;
 }

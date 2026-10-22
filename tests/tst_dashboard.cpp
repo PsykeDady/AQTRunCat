@@ -97,6 +97,146 @@ private slots:
         QCOMPARE(child<QLabel>(window, "diskWrite")->text(), QStringLiteral("↑ 620.0 KiB/s"));
     }
 
+    void f5SectionsShowValuesAndReasons()
+    {
+        DashboardWindow window("/home/alice");
+        // Before any sample: waiting, no GPU card, no invented values.
+        QCOMPARE(child<QLabel>(window, "gpuStatus")->text(), QStringLiteral("Waiting…"));
+        QCOMPARE(child<QLabel>(window, "uptimeValue")->text(), QStringLiteral("N/A"));
+
+        SystemMetricsSnapshot s = populatedSnapshot();
+        s.uptime.status = MetricStatus::okStatus();
+        s.uptime.seconds = 90061.0;
+        s.kernel.status = MetricStatus::okStatus();
+        s.kernel.info = KernelInfo{"Linux", "7.2.10-zen1-1-zen", "#1 ZEN SMP", "x86_64"};
+        s.distribution.status = MetricStatus::okStatus();
+        DistributionInfo d;
+        d.prettyName = "Arch Linux";
+        d.id = "arch";
+        d.buildId = "rolling";
+        d.source = "/etc/os-release";
+        s.distribution.info = d;
+        s.gpu.status = MetricStatus::okStatus();
+        GpuDevice gpu;
+        gpu.id = "0000:00:02.0";
+        gpu.model = "Intel Iris Xe";
+        gpu.driver = "i915";
+        gpu.integrated = true;
+        gpu.utilizationStatus = MetricStatus::okStatus();
+        gpu.utilizationPercent = 37.5;
+        gpu.utilizationMethod = "rc6-residency";
+        gpu.memoryStatus = MetricStatus::unavailable("integrated GPU: it uses shared system memory");
+        gpu.temperatureStatus = MetricStatus::unavailable("integrated GPU: no sensor of its own");
+        s.gpu.devices = {gpu};
+        s.fps.status = MetricStatus::unavailable("the MangoHud log has not been written for 12 s");
+        s.fps.condition = FpsCondition::Stale;
+        s.fps.lastFps = 58.7;
+        s.packageUpdates.status = MetricStatus::okStatus();
+        s.packageUpdates.manager = "pacman";
+        s.packageUpdates.count = 3;
+        s.packageUpdates.lastSuccess = 1'800'000'000;
+        s.packageUpdates.metadataTime = 1'799'000'000;
+        s.packageUpdates.metadataStale = true;
+        s.flatpakUpdates.status = MetricStatus::unavailable("Flatpak is not installed");
+        window.updateSnapshot(s);
+
+        QCOMPARE(child<QLabel>(window, "uptimeValue")->text(), QStringLiteral("1d 1h 1m"));
+        QCOMPARE(child<QLabel>(window, "kernelValue")->text(), QStringLiteral("7.2.10-zen1-1-zen"));
+        QCOMPARE(child<QLabel>(window, "distributionValue")->text(), QStringLiteral("Arch Linux"));
+        QVERIFY(child<QLabel>(window, "gpuStatus")->isHidden());
+        QCOMPARE(child<QLabel>(window, "gpuTitle_0")->text(), QStringLiteral("Intel Iris Xe"));
+        QCOMPARE(child<QLabel>(window, "gpuUtilization_0")->text(), QStringLiteral("37.5 %"));
+        QVERIFY(!child<QProgressBar>(window, "gpuUtilizationProgress_0")->isHidden());
+        QCOMPARE(child<QLabel>(window, "gpuMemory_0")->text(), QStringLiteral("N/A"));
+        QVERIFY(child<QLabel>(window, "gpuMemory_0")->toolTip().contains(QLatin1String("shared system memory")));
+        QVERIFY(child<QProgressBar>(window, "gpuMemoryProgress_0")->isHidden()); // no meaningless bar
+        QCOMPARE(child<QLabel>(window, "gpuTemperature_0")->text(), QStringLiteral("N/A"));
+        // Stale FPS: no value, the reason and the last reading, with a warning.
+        QCOMPARE(child<QLabel>(window, "fpsValue")->text(), QStringLiteral("N/A"));
+        QVERIFY(child<QLabel>(window, "fpsDetail")->text().contains(QLatin1String("59 FPS")));
+        QVERIFY(!child<QLabel>(window, "fpsWarning")->isHidden());
+        QCOMPARE(child<QLabel>(window, "packageUpdatesValue")->text(), QStringLiteral("3 updates"));
+        QVERIFY(child<QLabel>(window, "packageUpdatesDetail")->text().contains(QLatin1String("out of date")));
+        QVERIFY(!child<QLabel>(window, "packageUpdatesWarning")->isHidden());
+        QCOMPARE(child<QLabel>(window, "flatpakUpdatesValue")->text(), QStringLiteral("N/A"));
+        QCOMPARE(child<QLabel>(window, "flatpakUpdatesDetail")->text(), QStringLiteral("Flatpak is not installed"));
+
+        // A second GPU appears (eGPU): the cards follow, in order.
+        GpuDevice amd;
+        amd.id = "0000:05:00.0";
+        amd.model = "AMD Radeon";
+        amd.utilizationStatus = MetricStatus::okStatus();
+        amd.utilizationPercent = 10.0;
+        amd.memoryStatus = MetricStatus::okStatus();
+        amd.memoryUsedBytes = 1ull << 30;
+        amd.memoryTotalBytes = 8ull << 30;
+        amd.temperatureStatus = MetricStatus::okStatus();
+        amd.temperatureCelsius = 48.4;
+        s.gpu.devices.push_back(amd);
+        window.updateSnapshot(s);
+        QCOMPARE(child<QLabel>(window, "gpuTitle_1")->text(), QStringLiteral("AMD Radeon"));
+        QCOMPARE(child<QLabel>(window, "gpuMemory_1")->text(), QStringLiteral("1.0 GiB / 8.0 GiB"));
+        QCOMPARE(child<QProgressBar>(window, "gpuMemoryProgress_1")->value(), 125);
+        QCOMPARE(child<QLabel>(window, "gpuTemperature_1")->text(), QStringLiteral("48 °C"));
+        s.gpu.devices.clear();
+        s.gpu.status = MetricStatus::unavailable("no GPU found");
+        window.updateSnapshot(s);
+        QVERIFY(!window.findChild<QLabel *>(QStringLiteral("gpuTitle_0")));
+        QCOMPARE(child<QLabel>(window, "gpuStatus")->text(), QStringLiteral("no GPU found"));
+    }
+
+    void fpsSourceOffHidesFpsAndTheGamingSection()
+    {
+        DashboardWindow window("/home/alice");
+        SystemMetricsSnapshot s = populatedSnapshot();
+        s.uptime.status = MetricStatus::okStatus();
+        s.uptime.seconds = 3600.0;
+        s.fps.condition = FpsCondition::Disabled;
+        s.fps.status = MetricStatus::unavailable("the FPS source is turned off");
+        window.updateSnapshot(s);
+        // OFF: no row, no "Disabled" placeholder, no empty Gaming section.
+        QVERIFY(child<QWidget>(window, "fpsRow")->isHidden());
+        QVERIFY(child<QWidget>(window, "gamingHeader")->isHidden());
+        // Other built-in metrics are untouched.
+        QVERIFY(!child<QWidget>(window, "uptimeRow")->isHidden());
+        QCOMPARE(child<QLabel>(window, "uptimeValue")->text(), QStringLiteral("1h 0m"));
+        QCOMPARE(child<QLabel>(window, "cpuValue")->text(), QStringLiteral("23.4 %"));
+
+        // A source again (OFF → MangoHud): FPS is back, every condition with
+        // its own status.
+        const struct {
+            FpsCondition condition;
+            MetricStatus status;
+        } visible[] = {
+            {FpsCondition::Missing, MetricStatus::unavailable("MangoHud is not installed")},
+            {FpsCondition::NotConfigured, MetricStatus::unavailable("MangoHud has no output_folder")},
+            {FpsCondition::Inactive, MetricStatus::unavailable("no game is logging with MangoHud now")},
+            {FpsCondition::Stale, MetricStatus::unavailable("the MangoHud log has not been written for 12 s")},
+            {FpsCondition::Unsupported, MetricStatus::error("the MangoHud log has no frame-metrics header")},
+        };
+        for (const auto &c : visible) {
+            s.fps.condition = c.condition;
+            s.fps.status = c.status;
+            window.updateSnapshot(s);
+            QVERIFY(!child<QWidget>(window, "fpsRow")->isHidden());
+            QVERIFY(!child<QWidget>(window, "gamingHeader")->isHidden());
+            QCOMPARE(child<QLabel>(window, "fpsValue")->text(), QStringLiteral("N/A"));
+            QCOMPARE(child<QLabel>(window, "fpsDetail")->text(), QString::fromStdString(c.status.message));
+        }
+        s.fps.condition = FpsCondition::Measured;
+        s.fps.status = MetricStatus::okStatus();
+        s.fps.fps = 143.6;
+        window.updateSnapshot(s);
+        QCOMPARE(child<QLabel>(window, "fpsValue")->text(), QStringLiteral("144 FPS"));
+
+        // MangoHud → OFF: hidden with the next snapshot.
+        s.fps = {};
+        s.fps.condition = FpsCondition::Disabled;
+        window.updateSnapshot(s);
+        QVERIFY(child<QWidget>(window, "fpsRow")->isHidden());
+        QVERIFY(child<QWidget>(window, "gamingHeader")->isHidden());
+    }
+
     void receivesSharedSamplerSnapshot()
     {
         DashboardWindow window("/home/alice");

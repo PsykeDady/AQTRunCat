@@ -42,11 +42,26 @@ echo "\$@" >> "$work/sudo-calls"
 exit 1
 EOF
 chmod +x "$work/fakebin/sudo"
-# Plasma tools: the installer must never restart plasmashell or edit panels.
+# Plasma tools: the installer never edits panels, and restarts plasmashell
+# only when asked to (opt-in, after a widget update). Every run below looks
+# for a fake plasmashell (AQTRUNCAT_PLASMASHELL_NAME) and finds these fakes
+# first in PATH: the real Plasma session is never seen nor touched.
 for tool in plasmashell kquitapp6 kstart kpackagetool6 qdbus6 qdbus; do
     printf '#!/bin/sh\necho "%s $*" >> "%s/plasma-calls"\nexit 0\n' "$tool" "$work" > "$work/fakebin/$tool"
     chmod +x "$work/fakebin/$tool"
 done
+# systemctl: is-active fails with "plasma-no-unit"; restart kills the fake
+# plasmashell (and does not start it) with "plasma-dies".
+cat > "$work/fakebin/systemctl" <<EOF
+#!/bin/sh
+echo "systemctl \$*" >> "$work/systemctl-calls"
+case "\$*" in
+    *is-active*) [ -e "$work/plasma-no-unit" ] && exit 3 ;;
+    *restart*) [ -e "$work/plasma-dies" ] && kill "\$(cat "$work/fakeplasma.pid")" ;;
+esac
+exit 0
+EOF
+chmod +x "$work/fakebin/systemctl"
 
 # Fake Qt 6 QML trees: KDE Plasma 6 (every module the widget imports), none.
 plasma_modules="org/kde/plasma/plasmoid org/kde/plasma/core org/kde/plasma/components org/kde/plasma/extras org/kde/plasma/workspace/dbus org/kde/kirigami org/kde/kcmutils QtQuick/Dialogs"
@@ -64,7 +79,7 @@ mkdir -p "$work/qml-none"
 
 # Run the installer with a clean, temporary user environment.
 run() {
-    env -i PATH="$work/fakebin:/usr/local/bin:/usr/bin:/bin" HOME="$work/home" TMPDIR="$work" \
+    env -i PATH="$work/fakebin:/usr/local/bin:/usr/bin:/bin" HOME="$work/home" TMPDIR="$work" AQTRUNCAT_PLASMASHELL_NAME=fakeplasmashell AQTRUNCAT_PLASMA_TIMEOUT=3 \
         LANG=C.UTF-8 AQTRUNCAT_QML_DIRS="${QML_DIRS:-$work/qml-none}" ${XDG_TEST_ENV:+$XDG_TEST_ENV} bash "$installer" "$@"
 }
 out=""
@@ -77,7 +92,8 @@ capture --help
 check "--help exits 0" test "$rc" -eq 0
 for needle in "--local" "-A, --autostart=true" "-na, --autostart=false" "-U, --uninstall" \
     "ON by default" "Never removed" "Ubuntu 24.04" "sudo is used only" "Examples:" "--no-build" \
-    "aqtruncat/install-build" "--plasmoid" "--no-plasmoid" "Add or Manage Widgets" "plasmashell is never restarted"; do
+    "aqtruncat/install-build" "--plasmoid" "--no-plasmoid" "Add or Manage Widgets" "--restart-plasma" "--no-restart-plasma" \
+    "systemctl --user restart plasma-plasmashell" "systemctl --user start plasma-plasmashell"; do
     check "--help mentions $needle" grep -qF -- "$needle" <<< "$out"
 done
 help_text=$out
@@ -87,7 +103,8 @@ check "-h equals --help" test "$out" = "$help_text"
 for bad in "--bogus" "-x" "--autostart=maybe" "-A -na" "--autostart=true --autostart=false" \
     "-na --autostart=true" "-U -A" "--uninstall -na" "--local --prefix=/opt/x" "--prefix=relative" \
     "--prefix=/" "-U --build-dir=/tmp" "-U --no-build" "--plasmoid --no-plasmoid" "--no-plasmoid --plasmoid" \
-    "-U --plasmoid" "--uninstall --no-plasmoid"; do
+    "-U --plasmoid" "--uninstall --no-plasmoid" "--restart-plasma --no-restart-plasma" "-U --restart-plasma" \
+    "--restart-plasma --no-plasmoid"; do
     # shellcheck disable=SC2086 # split the option list on purpose
     capture $bad
     check "\"$bad\" is a usage error (2)" test "$rc" -eq 2
@@ -241,12 +258,12 @@ check "without a terminal the new version is built" grep -qF "building the new v
 check "building anew does not reuse the old build" grep -qF "Building the new version instead of reusing" <<< "$out"
 check "the old build is never installed without asking" test ! -e "$work/home/.local/bin/aqtruncat"
 if command -v script > /dev/null; then
-    tty_out=$(printf 'y\n' | env -i PATH="$work/fakebin:/usr/local/bin:/usr/bin:/bin" HOME="$work/home" TMPDIR="$work" LANG=C.UTF-8 \
+    tty_out=$(printf 'y\n' | env -i PATH="$work/fakebin:/usr/local/bin:/usr/bin:/bin" HOME="$work/home" TMPDIR="$work" AQTRUNCAT_PLASMASHELL_NAME=fakeplasmashell AQTRUNCAT_PLASMA_TIMEOUT=3 LANG=C.UTF-8 \
         script -qec "bash '$installer' --local --no-build --build-dir='$old_build' -na" /dev/null 2>&1)
     check "the question names both versions" grep -qF "Install the previous version 0.9.0 (y) or build the new version $source_version (N)? [y/N]" <<< "$tty_out"
     check "y reuses the previous build without compiling" grep -qF "nothing is compiled" <<< "$tty_out"
     check "y skips the up-to-date check" lacks "is not up to date" "$tty_out"
-    tty_out=$(printf '\n' | env -i PATH="$work/fakebin:/usr/local/bin:/usr/bin:/bin" HOME="$work/home" TMPDIR="$work" LANG=C.UTF-8 \
+    tty_out=$(printf '\n' | env -i PATH="$work/fakebin:/usr/local/bin:/usr/bin:/bin" HOME="$work/home" TMPDIR="$work" AQTRUNCAT_PLASMASHELL_NAME=fakeplasmashell AQTRUNCAT_PLASMA_TIMEOUT=3 LANG=C.UTF-8 \
         script -qec "bash '$installer' --local --no-build --build-dir='$old_build' -na" /dev/null 2>&1)
     check "Enter (N) builds the new version" grep -qF "Building the new version instead of reusing" <<< "$tty_out"
 fi
@@ -405,7 +422,7 @@ check "the widget version is the AQTRunCat version" grep -qF "\"Version\": \"$so
 check "--local: no XDG_DATA_DIRS warning" lacks "XDG_DATA_DIRS" "$out"
 
 QML_DIRS=$work/qml-plasma6 capture --local --build-dir="$build_dir" -na
-check "updating the widget tells when Plasma uses it" grep -qF "keeps the previous version until Plasma starts again" <<< "$out"
+check "updating the widget, no Plasma running: nothing to reload" lacks "Restart Plasma" "$out"
 
 QML_DIRS=$work/qml-plasma6 capture --local --build-dir="$build_dir" -na --no-plasmoid
 check "--no-plasmoid update succeeds" test "$rc" -eq 0
@@ -428,8 +445,95 @@ check "uninstall reports the widget left on panels" grep -qF "shows as unavailab
 check "an unrelated widget is kept" test -f "$other_widget/metadata.json"
 check "the Plasma layout is never edited" cmp -s "$layout" "$work/layout-before"
 check "plasmashell and Plasma tools were never called" test ! -e "$work/plasma-calls"
+check "systemctl was never called" test ! -e "$work/systemctl-calls"
 check "user runners kept with the widget" test -f "$home/.local/share/AQTRunCat/runners/mine/frame-0.png"
 rm -rf "$other_widget" "$layout"
+
+# --- Plasma restart after a widget update (opt-in) --------------------------
+
+# A fake plasmashell of this user: a copy of sleep, so that its process name
+# is the one the installer is told to look for.
+mkdir -p "$work/fakeplasma"
+cp -- "$(command -v sleep)" "$work/fakeplasma/fakeplasmashell"
+start_fake_plasma() {
+    "$work/fakeplasma/fakeplasmashell" 600 &
+    started+=("$!")
+    echo "$!" > "$work/fakeplasma.pid"
+    local i
+    for i in $(seq 50); do
+        [[ $(cat "/proc/$!/comm" 2> /dev/null) == fakeplasmashell ]] && return 0
+        sleep 0.1
+    done
+}
+# The installer on a pseudo-terminal fed with INPUT.
+plasma_tty() { # plasma_tty INPUT [OPTION...]
+    local input=$1
+    shift
+    out=$(printf '%s' "$input" | env -i PATH="$work/fakebin:/usr/local/bin:/usr/bin:/bin" HOME="$work/home" TMPDIR="$work" \
+        AQTRUNCAT_PLASMASHELL_NAME=fakeplasmashell AQTRUNCAT_PLASMA_TIMEOUT=3 LANG=C.UTF-8 AQTRUNCAT_QML_DIRS="$work/qml-plasma6" \
+        script -qec "bash '$installer' --local --build-dir='$build_dir' -na $*" /dev/null 2>&1)
+    rc=$?
+}
+restart_call="systemctl --user restart plasma-plasmashell.service"
+
+QML_DIRS=$work/qml-plasma6 capture --dry-run --local
+check "--dry-run: Plasma restart asked by default" grep -qF "  restart Plasma    = ask (default" <<< "$out"
+QML_DIRS=$work/qml-plasma6 capture --dry-run --local --restart-plasma
+check "--dry-run: --restart-plasma" grep -qF "  restart Plasma    = true (--restart-plasma" <<< "$out"
+
+QML_DIRS=$work/qml-plasma6 capture --local --build-dir="$build_dir" -na
+check "first widget install: nothing to reload" lacks "Restart Plasma" "$out"
+start_fake_plasma
+QML_DIRS=$work/qml-plasma6 capture --local --build-dir="$build_dir" -na
+check "update without a terminal succeeds" test "$rc" -eq 0
+check "without a terminal Plasma is not restarted" test ! -e "$work/systemctl-calls"
+check "without a terminal there is no Plasma question" lacks "Restart Plasma now" "$out"
+check "the old widget version is explained" grep -qF "keeps the previous version until Plasma starts again" <<< "$out"
+check "the restart command is suggested" grep -qF "systemctl --user restart plasma-plasmashell" <<< "$out"
+if command -v script > /dev/null; then
+    plasma_tty $'\n'
+    check "on a terminal the user is asked" grep -qF "Restart Plasma now so that the widget already shown uses the new version?" <<< "$out"
+    check "the question says how long Plasma disappears" grep -qF "up to about a minute" <<< "$out"
+    check "Enter (N): Plasma is not restarted" test ! -e "$work/systemctl-calls"
+    plasma_tty $'y\n'
+    check "y: plasmashell restarted through its systemd unit" grep -qxF "$restart_call" "$work/systemctl-calls"
+    check "y: the user session is used" grep -qF "systemctl --user --quiet is-active plasma-plasmashell.service" "$work/systemctl-calls"
+    check "y: Plasma is back" grep -qF "Plasma is running again" <<< "$out"
+    check "y: the installation succeeded" test "$rc" -eq 0
+    rm -f "$work/systemctl-calls"
+    plasma_tty "" --no-restart-plasma
+    check "--no-restart-plasma: no question" lacks "Restart Plasma now" "$out"
+    check "--no-restart-plasma: Plasma is not restarted" test ! -e "$work/systemctl-calls"
+fi
+QML_DIRS=$work/qml-plasma6 capture --local --build-dir="$build_dir" -na --restart-plasma
+check "--restart-plasma: restarted without a terminal" grep -qxF "$restart_call" "$work/systemctl-calls"
+check "--restart-plasma: no question" lacks "Restart Plasma now" "$out"
+check "--restart-plasma: no second start when Plasma is back" test "$(grep -cxF 'systemctl --user start plasma-plasmashell.service' "$work/systemctl-calls")" -eq 0
+rm -f "$work/systemctl-calls"
+
+# Plasma not started by systemd: kquitapp6, then kstart.
+touch "$work/plasma-no-unit"
+QML_DIRS=$work/qml-plasma6 capture --local --build-dir="$build_dir" -na --restart-plasma
+check "without the systemd unit: kquitapp6 then kstart" test "$(cat "$work/plasma-calls" 2> /dev/null)" = $'kquitapp6 plasmashell\nkstart plasmashell'
+check "without the systemd unit: no restart through systemd" lacks "restart" "$(cat "$work/systemctl-calls")"
+rm -f "$work/plasma-no-unit" "$work/plasma-calls" "$work/systemctl-calls"
+
+# Plasma does not come back: one more start, then the commands to run.
+touch "$work/plasma-dies"
+QML_DIRS=$work/qml-plasma6 capture --local --build-dir="$build_dir" -na --restart-plasma
+check "Plasma down: the installation still succeeds" test "$rc" -eq 0
+check "Plasma down: reset-failed first" grep -qxF "systemctl --user reset-failed plasma-plasmashell.service" "$work/systemctl-calls"
+check "Plasma down: start once more" grep -qxF "systemctl --user start plasma-plasmashell.service" "$work/systemctl-calls"
+check "Plasma down: reported after the timeout" grep -qF "Plasma did not come back within 3 s" <<< "$out"
+check "Plasma down: how to start it again" grep -qF "systemctl --user start plasma-plasmashell" <<< "$out"
+rm -f "$work/plasma-dies" "$work/systemctl-calls"
+
+# No Plasma of this user running (the fake one was stopped above): nothing to do.
+QML_DIRS=$work/qml-plasma6 capture --local --build-dir="$build_dir" -na --restart-plasma
+check "no Plasma running: nothing restarted" test ! -e "$work/systemctl-calls"
+capture --local -U
+check "uninstall after the Plasma restart cases" test "$rc" -eq 0
+rm -f "$work/plasma-calls"
 
 QML_DIRS=$work/qml-plasma6 capture --prefix="$prefix" --build-dir="$build_dir" -na
 check "system install with the widget" test -f "$prefix/share/plasma/plasmoids/io.github.psykedady.aqtruncat/metadata.json"
@@ -595,7 +699,7 @@ chmod +x "$work/sudobin/sudo"
 # The installer with that sudo, on a pseudo-terminal fed with INPUT (or,
 # without INPUT, with stdin from /dev/null: no terminal).
 sudo_install() { # sudo_install [INPUT]
-    local command="env -i PATH='$work/sudobin:/usr/local/bin:/usr/bin:/bin' HOME='$work/home' TMPDIR='$work' LANG=C.UTF-8 bash '$installer' --prefix='$locked' --build-dir='$build_dir' -na"
+    local command="env -i PATH='$work/sudobin:/usr/local/bin:/usr/bin:/bin' HOME='$work/home' TMPDIR='$work' AQTRUNCAT_PLASMASHELL_NAME=fakeplasmashell AQTRUNCAT_PLASMA_TIMEOUT=3 LANG=C.UTF-8 bash '$installer' --prefix='$locked' --build-dir='$build_dir' -na"
     if (($#)); then
         out=$(printf '%s' "$1" | script -qec "$command" /dev/null 2>&1); rc=$?
     else
@@ -626,7 +730,7 @@ check "y: asked exactly once" test "$(grep -c 'Retry installing the build' <<< "
 check "y: the binary is installed" test -x "$locked/bin/aqtruncat"
 check "y: nothing was rebuilt" test "$(grep -c 'Configuring and building' <<< "$out")" -eq 0
 echo 0 > "$work/sudo-v-fails"
-env -i PATH="$work/sudobin:/usr/local/bin:/usr/bin:/bin" HOME="$work/home" TMPDIR="$work" LANG=C.UTF-8 \
+env -i PATH="$work/sudobin:/usr/local/bin:/usr/bin:/bin" HOME="$work/home" TMPDIR="$work" AQTRUNCAT_PLASMASHELL_NAME=fakeplasmashell AQTRUNCAT_PLASMA_TIMEOUT=3 LANG=C.UTF-8 \
     bash "$installer" --prefix="$locked" -U < /dev/null > /dev/null 2>&1
 check "cleanup uninstall through sudo" test ! -e "$locked/bin/aqtruncat"
 

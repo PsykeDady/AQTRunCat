@@ -1,6 +1,7 @@
 #include "metricscommand.h"
 
 #include "metrics/metricsformat.h"
+#include "metrics/uptime.h"
 
 #include <QStringList>
 #include <QTime>
@@ -129,6 +130,54 @@ QString formatMetricsReport(const SystemMetricsSnapshot &s)
     } else {
         out += notAvailable(s.diskIo.status);
     }
+
+    // F5. Update counts need the backend's checks: "aqtruncatctl metrics".
+    out += QStringLiteral("Uptime\n");
+    if (s.uptime.status.ok() && s.uptime.seconds)
+        out += row("Since boot:", q(formatDuration(*s.uptime.seconds)));
+    else
+        out += notAvailable(s.uptime.status);
+
+    if (s.gpu.devices.empty()) {
+        out += QStringLiteral("GPU\n");
+        out += notAvailable(s.gpu.status);
+    }
+    for (const GpuDevice &gpu : s.gpu.devices) {
+        out += QStringLiteral("GPU %1 (%2)\n").arg(q(gpu.id), q(gpu.model));
+        auto field = [&out](const char *label, const MetricStatus &status, const QString &value) {
+            out += status.ok() ? row(label, value)
+                               : QStringLiteral("  %1 %2\n").arg(QLatin1String(label), -11)
+                                     .arg(QStringLiteral("%1 (%2)").arg(status.state == MetricState::Pending ? QStringLiteral("waiting")
+                                                                                                             : QStringLiteral("n/a"),
+                                                                       q(status.message)));
+        };
+        const bool activity = gpu.utilizationMethod == "rc6-residency";
+        field(activity ? "Activity:" : "Utilization:", gpu.utilizationStatus,
+              gpu.utilizationPercent ? q(formatPercent(*gpu.utilizationPercent)) : QString());
+        field("Memory:", gpu.memoryStatus,
+              gpu.memoryUsedBytes && gpu.memoryTotalBytes
+                  ? QStringLiteral("%1 / %2").arg(q(formatBytes(*gpu.memoryUsedBytes)), q(formatBytes(*gpu.memoryTotalBytes)))
+                  : QString());
+        field("Temp:", gpu.temperatureStatus, gpu.temperatureCelsius ? q(formatCelsius(*gpu.temperatureCelsius)) : QString());
+    }
+
+    out += QStringLiteral("FPS\n");
+    if (s.fps.status.ok() && s.fps.fps)
+        out += row("MangoHud:", q(formatFps(*s.fps.fps)) + (s.fps.application.empty() ? QString()
+                                                                                      : QStringLiteral("  (%1)").arg(q(s.fps.application))));
+    else
+        out += notAvailable(s.fps.status);
+
+    out += QStringLiteral("System\n");
+    if (s.kernel.status.ok() && s.kernel.info)
+        out += row("Kernel:", q(s.kernel.info->sysname + " " + s.kernel.info->release + " (" + s.kernel.info->machine + ")"));
+    else
+        out += notAvailable(s.kernel.status);
+    if (s.distribution.status.ok() && s.distribution.info)
+        out += row("Distro:", q(s.distribution.info->prettyName.empty() ? s.distribution.info->id
+                                                                         : s.distribution.info->prettyName));
+    else
+        out += notAvailable(s.distribution.status);
     return out;
 }
 

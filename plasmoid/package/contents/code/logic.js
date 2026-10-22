@@ -151,11 +151,20 @@ function metricRow(metric) {
     return row;
 }
 
+// FPS with its source turned OFF (data.condition "disabled") is the user's
+// choice not to see it, not an unavailable value: the metric is left out.
+// Every other FPS condition is shown with its status.
+function hiddenMetric(metric) {
+    return !!metric && metric.id === "fps" && !!metric.data && metric.data.condition === "disabled";
+}
+
 // Rows grouped by category (built-in, integrations, custom), API order kept
-// inside each group; hidden categories are left out.
+// inside each group; hidden categories and hidden metrics are left out.
 function metricRows(metrics, shown) {
     var groups = { builtin: [], integration: [], custom: [] };
     for (var i = 0; i < metrics.length; ++i) {
+        if (hiddenMetric(metrics[i]))
+            continue;
         var row = metricRow(metrics[i]);
         groups[row.category].push(row);
     }
@@ -227,6 +236,51 @@ function applyDelta(metrics, changes) {
         result.push(byId[order[i]]);
     }
     return result;
+}
+
+// F5 (schema 2) shared settings: the choices of the Metrics Bar GPU, from
+// the backend's "gpu:<device>" metrics. "auto" first; a chosen device that
+// is not present now stays listed.
+function gpuChoices(metrics, current) {
+    var choices = [{ text: "Automatic (discrete GPU first)", value: "auto" }];
+    var list = Array.isArray(metrics) ? metrics : [];
+    for (var i = 0; i < list.length; ++i) {
+        var metric = list[i] || {};
+        var id = typeof metric.id === "string" ? metric.id : "";
+        if (metric.category !== "builtin" || id.indexOf("gpu:") !== 0)
+            continue;
+        var device = id.substring(4);
+        choices.push({ text: (metric.title || device) + " (" + device + ")", value: device });
+    }
+    if (typeof current === "string" && current.length > 0) {
+        var known = false;
+        for (var j = 0; j < choices.length; ++j)
+            known = known || choices[j].value === current;
+        if (!known)
+            choices.push({ text: current + " (not present)", value: current });
+    }
+    return choices;
+}
+
+// Update-check intervals the backend accepts (minutes; 0 = off).
+function updatesIntervalChoices() {
+    var minutes = [0, 15, 30, 60, 180, 360, 720, 1440];
+    var choices = [];
+    for (var i = 0; i < minutes.length; ++i) {
+        var m = minutes[i];
+        var text = m === 0 ? "Off" : m < 60 ? "Every " + m + " minutes" : m === 60 ? "Every hour"
+                 : m === 1440 ? "Once a day" : "Every " + (m / 60) + " hours";
+        choices.push({ text: text, value: m });
+    }
+    return choices;
+}
+
+function indexOfValue(choices, value) {
+    for (var i = 0; i < choices.length; ++i) {
+        if (choices[i].value === value)
+            return i;
+    }
+    return -1;
 }
 
 function hasCapability(info, name) {

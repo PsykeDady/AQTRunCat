@@ -17,6 +17,7 @@
 #include <QDBusMessage>
 #include <QDir>
 #include <QFile>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -187,6 +188,9 @@ private slots:
         m_metricsDir = m_root.filePath(QStringLiteral("data/AQTRunCat/metrics"));
         m_settingsFile = m_root.filePath(QStringLiteral("config/AQTRunCat/AQTRunCat.ini"));
         QDir().mkpath(m_metricsDir);
+        // F5: no real package-manager or Flatpak checks from these tests
+        // (tst_updatesservice covers them with fake tools).
+        writeFile(m_settingsFile, "[updates]\nintervalMinutes=0\n");
         QVERIFY(!backendRegistered());
     }
 
@@ -562,6 +566,83 @@ private slots:
     // F4.2: the runner catalogue for frontends that cannot load runners
     // themselves (the Plasmoid): files, playback order, colour mode and the
     // same fallback as the Qt frontend for an unusable stored runner.
+    void builtInMetricsOfF5()
+    {
+        startBackend();
+        QTest::qWait(1500); // a sample with values
+        Run r = ctl({QStringLiteral("--json"), QStringLiteral("metrics"), QStringLiteral("uptime"), QStringLiteral("fps"),
+                     QStringLiteral("updates.packages"), QStringLiteral("updates.flatpak"), QStringLiteral("kernel"),
+                     QStringLiteral("distribution")});
+        QCOMPARE(r.exitCode, 0);
+        const QJsonArray metrics = QJsonDocument::fromJson(r.out).array();
+        QCOMPARE(metrics.size(), 6);
+        QHash<QString, QJsonObject> byId;
+        for (const QJsonValue &value : metrics) {
+            const QJsonObject metric = value.toObject();
+            QCOMPARE(metric.value(QStringLiteral("category")).toString(), QStringLiteral("builtin"));
+            byId.insert(metric.value(QStringLiteral("id")).toString(), metric);
+        }
+        QCOMPARE(byId.value(QStringLiteral("uptime")).value(QStringLiteral("state")).toString(), QStringLiteral("ok"));
+        QVERIFY(byId.value(QStringLiteral("uptime")).value(QStringLiteral("value")).toDouble() > 0);
+        QCOMPARE(byId.value(QStringLiteral("kernel")).value(QStringLiteral("state")).toString(), QStringLiteral("ok"));
+        QVERIFY(byId.value(QStringLiteral("kernel")).value(QStringLiteral("value")).isNull());
+        // The isolated HOME has no MangoHud configuration.
+        const QString fpsCondition = byId.value(QStringLiteral("fps")).value(QStringLiteral("data")).toObject()
+                                         .value(QStringLiteral("condition")).toString();
+        QVERIFY2(fpsCondition == QLatin1String("missing") || fpsCondition == QLatin1String("not-configured"), qPrintable(fpsCondition));
+        for (const char *id : {"updates.packages", "updates.flatpak"}) {
+            const QJsonObject updates = byId.value(QLatin1String(id));
+            QCOMPARE(updates.value(QStringLiteral("state")).toString(), QStringLiteral("unavailable"));
+            QCOMPARE(updates.value(QStringLiteral("message")).toString(), QStringLiteral("update checks are turned off"));
+            QVERIFY(updates.value(QStringLiteral("value")).isNull());
+        }
+        // Every GPU is its own metric, with a stable id.
+        r = ctl({QStringLiteral("--json"), QStringLiteral("metrics")});
+        for (const QJsonValue &value : QJsonDocument::fromJson(r.out).array()) {
+            const QString id = value.toObject().value(QStringLiteral("id")).toString();
+            if (id.startsWith(QLatin1String("gpu:")))
+                QCOMPARE(value.toObject().value(QStringLiteral("data")).toObject().value(QStringLiteral("device")).toString(), id.mid(4));
+        }
+        QCOMPARE(QJsonDocument::fromJson(ctl({QStringLiteral("--json"), QStringLiteral("status")}).out).object()
+                     .value(QStringLiteral("info")).toObject().value(QStringLiteral("schema")).toInt(), 2);
+
+        // The F5 settings through the API, validated.
+        QCOMPARE(ctl({QStringLiteral("settings"), QStringLiteral("set"), QStringLiteral("fpsSource"), QStringLiteral("off")}).exitCode, 0);
+        QCOMPARE(ctl({QStringLiteral("settings"), QStringLiteral("set"), QStringLiteral("gpuDevice"), QStringLiteral("0000:03:00.0")}).exitCode, 0);
+        QCOMPARE(ctl({QStringLiteral("settings"), QStringLiteral("set"), QStringLiteral("updatesRemoteRefresh"), QStringLiteral("true")}).exitCode, 0);
+        r = ctl({QStringLiteral("settings"), QStringLiteral("set"), QStringLiteral("updatesIntervalMinutes"), QStringLiteral("7")});
+        QCOMPARE(r.exitCode, 4);
+        QVERIFY(r.err.contains("updatesIntervalMinutes must be one of"));
+        QCOMPARE(ctl({QStringLiteral("settings"), QStringLiteral("set"), QStringLiteral("gpuDevice"), QStringLiteral("../x")}).exitCode, 4);
+        QCOMPARE(ctl({QStringLiteral("settings"), QStringLiteral("set"), QStringLiteral("fpsSource"), QStringLiteral("inject")}).exitCode, 4);
+        QCOMPARE(ctl({QStringLiteral("settings"), QStringLiteral("set"), QStringLiteral("updatesRemoteRefresh"), QStringLiteral("yes")}).exitCode, 4);
+        const QJsonObject settings = QJsonDocument::fromJson(ctl({QStringLiteral("settings"), QStringLiteral("--json")}).out).object();
+        QCOMPARE(settings.value(QStringLiteral("fpsSource")).toString(), QStringLiteral("off"));
+        QCOMPARE(settings.value(QStringLiteral("gpuDevice")).toString(), QStringLiteral("0000:03:00.0"));
+        QCOMPARE(settings.value(QStringLiteral("updatesIntervalMinutes")).toInt(), 0);
+        QVERIFY(settings.value(QStringLiteral("updatesRemoteRefresh")).toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(QJsonDocument::fromJson(ctl({QStringLiteral("--json"), QStringLiteral("metrics"), QStringLiteral("fps")}).out)
+                                     .array().at(0).toObject().value(QStringLiteral("data")).toObject()
+                                     .value(QStringLiteral("condition")).toString() == QLatin1String("disabled"),
+                                 5000);
+        // A source change is published at once, not with the next sample
+        // (frontends hide FPS on "disabled"); the API keeps the metric.
+        const auto fpsConditionNow = [] {
+            const QJsonArray fps = QJsonDocument::fromJson(ctl({QStringLiteral("--json"), QStringLiteral("metrics"), QStringLiteral("fps")}).out).array();
+            return fps.size() == 1 ? fps.at(0).toObject().value(QStringLiteral("data")).toObject().value(QStringLiteral("condition")).toString()
+                                   : QStringLiteral("<no fps metric>");
+        };
+        QCOMPARE(ctl({QStringLiteral("settings"), QStringLiteral("set"), QStringLiteral("fpsSource"), QStringLiteral("mangohud")}).exitCode, 0);
+        const QString on = fpsConditionNow();
+        QVERIFY2(on == QLatin1String("missing") || on == QLatin1String("not-configured"), qPrintable(on));
+        QCOMPARE(ctl({QStringLiteral("settings"), QStringLiteral("set"), QStringLiteral("fpsSource"), QStringLiteral("off")}).exitCode, 0);
+        QCOMPARE(fpsConditionNow(), QStringLiteral("disabled"));
+        // Back to the defaults the other cases expect.
+        ctl({QStringLiteral("settings"), QStringLiteral("set"), QStringLiteral("fpsSource"), QStringLiteral("mangohud")});
+        ctl({QStringLiteral("settings"), QStringLiteral("set"), QStringLiteral("gpuDevice"), QStringLiteral("auto")});
+        ctl({QStringLiteral("settings"), QStringLiteral("set"), QStringLiteral("updatesRemoteRefresh"), QStringLiteral("false")});
+    }
+
     void runnerCatalogForOtherFrontends()
     {
         const QDir runners(m_root.filePath(QStringLiteral("data/AQTRunCat/runners")));

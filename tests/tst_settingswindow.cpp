@@ -172,7 +172,7 @@ private slots:
         QCOMPARE(row(0), QStringLiteral("cpu"));
         QCOMPARE(row(1), QStringLiteral("custom:/gone/old.json"));
         QCOMPARE(list->topLevelItem(1)->text(1), QStringLiteral("Custom — not currently available"));
-        QCOMPARE(list->topLevelItemCount(), 2 + 8);
+        QCOMPARE(list->topLevelItemCount(), 2 + 8 + 7); // + the seven F5 entries
         QVERIFY(child<QLabel>(window, "metricsBarCount")->text().startsWith(QStringLiteral("2 of 3 metrics")));
 
         enabled->click();
@@ -242,6 +242,46 @@ private slots:
         QTRY_COMPARE(enabledRows(), list->topLevelItemCount());
     }
 
+    void builtInMetricsSettingsAreShared()
+    {
+        QTemporaryDir temporary;
+        const QString file = temporary.filePath(QStringLiteral("settings.ini"));
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), file);
+        settings.setGpuDevice(QStringLiteral("0000:09:00.0")); // e.g. an eGPU unplugged now
+        SettingsWindow window(&settings, {{QStringLiteral("cat"), QStringLiteral("Cat"), aqtruncat::RunnerSource::Bundled}});
+        auto *gpu = child<QComboBox>(window, "gpuDevice");
+        auto *fps = child<QComboBox>(window, "fpsSource");
+        auto *interval = child<QComboBox>(window, "updatesInterval");
+        auto *remote = child<QCheckBox>(window, "updatesRemote");
+        QCOMPARE(gpu->currentData().toString(), QStringLiteral("0000:09:00.0"));
+        QVERIFY(gpu->currentText().contains(QLatin1String("not present")));
+        QCOMPARE(fps->currentData().toString(), QStringLiteral("mangohud"));
+        QCOMPARE(interval->currentData().toInt(), 60);
+        QVERIFY(!remote->isChecked());
+
+        aqtruncat::metrics::GpuDevice intel;
+        intel.id = "0000:00:02.0";
+        intel.model = "Intel Iris Xe";
+        window.setAvailableGpus({intel});
+        QCOMPARE(gpu->count(), 3); // auto, Intel, the absent choice
+        gpu->setCurrentIndex(gpu->findData(QStringLiteral("0000:00:02.0")));
+        QCOMPARE(settings.gpuDevice(), QStringLiteral("0000:00:02.0"));
+        QCOMPARE(gpu->count(), 2);
+        fps->setCurrentIndex(fps->findData(QStringLiteral("off")));
+        QCOMPARE(settings.fpsSource(), QStringLiteral("off"));
+        interval->setCurrentIndex(interval->findData(0));
+        QCOMPARE(settings.updatesIntervalMinutes(), 0);
+        QVERIFY(!remote->isEnabled()); // nothing to refresh when checks are off
+
+        // A change from another client (CLI, Plasmoid) shows up here.
+        aqtruncat::AppSettings other(QStringLiteral("cat"), file);
+        other.setUpdatesIntervalMinutes(180);
+        other.setUpdatesRemoteRefresh(true);
+        QVERIFY(settings.reload());
+        QCOMPARE(interval->currentData().toInt(), 180);
+        QVERIFY(remote->isEnabled() && remote->isChecked());
+    }
+
     void metricsBarListsCustomSourcesAsTheyComeAndGo()
     {
         QTemporaryDir temporary;
@@ -253,7 +293,7 @@ private slots:
         SettingsWindow window(&settings,
             {{QStringLiteral("cat"), QStringLiteral("Cat"), aqtruncat::RunnerSource::Bundled}}, &service);
         auto *list = child<QTreeWidget>(window, "metricsBarItems");
-        QCOMPARE(list->topLevelItemCount(), 9);
+        QCOMPARE(list->topLevelItemCount(), 9 + 7);
 
         auto write = [&](const QString &name, const QByteArray &bar) {
             QFile json(discovery + u'/' + name);
@@ -264,7 +304,7 @@ private slots:
         write(QStringLiteral("with.json"), "\"metricsBarValue\":\"5%\",");
         write(QStringLiteral("without.json"), "");
         service.rescan();
-        QTRY_COMPARE(list->topLevelItemCount(), 11);
+        QTRY_COMPARE(list->topLevelItemCount(), 11 + 7);
         QStringList notes;
         for (int i = 0; i < list->topLevelItemCount(); ++i)
             notes.append(list->topLevelItem(i)->text(1));

@@ -139,11 +139,16 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
     std::unique_ptr<ProviderIntegration> codexIntegration;
     std::unique_ptr<SettingsWindow> settingsWindow;
     std::vector<aqtruncat::metrics::InterfaceMetrics> latestInterfaces;
+    std::vector<aqtruncat::metrics::GpuDevice> latestGpus;
     QObject::connect(&backend, &BackendClient::systemSnapshot, &app,
                      [&](const aqtruncat::metrics::SystemMetricsSnapshot &snapshot) {
                          latestInterfaces = snapshot.network.interfaces;
-                         if (settingsWindow)
+                         if (snapshot.gpu.status.state != aqtruncat::metrics::MetricState::Pending)
+                             latestGpus = snapshot.gpu.devices;
+                         if (settingsWindow) {
                              settingsWindow->setAvailableInterfaces(latestInterfaces);
+                             settingsWindow->setAvailableGpus(latestGpus);
+                         }
                      });
     auto openSettings = [&] {
         if (!settingsWindow) {
@@ -166,6 +171,7 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
                                                               claudeIntegration.get(), codexIntegration.get());
             settingsWindow->setActiveRunner(activeRunner);
             settingsWindow->setAvailableInterfaces(latestInterfaces);
+            settingsWindow->setAvailableGpus(latestGpus);
         }
         settingsWindow->showAndRaise();
     };

@@ -1,4 +1,4 @@
-.TH AQTRUNCAT 1 "2026-10-21" "AQTRunCat 1.4.2" "User Commands"
+.TH AQTRUNCAT 1 "2026-10-22" "AQTRunCat 1.5.6" "User Commands"
 .SH NAME
 aqtruncat \- A Cute Run Cat for Linux: CPU\-driven tray runner with system metrics
 .SH SYNOPSIS
@@ -44,6 +44,13 @@ programs, or command configurations that periodically run an explicit
 executable plus argument list and consume one UTF\-8 scalar output line.
 Commands never use an implicit shell. The optional Metrics Bar shows up to
 three compact values as extra tray icons next to the runner.
+.PP
+Built\-in metrics cover CPU, memory, swap, network, storage and disk I/O, and
+also uptime, every GPU (utilization, memory, temperature where the driver
+reports them), game FPS read from the log MangoHud writes, available package
+and Flatpak updates (read\-only checks of the locally cached metadata unless a
+remote refresh is enabled; nothing is ever installed), the kernel and the
+distribution.
 .PP
 The metrics, Custom Metrics, integrations, runner speed and settings are
 provided by the backend
@@ -92,6 +99,8 @@ Uninstall a user runner. Bundled runners cannot be removed.
 .B metrics
 Print the system metrics once, or once per second with
 .BR \-\-watch .
+Update counts come from the backend:
+.BR "aqtruncatctl metrics" .
 .TP
 .B autostart enable\fR|\fBdisable\fR|\fBstatus
 Start AQTRunCat at login: the same per\-user preference as the Settings

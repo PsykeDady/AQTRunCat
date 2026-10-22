@@ -1,7 +1,7 @@
 /*
  * AQTRunCat Plasmoid (F4.2): the popup (Plasma's expanded representation),
  * or the widget itself on the desktop when it is large enough. Metrics in
- * the backend's three categories — System, Integrations, Custom Metrics —
+ * the backend's three categories — Built-in Metrics, Integrations, Custom Metrics —
  * by their "category" field only; an empty or hidden category has no
  * section. Not a copy of the Qt Dashboard: one scrollable Plasma list.
  */
@@ -107,7 +107,7 @@ PlasmaExtras.Representation {
             section.delegate: PlasmaExtras.ListSectionHeader {
                 required property string section
                 width: ListView.view.width - ListView.view.leftMargin - ListView.view.rightMargin
-                text: section === "builtin" ? "System" : section === "integration" ? "Integrations" : "Custom Metrics"
+                text: section === "builtin" ? "Built-in Metrics" : section === "integration" ? "Integrations" : "Custom Metrics"
             }
 
             delegate: MetricDelegate {

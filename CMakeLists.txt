@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(AQTRunCat
-    VERSION 1.4.2
+    VERSION 1.5.6
     DESCRIPTION "A Cute Run Cat for Linux"
     LANGUAGES CXX)
 

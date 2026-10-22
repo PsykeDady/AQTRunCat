@@ -2,8 +2,10 @@
 
 #include "customsymbol.h"
 #include "metrics/metricsformat.h"
+#include "metrics/uptime.h"
 
 #include <QCloseEvent>
+#include <QDateTime>
 #include <QFont>
 #include <QGridLayout>
 #include <QHideEvent>
@@ -165,6 +167,31 @@ DashboardWindow::DashboardWindow(std::string homePath, QWidget *parent)
     m_layout->addWidget(twoValues(tr("Read"), &m_diskRead, "diskRead",
                                   tr("Write"), &m_diskWrite, "diskWrite", this));
 
+    // F5 built-in metrics.
+    m_layout->addWidget(sectionHeader(tr("GPU"), this));
+    auto *gpus = new QWidget(this);
+    gpus->setObjectName(QStringLiteral("gpuContainer"));
+    m_gpuLayout = new QVBoxLayout(gpus);
+    m_gpuLayout->setContentsMargins(0, 0, 0, 0);
+    m_gpuLayout->setSpacing(8);
+    m_gpuStatus = label(tr("Waiting…"), gpus, "gpuStatus");
+    m_gpuLayout->addWidget(m_gpuStatus);
+    m_layout->addWidget(gpus);
+
+    m_gamingHeader = sectionHeader(tr("Gaming"), this);
+    m_gamingHeader->setObjectName(QStringLiteral("gamingHeader"));
+    m_layout->addWidget(m_gamingHeader);
+    m_fps = textRow(tr("FPS"), "fps", this);
+
+    m_layout->addWidget(sectionHeader(tr("Updates"), this));
+    m_packageUpdates = textRow(tr("Packages"), "packageUpdates", this);
+    m_flatpakUpdates = textRow(tr("Flatpak"), "flatpakUpdates", this);
+
+    m_layout->addWidget(sectionHeader(tr("System"), this));
+    m_uptime = textRow(tr("Uptime"), "uptime", this);
+    m_kernel = textRow(tr("Kernel"), "kernel", this);
+    m_distribution = textRow(tr("Distribution"), "distribution", this);
+
     auto section = [this](const QString &title, const char *name, QWidget *&header, QWidget *&container,
                           QVBoxLayout *&layout) {
         header = sectionHeader(title, this);
@@ -182,6 +209,55 @@ DashboardWindow::DashboardWindow(std::string homePath, QWidget *parent)
     section(tr("Integrations"), "integrations", m_integrationsHeader, m_integrationsContainer, m_integrationsLayout);
     section(tr("Custom Metrics"), "customMetrics", m_customHeader, m_customContainer, m_customLayout);
     m_layout->addStretch();
+}
+
+DashboardWindow::TextRow DashboardWindow::textRow(const QString &title, const char *name, QWidget *parent)
+{
+    auto *container = new QWidget(parent);
+    auto *grid = new QGridLayout(container);
+    grid->setContentsMargins(0, 0, 0, 0);
+    grid->setHorizontalSpacing(6);
+    grid->setVerticalSpacing(0);
+    TextRow row;
+    row.container = container;
+    container->setObjectName(QStringLiteral("%1Row").arg(QLatin1String(name)));
+    row.warning = new QLabel(container);
+    row.warning->setObjectName(QStringLiteral("%1Warning").arg(QLatin1String(name)));
+    const QIcon warningIcon = QIcon::fromTheme(QStringLiteral("dialog-warning"),
+                                               style()->standardIcon(QStyle::SP_MessageBoxWarning));
+    row.warning->setPixmap(warningIcon.pixmap(16, 16));
+    row.warning->setAccessibleName(tr("Warning"));
+    row.warning->hide();
+    row.value = label(QStringLiteral("N/A"), container, nullptr);
+    row.value->setObjectName(QStringLiteral("%1Value").arg(QLatin1String(name)));
+    row.value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    QFont bold = row.value->font();
+    bold.setBold(true);
+    row.value->setFont(bold);
+    row.detail = label(QString(), container, nullptr);
+    row.detail->setObjectName(QStringLiteral("%1Detail").arg(QLatin1String(name)));
+    row.detail->setWordWrap(true);
+    QFont secondary = row.detail->font();
+    secondary.setPointSizeF(secondary.pointSizeF() * 0.9);
+    row.detail->setFont(secondary);
+    row.detail->hide();
+    grid->addWidget(row.warning, 0, 0);
+    grid->addWidget(label(title, container), 0, 1);
+    grid->addWidget(row.value, 0, 2);
+    grid->addWidget(row.detail, 1, 1, 1, 2);
+    grid->setColumnStretch(1, 1);
+    m_layout->addWidget(container);
+    return row;
+}
+
+void DashboardWindow::setText(TextRow &row, const QString &value, const QString &detail, bool warning, const QString &tooltip)
+{
+    row.value->setText(value);
+    row.value->setToolTip(tooltip);
+    row.detail->setText(detail);
+    row.detail->setVisible(!detail.isEmpty());
+    row.warning->setVisible(warning);
+    row.warning->setToolTip(warning ? detail : QString());
 }
 
 QWidget *DashboardWindow::sectionHeader(const QString &title, QWidget *parent)
@@ -308,6 +384,187 @@ void DashboardWindow::updateSnapshot(const SystemMetricsSnapshot &s)
     } else {
         m_diskRead->setText(statusText(s.diskIo.status));
         m_diskWrite->setText(statusText(s.diskIo.status));
+    }
+
+    updateGpus(s.gpu);
+
+    // FPS: only a fresh MangoHud reading is a value; every other condition
+    // says why there is none, except OFF, which hides the row (and the
+    // Gaming section, FPS being its only metric).
+    const bool fpsShown = !fpsHidden(s.fps);
+    m_fps.container->setVisible(fpsShown);
+    m_gamingHeader->setVisible(fpsShown);
+    if (s.fps.status.ok() && s.fps.fps) {
+        QStringList detail{tr("MangoHud")};
+        if (!s.fps.application.empty())
+            detail << q(s.fps.application);
+        if (s.fps.frametimeMs)
+            detail << tr("%1 ms frame time").arg(*s.fps.frametimeMs, 0, 'f', 1);
+        setText(m_fps, q(formatFps(*s.fps.fps)), detail.join(QStringLiteral(" · ")));
+    } else {
+        QString detail = q(s.fps.status.message);
+        if (s.fps.condition == FpsCondition::Stale && s.fps.lastFps)
+            detail += tr(" (last reading %1)").arg(q(formatFps(*s.fps.lastFps)));
+        setText(m_fps, statusText(s.fps.status), detail, s.fps.condition == FpsCondition::Stale);
+    }
+
+    updateUpdates(m_packageUpdates, s.packageUpdates);
+    updateUpdates(m_flatpakUpdates, s.flatpakUpdates);
+
+    if (s.uptime.status.ok() && s.uptime.seconds)
+        setText(m_uptime, q(formatDuration(*s.uptime.seconds)), QString());
+    else
+        setText(m_uptime, statusText(s.uptime.status), q(s.uptime.status.message));
+    if (s.kernel.status.ok() && s.kernel.info)
+        setText(m_kernel, q(s.kernel.info->release), q(s.kernel.info->sysname + " · " + s.kernel.info->machine), false,
+                q(s.kernel.info->version));
+    else
+        setText(m_kernel, statusText(s.kernel.status), q(s.kernel.status.message));
+    if (s.distribution.status.ok() && s.distribution.info) {
+        const DistributionInfo &d = *s.distribution.info;
+        QStringList detail;
+        if (!d.versionId.empty() && d.prettyName.find(d.versionId) == std::string::npos)
+            detail << q(d.versionId);
+        if (!d.buildId.empty())
+            detail << q(d.buildId);
+        if (!d.id.empty())
+            detail << tr("ID %1").arg(q(d.id));
+        setText(m_distribution, q(d.prettyName.empty() ? d.id : d.prettyName), detail.join(QStringLiteral(" · ")), false,
+                tr("From %1").arg(q(d.source)));
+    } else {
+        setText(m_distribution, statusText(s.distribution.status), q(s.distribution.status.message));
+    }
+}
+
+void DashboardWindow::updateUpdates(TextRow &row, const UpdatesMetrics &updates)
+{
+    QStringList detail;
+    if (!updates.manager.empty() && updates.manager != "flatpak")
+        detail << q(updates.manager);
+    if (updates.manager == "flatpak" && updates.count && *updates.count > 0)
+        detail << (updates.apps == 1 ? tr("1 app") : tr("%1 apps").arg(updates.apps)) + QStringLiteral(", ")
+                      + (updates.runtimes == 1 ? tr("1 runtime") : tr("%1 runtimes").arg(updates.runtimes));
+    if (updates.ignored > 0)
+        detail << tr("%1 ignored").arg(updates.ignored);
+    const QLocale locale;
+    if (updates.lastSuccess)
+        detail << tr("checked %1").arg(locale.toString(QDateTime::fromSecsSinceEpoch(*updates.lastSuccess), QLocale::ShortFormat));
+    if (updates.metadataStale && updates.metadataTime)
+        detail << tr("package metadata from %1 is out of date")
+                      .arg(locale.toString(QDateTime::fromSecsSinceEpoch(*updates.metadataTime).date(), QLocale::ShortFormat));
+    if (updates.checking)
+        detail << tr("checking…");
+    if (!updates.note.empty())
+        detail << q(updates.note);
+    if (updates.status.ok() && updates.count) {
+        setText(row, q(formatUpdateCount(*updates.count)), detail.join(QStringLiteral(" · ")), updates.metadataStale);
+        return;
+    }
+    if (!updates.status.message.empty() && updates.status.state != MetricState::Pending)
+        detail.prepend(q(updates.status.message));
+    setText(row, updates.status.state == MetricState::Error ? tr("Error") : statusText(updates.status),
+            detail.join(QStringLiteral(" · ")), updates.status.state == MetricState::Error, q(updates.status.message));
+}
+
+void DashboardWindow::updateGpus(const GpuMetrics &gpu)
+{
+    // Cards are rebuilt only when the set of devices changes.
+    bool same = int(gpu.devices.size()) == m_gpuCards.size();
+    for (int i = 0; same && i < m_gpuCards.size(); ++i)
+        same = m_gpuCards.at(i).id == gpu.devices[std::size_t(i)].id;
+    if (!same) {
+        for (const GpuCard &card : std::as_const(m_gpuCards))
+            delete card.card;
+        m_gpuCards.clear();
+        for (std::size_t i = 0; i < gpu.devices.size(); ++i) {
+            GpuCard card;
+            card.id = gpu.devices[i].id;
+            card.card = new QWidget(this);
+            card.card->setObjectName(QStringLiteral("gpu_%1").arg(i));
+            auto *grid = new QGridLayout(card.card);
+            grid->setContentsMargins(0, 0, 0, 0);
+            grid->setVerticalSpacing(2);
+            card.title = label(QString(), card.card, nullptr);
+            card.title->setObjectName(QStringLiteral("gpuTitle_%1").arg(i));
+            card.title->setWordWrap(true);
+            card.detail = label(QString(), card.card, nullptr);
+            card.detail->setObjectName(QStringLiteral("gpuDetail_%1").arg(i));
+            QFont secondary = card.detail->font();
+            secondary.setPointSizeF(secondary.pointSizeF() * 0.9);
+            card.detail->setFont(secondary);
+            card.utilizationName = label(tr("Utilization"), card.card, nullptr);
+            card.utilization = label(QStringLiteral("N/A"), card.card, nullptr);
+            card.utilization->setObjectName(QStringLiteral("gpuUtilization_%1").arg(i));
+            card.utilizationBar = new QProgressBar(card.card);
+            card.utilizationBar->setObjectName(QStringLiteral("gpuUtilizationProgress_%1").arg(i));
+            card.utilizationBar->setTextVisible(false);
+            card.memory = label(QStringLiteral("N/A"), card.card, nullptr);
+            card.memory->setObjectName(QStringLiteral("gpuMemory_%1").arg(i));
+            card.memoryBar = new QProgressBar(card.card);
+            card.memoryBar->setObjectName(QStringLiteral("gpuMemoryProgress_%1").arg(i));
+            card.memoryBar->setTextVisible(false);
+            card.temperature = label(QStringLiteral("N/A"), card.card, nullptr);
+            card.temperature->setObjectName(QStringLiteral("gpuTemperature_%1").arg(i));
+            for (QLabel *value : {card.utilization, card.memory, card.temperature})
+                value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            grid->addWidget(card.title, 0, 0, 1, 2);
+            grid->addWidget(card.detail, 1, 0, 1, 2);
+            grid->addWidget(card.utilizationName, 2, 0);
+            grid->addWidget(card.utilization, 2, 1);
+            grid->addWidget(card.utilizationBar, 3, 0, 1, 2);
+            grid->addWidget(label(tr("Memory"), card.card, nullptr), 4, 0);
+            grid->addWidget(card.memory, 4, 1);
+            grid->addWidget(card.memoryBar, 5, 0, 1, 2);
+            grid->addWidget(label(tr("Temperature"), card.card, nullptr), 6, 0);
+            grid->addWidget(card.temperature, 6, 1);
+            m_gpuLayout->addWidget(card.card);
+            m_gpuCards.append(card);
+        }
+    }
+    m_gpuStatus->setVisible(gpu.devices.empty());
+    m_gpuStatus->setText(gpu.status.state == MetricState::Pending ? tr("Waiting…") : q(gpu.status.message));
+
+    // A value only when the field has one; otherwise its reason, no bar.
+    auto field = [](QLabel *value, QProgressBar *bar, const MetricStatus &status, const QString &text,
+                    const std::optional<double> &percent) {
+        value->setText(status.ok() ? text : statusText(status));
+        value->setToolTip(status.ok() ? QString() : q(status.message));
+        if (bar) {
+            bar->setVisible(status.ok() && percent.has_value());
+            if (status.ok() && percent)
+                setProgress(bar, percent);
+        }
+    };
+    for (int i = 0; i < m_gpuCards.size(); ++i) {
+        const GpuDevice &device = gpu.devices[std::size_t(i)];
+        GpuCard &card = m_gpuCards[i];
+        card.title->setText(q(device.model));
+        QStringList detail{q(device.id)};
+        if (!device.driver.empty())
+            detail << q(device.driver);
+        if (device.integrated)
+            detail << (*device.integrated ? tr("integrated") : tr("discrete"));
+        if (device.frequencyMHz && *device.frequencyMHz > 0)
+            detail << tr("%1 MHz").arg(qRound(*device.frequencyMHz));
+        if (device.suspended)
+            detail << tr("suspended");
+        if (device.selected && gpu.devices.size() > 1)
+            detail << tr("Metrics Bar GPU");
+        card.detail->setText(detail.join(QStringLiteral(" · ")));
+        const bool activity = device.utilizationMethod == "rc6-residency";
+        card.utilizationName->setText(activity ? tr("Activity") : tr("Utilization"));
+        card.utilizationName->setToolTip(activity ? tr("Time out of the RC6 power-saving state") : QString());
+        field(card.utilization, card.utilizationBar, device.utilizationStatus,
+              device.utilizationPercent ? percent(*device.utilizationPercent) : QString(), device.utilizationPercent);
+        std::optional<double> memoryPercent;
+        QString memoryText;
+        if (device.memoryUsedBytes && device.memoryTotalBytes && *device.memoryTotalBytes > 0) {
+            memoryPercent = 100.0 * double(*device.memoryUsedBytes) / double(*device.memoryTotalBytes);
+            memoryText = tr("%1 / %2").arg(bytes(*device.memoryUsedBytes), bytes(*device.memoryTotalBytes));
+        }
+        field(card.memory, card.memoryBar, device.memoryStatus, memoryText, memoryPercent);
+        field(card.temperature, nullptr, device.temperatureStatus,
+              device.temperatureCelsius ? q(formatCelsius(*device.temperatureCelsius)) : QString(), std::nullopt);
     }
 }
 

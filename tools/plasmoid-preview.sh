@@ -82,7 +82,8 @@ export HOME=$work/home XDG_CONFIG_HOME=$work/config XDG_DATA_HOME=$work/data
 export XDG_CACHE_HOME=$work/cache XDG_STATE_HOME=$work/state
 mkdir -p "$HOME" "$XDG_CONFIG_HOME/AQTRunCat" "$XDG_DATA_HOME/AQTRunCat/metrics"
 metrics=$XDG_DATA_HOME/AQTRunCat/metrics
-printf '[runner]\nid=%s\n' "$runner" > "$XDG_CONFIG_HOME/AQTRunCat/AQTRunCat.ini"
+# No update checks of the host in previews (F5).
+printf '[runner]\nid=%s\n[updates]\nintervalMinutes=0\n' "$runner" > "$XDG_CONFIG_HOME/AQTRunCat/AQTRunCat.ini"
 
 # A command metric that prints a fixed snapshot (multi-value output).
 demo_command() { # demo_command FILE ID TITLE INTEGRATION SNAPSHOT

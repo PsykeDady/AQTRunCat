@@ -13,7 +13,7 @@
       <default>true</default>
     </entry>
     <entry name="showBuiltin" type="Bool">
-      <label>Show the System metrics in the popup</label>
+      <label>Show the Built-in Metrics in the popup</label>
       <default>true</default>
     </entry>
     <entry name="showIntegrations" type="Bool">

@@ -60,4 +60,9 @@ inline bool parseUnsigned(std::string_view text, std::uint64_t &value)
 // Whole file as a string; nullopt if it cannot be opened. errno-style reason in *error.
 std::optional<std::string> readTextFile(const std::string &path, std::string *error = nullptr, bool *missing = nullptr);
 
+// As readTextFile, but a file longer than maxBytes is an error ("too large"):
+// for files that other programs write (os-release, logs), never read whole.
+std::optional<std::string> readBoundedTextFile(const std::string &path, std::size_t maxBytes,
+                                               std::string *error = nullptr, bool *missing = nullptr);
+
 } // namespace aqtruncat::metrics

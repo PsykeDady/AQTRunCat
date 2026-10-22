@@ -50,6 +50,31 @@ private:
                             const QString &unavailable = QStringLiteral("N/A"));
     static QString statusText(const aqtruncat::metrics::MetricStatus &status);
     StorageRow &ensureStorageRow(const std::string &path);
+
+    // F5
+    struct TextRow {
+        QWidget *container = nullptr;
+        QLabel *value = nullptr;
+        QLabel *detail = nullptr;
+        QLabel *warning = nullptr;
+    };
+    struct GpuCard {
+        std::string id;
+        QWidget *card = nullptr;
+        QLabel *title = nullptr;
+        QLabel *detail = nullptr;
+        QLabel *utilizationName = nullptr;
+        QLabel *utilization = nullptr;
+        QProgressBar *utilizationBar = nullptr;
+        QLabel *memory = nullptr;
+        QProgressBar *memoryBar = nullptr;
+        QLabel *temperature = nullptr;
+    };
+    TextRow textRow(const QString &title, const char *name, QWidget *parent);
+    static void setText(TextRow &row, const QString &value, const QString &detail, bool warning = false,
+                        const QString &tooltip = QString());
+    void updateGpus(const aqtruncat::metrics::GpuMetrics &gpu);
+    void updateUpdates(TextRow &row, const aqtruncat::metrics::UpdatesMetrics &updates);
     void rebuildCustomMetrics();
     QWidget *customCard(const aqtruncat::custommetrics::Source &source, int index);
 
@@ -92,4 +117,15 @@ private:
     QLabel *m_diskRead = nullptr;
     QLabel *m_diskWrite = nullptr;
     QList<StorageRow> m_storageRows;
+
+    TextRow m_uptime;
+    TextRow m_kernel;
+    TextRow m_distribution;
+    QVBoxLayout *m_gpuLayout = nullptr;
+    QLabel *m_gpuStatus = nullptr;
+    QList<GpuCard> m_gpuCards;
+    QWidget *m_gamingHeader = nullptr; // hidden with FPS when its source is OFF
+    TextRow m_fps;
+    TextRow m_packageUpdates;
+    TextRow m_flatpakUpdates;
 };

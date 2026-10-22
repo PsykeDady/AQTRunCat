@@ -22,6 +22,11 @@ constexpr auto AutostartKey = "desktop/autostart";
 constexpr auto CustomMetricFilesKey = "customMetrics/files";
 constexpr auto MetricsBarEnabledKey = "metricsBar/enabled";
 constexpr auto MetricsBarItemsKey = "metricsBar/items";
+constexpr auto GpuDeviceKey = "gpu/device";
+constexpr auto FpsSourceKey = "fps/source";
+constexpr auto UpdatesIntervalKey = "updates/intervalMinutes";
+constexpr auto UpdatesRemoteKey = "updates/remoteRefresh";
+constexpr int DefaultUpdatesInterval = 60;
 constexpr qsizetype MaxMetricsBarIdLength = 4096;
 
 SpeedMode readSpeedMode(const QVariant &value)
@@ -109,6 +114,28 @@ QStringList AppSettings::normalizedCustomMetricFiles(QStringList files)
     return result;
 }
 
+bool AppSettings::isValidGpuDevice(const QString &id)
+{
+    // "auto", a PCI slot ("0000:03:00.0") or another bus's device name.
+    static const QRegularExpression device(QStringLiteral("^(auto|[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\\.[0-7]|platform:[A-Za-z0-9._:-]{1,100})$"));
+    return device.match(id).hasMatch();
+}
+
+bool AppSettings::isValidFpsSource(const QString &source)
+{
+    return source == QLatin1String("mangohud") || source == QLatin1String("off");
+}
+
+QList<int> AppSettings::updatesIntervals()
+{
+    return {0, 15, 30, 60, 180, 360, 720, 1440};
+}
+
+bool AppSettings::isValidUpdatesInterval(int minutes)
+{
+    return updatesIntervals().contains(minutes);
+}
+
 QStringList AppSettings::defaultMetricsBarItems()
 {
     // Pre-selected so that enabling the bar shows something useful; the bar
@@ -148,6 +175,13 @@ void AppSettings::load()
     m_metricsBarItems = m_settings.contains(QLatin1String(MetricsBarItemsKey))
         ? normalizedMetricsBarItems(m_settings.value(QLatin1String(MetricsBarItemsKey)).toStringList())
         : defaultMetricsBarItems();
+    const QString gpu = m_settings.value(QLatin1String(GpuDeviceKey), QStringLiteral("auto")).toString();
+    m_gpuDevice = isValidGpuDevice(gpu) ? gpu : QStringLiteral("auto");
+    const QString fps = m_settings.value(QLatin1String(FpsSourceKey), QStringLiteral("mangohud")).toString();
+    m_fpsSource = isValidFpsSource(fps) ? fps : QStringLiteral("mangohud");
+    const int interval = m_settings.value(QLatin1String(UpdatesIntervalKey), DefaultUpdatesInterval).toInt();
+    m_updatesIntervalMinutes = isValidUpdatesInterval(interval) ? interval : DefaultUpdatesInterval;
+    m_updatesRemoteRefresh = m_settings.value(QLatin1String(UpdatesRemoteKey), false).toBool();
 }
 
 void AppSettings::write(const QString &key, const QVariant &value)
@@ -257,6 +291,42 @@ void AppSettings::setMetricsBarItems(QStringList ids)
     emit metricsBarChanged();
 }
 
+void AppSettings::setGpuDevice(const QString &id)
+{
+    if (!isValidGpuDevice(id) || id == m_gpuDevice)
+        return;
+    m_gpuDevice = id;
+    write(QLatin1String(GpuDeviceKey), id);
+    emit systemMetricsSettingsChanged();
+}
+
+void AppSettings::setFpsSource(const QString &source)
+{
+    if (!isValidFpsSource(source) || source == m_fpsSource)
+        return;
+    m_fpsSource = source;
+    write(QLatin1String(FpsSourceKey), source);
+    emit systemMetricsSettingsChanged();
+}
+
+void AppSettings::setUpdatesIntervalMinutes(int minutes)
+{
+    if (!isValidUpdatesInterval(minutes) || minutes == m_updatesIntervalMinutes)
+        return;
+    m_updatesIntervalMinutes = minutes;
+    write(QLatin1String(UpdatesIntervalKey), minutes);
+    emit systemMetricsSettingsChanged();
+}
+
+void AppSettings::setUpdatesRemoteRefresh(bool remote)
+{
+    if (remote == m_updatesRemoteRefresh)
+        return;
+    m_updatesRemoteRefresh = remote;
+    write(QLatin1String(UpdatesRemoteKey), remote);
+    emit systemMetricsSettingsChanged();
+}
+
 bool AppSettings::reload()
 {
     const QString runner = m_runnerId;
@@ -268,6 +338,10 @@ bool AppSettings::reload()
     const QStringList customFiles = m_customMetricFiles;
     const bool barEnabled = m_metricsBarEnabled;
     const QStringList barItems = m_metricsBarItems;
+    const QString gpu = m_gpuDevice;
+    const QString fps = m_fpsSource;
+    const int interval = m_updatesIntervalMinutes;
+    const bool remote = m_updatesRemoteRefresh;
     m_settings.sync(); // no pending local writes: this picks up the file on disk
     load();
     bool changed = false;
@@ -299,6 +373,11 @@ bool AppSettings::reload()
         changed = true;
         emit metricsBarChanged();
     }
+    if (gpu != m_gpuDevice || fps != m_fpsSource || interval != m_updatesIntervalMinutes
+        || remote != m_updatesRemoteRefresh) {
+        changed = true;
+        emit systemMetricsSettingsChanged();
+    }
     return changed;
 }
 
@@ -307,7 +386,8 @@ void AppSettings::restoreDefaults()
     // Restore application preferences, but keep explicit Custom Metrics
     // registrations: removing a producer is a separate, deliberate action.
     for (const char *key : {RunnerKey, SpeedKey, NetworkModeKey, NetworkInterfacesKey,
-                            RefreshKey, AutostartKey, MetricsBarEnabledKey, MetricsBarItemsKey})
+                            RefreshKey, AutostartKey, MetricsBarEnabledKey, MetricsBarItemsKey,
+                            GpuDeviceKey, FpsSourceKey, UpdatesIntervalKey, UpdatesRemoteKey})
         m_settings.remove(QLatin1String(key));
     m_settings.sync();
     m_runnerId = m_defaultRunnerId;
@@ -318,12 +398,17 @@ void AppSettings::restoreDefaults()
     m_autostartEnabled = false;
     m_metricsBarEnabled = false;
     m_metricsBarItems = defaultMetricsBarItems();
+    m_gpuDevice = QStringLiteral("auto");
+    m_fpsSource = QStringLiteral("mangohud");
+    m_updatesIntervalMinutes = DefaultUpdatesInterval;
+    m_updatesRemoteRefresh = false;
     emit runnerIdChanged(m_runnerId);
     emit speedModeChanged(m_speedMode);
     emit networkSettingsChanged();
     emit dashboardRefreshSecondsChanged(m_dashboardRefreshSeconds);
     emit autostartEnabledChanged(m_autostartEnabled);
     emit metricsBarChanged();
+    emit systemMetricsSettingsChanged();
 }
 
 } // namespace aqtruncat

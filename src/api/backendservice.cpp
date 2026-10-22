@@ -10,6 +10,7 @@
 #include "app/providerintegration.h"
 #include "app/runnerspeedcontroller.h"
 #include "app/storagepaths.h"
+#include "app/updatesservice.h"
 
 #include <QCoreApplication>
 #include <QDBusConnectionInterface>
@@ -66,7 +67,15 @@ BackendService::BackendService(Config config, QObject *parent)
     aqtruncat::metrics::MetricsSources sources;
     sources.storagePaths = desktopStoragePaths(m_config.homePath);
     sources.networkSelection = m_settings->networkSelection();
+    sources.gpuPreference = m_settings->gpuDevice().toStdString();
+    sources.fpsSource = m_settings->fpsSource().toStdString();
     m_sampler = std::make_unique<MetricSampler>(nullptr, std::move(sources));
+    UpdatesService::Options updates;
+    updates.searchPath = m_config.updatesSearchPath;
+    updates.root = m_config.updatesRoot;
+    updates.firstCheckDelayMs = m_config.updatesFirstCheckDelayMs;
+    m_updates = std::make_unique<UpdatesService>(updates);
+    m_updates->setPolicy(m_settings->updatesIntervalMinutes(), m_settings->updatesRemoteRefresh());
     m_custom = std::make_unique<CustomMetricsService>(m_settings.get(), m_config.discoveryDirectory);
     m_cpu = std::make_unique<CpuMonitor>();
     m_speed = std::make_unique<RunnerSpeedController>(m_settings->speedMode());
@@ -87,6 +96,7 @@ BackendService::BackendService(Config config, QObject *parent)
                 m_cpu->consume(snapshot.cpu);
                 scheduleMetrics();
             });
+    connect(m_updates.get(), &UpdatesService::changed, this, &BackendService::scheduleMetrics);
     connect(m_custom.get(), &CustomMetricsModel::sourcesChanged, this,
             [this](const QList<aqtruncat::custommetrics::Source> &sources) {
                 m_sources = sources;
@@ -106,6 +116,18 @@ BackendService::BackendService(Config config, QObject *parent)
     connect(m_settings.get(), &aqtruncat::AppSettings::networkSettingsChanged, this,
             [this] { m_sampler->setNetworkSelection(m_settings->networkSelection()); });
     connect(m_settings.get(), &aqtruncat::AppSettings::speedModeChanged, m_speed.get(), &RunnerSpeedController::setMode);
+    connect(m_settings.get(), &aqtruncat::AppSettings::systemMetricsSettingsChanged, this, [this] {
+        m_sampler->setGpuPreference(m_settings->gpuDevice());
+        m_sampler->setFpsSource(m_settings->fpsSource());
+        m_updates->setPolicy(m_settings->updatesIntervalMinutes(), m_settings->updatesRemoteRefresh());
+        publishSettings();
+        // An FPS source change (OFF hides FPS in every frontend) is
+        // published now, not with the next sample.
+        if (m_system) {
+            m_system->fps = m_sampler->sampleFps();
+            scheduleMetrics();
+        }
+    });
     connect(m_settings.get(), &aqtruncat::AppSettings::autostartEnabledChanged, this, [this] { applyAutostart(); });
     for (auto signal : {&aqtruncat::AppSettings::networkSettingsChanged, &aqtruncat::AppSettings::metricsBarChanged}) {
         connect(m_settings.get(), signal, this, &BackendService::publishSettings);
@@ -160,6 +182,8 @@ BackendService::BackendService(Config config, QObject *parent)
 
 BackendService::~BackendService()
 {
+    if (m_updates)
+        m_updates->stop();
     if (m_custom)
         m_custom->stop();
     if (m_sampler)
@@ -200,6 +224,7 @@ void BackendService::start()
     applyAutostart();
     m_sampler->start();
     m_custom->start();
+    m_updates->start();
     m_claude->refresh();
     m_codex->refresh();
 }
@@ -239,7 +264,14 @@ void BackendService::scheduleMetrics()
 
 void BackendService::publishMetrics()
 {
-    QJsonArray next = aqtruncat::api::builtInMetrics(m_system, m_config.homePath);
+    // The update checks run on their own schedule: their latest results
+    // join the latest system sample.
+    std::optional<aqtruncat::metrics::SystemMetricsSnapshot> system = m_system;
+    if (system) {
+        system->packageUpdates = m_updates->packages();
+        system->flatpakUpdates = m_updates->flatpak();
+    }
+    QJsonArray next = aqtruncat::api::builtInMetrics(system, m_config.homePath);
     for (const aqtruncat::custommetrics::Source &source : std::as_const(m_sources))
         next.append(aqtruncat::api::customMetric(source));
     QJsonArray changed;
@@ -451,6 +483,28 @@ void BackendService::SetSetting(const QString &key, const QString &jsonValue)
             return void(fail(ErrorInvalidArgument,
                              QStringLiteral("metricsBarItems must be at most %1 distinct metric ids").arg(aqtruncat::metricsbar::MaxItems)));
         s.setMetricsBarItems(*list);
+    } else if (key == QLatin1String("gpuDevice")) {
+        if (!value.isString() || !aqtruncat::AppSettings::isValidGpuDevice(value.toString()))
+            return void(fail(ErrorInvalidArgument, QStringLiteral("gpuDevice must be \"auto\" or a GPU device id (\"0000:03:00.0\")")));
+        s.setGpuDevice(value.toString());
+    } else if (key == QLatin1String("fpsSource")) {
+        if (!value.isString() || !aqtruncat::AppSettings::isValidFpsSource(value.toString()))
+            return void(fail(ErrorInvalidArgument, QStringLiteral("fpsSource must be \"mangohud\" or \"off\"")));
+        s.setFpsSource(value.toString());
+    } else if (key == QLatin1String("updatesIntervalMinutes")) {
+        const int minutes = value.toInt(-1);
+        if (!value.isDouble() || value.toDouble() != minutes || !aqtruncat::AppSettings::isValidUpdatesInterval(minutes)) {
+            QStringList allowed;
+            for (const int interval : aqtruncat::AppSettings::updatesIntervals())
+                allowed << QString::number(interval);
+            return void(fail(ErrorInvalidArgument, QStringLiteral("updatesIntervalMinutes must be one of %1 (0 = off)")
+                                                       .arg(allowed.join(QStringLiteral(", ")))));
+        }
+        s.setUpdatesIntervalMinutes(minutes);
+    } else if (key == QLatin1String("updatesRemoteRefresh")) {
+        if (!value.isBool())
+            return void(fail(ErrorInvalidArgument, QStringLiteral("updatesRemoteRefresh must be true or false")));
+        s.setUpdatesRemoteRefresh(value.toBool());
     } else {
         return void(fail(ErrorInvalidArgument, QStringLiteral("unknown or read-only setting \"%1\"").arg(key)));
     }

@@ -53,4 +53,21 @@ std::string formatPercent(double percent)
     return oneDecimal(percent) + " %";
 }
 
+std::string formatCelsius(double celsius)
+{
+    return std::to_string(std::lround(celsius)) + " °C";
+}
+
+std::string formatFps(double fps)
+{
+    return std::to_string(std::lround(fps)) + " FPS";
+}
+
+std::string formatUpdateCount(long long count)
+{
+    if (count == 0)
+        return "Up to date";
+    return std::to_string(count) + (count == 1 ? " update" : " updates");
+}
+
 } // namespace aqtruncat::metrics

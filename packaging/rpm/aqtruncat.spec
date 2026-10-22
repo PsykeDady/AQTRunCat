@@ -1,7 +1,7 @@
 # Build: packaging/make-source-tarball.sh ~/rpmbuild/SOURCES
 #        rpmbuild -ba packaging/rpm/aqtruncat.spec
 Name:           aqtruncat
-Version:        1.4.2
+Version:        1.5.6
 Release:        1%{?dist}
 Summary:        A Cute Run Cat for Linux
 
@@ -21,6 +21,9 @@ Requires:       dbus
 Recommends:     qt6-qtwayland
 # F4.2: the KDE Plasma 6 widget is plain QML, used only where Plasma is.
 Suggests:       plasma-workspace
+Suggests:       hwdata
+Suggests:       flatpak
+Suggests:       mangohud
 
 %description
 AQTRunCat is an animated runner in the system tray whose speed follows the
@@ -63,6 +66,10 @@ export QT_QPA_PLATFORM=offscreen
 %{_docdir}/%{name}/
 
 %changelog
+* Thu Oct 22 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 1.5.6-1
+- F5: built-in uptime, GPU, FPS (MangoHud log), package and Flatpak update
+  counts (read-only, local metadata by default), kernel and distribution.
+
 * Wed Oct 21 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 1.4.2-1
 - F4.2: native KDE Plasma 6 widget (Plasmoid), a client of the backend;
   bundled runners also installed as files; GetRunners in the D-Bus API.

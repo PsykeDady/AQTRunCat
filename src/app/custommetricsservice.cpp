@@ -2,6 +2,7 @@
 
 #include "appsettings.h"
 #include "custommetricpaths.h"
+#include "processgroup.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -33,9 +34,7 @@ constexpr int StopWaitMilliseconds = 250;
 // an output overflow or shutdown also reaches helpers spawned by a script.
 void signalProcessGroup(const QProcess &process, int signal)
 {
-    const qint64 pid = process.processId();
-    if (pid > 0)
-        ::kill(-pid_t(pid), signal);
+    aqtruncat::process::signalGroup(process, signal);
 }
 }
 
@@ -478,7 +477,7 @@ void CustomMetricsService::startCommand(const QString &id)
     QProcess *process = job.process.get();
     process->setProcessChannelMode(QProcess::SeparateChannels);
     process->setWorkingDirectory(job.definition.workingDirectory);
-    process->setChildProcessModifier([] { ::setpgid(0, 0); });
+    aqtruncat::process::runInOwnGroup(*process);
     connect(process, &QProcess::readyReadStandardOutput, this, [this, id] { readCommandOutput(id); });
     connect(process, &QProcess::readyReadStandardError, this, [this, id] { readCommandOutput(id); });
     connect(process, &QProcess::finished, this,

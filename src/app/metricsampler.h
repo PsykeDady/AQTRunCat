@@ -24,6 +24,9 @@ public:
     void stop();
     bool isActive() const { return m_timer.isActive(); }
     void setNetworkSelection(aqtruncat::metrics::NetworkSelection selection);
+    void setGpuPreference(const QString &device);
+    void setFpsSource(const QString &source);
+    aqtruncat::metrics::FpsMetrics sampleFps() { return m_sampler.sampleFps(); }
 
 public slots:
     void sampleNow();

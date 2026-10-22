@@ -27,6 +27,7 @@ class CustomMetricsService;
 class MetricSampler;
 class ProviderIntegration;
 class RunnerSpeedController;
+class UpdatesService;
 
 // F4.1: the AQTRunCat backend. It owns the only instances of the metric
 // engine (system sampler, Custom Metrics with the F2/F3 adapters, runner
@@ -48,6 +49,11 @@ public:
         QString codexAdapter;
         std::string homePath;
         bool manageAutostart = true;
+        // F5 update checks: tool search path and root prefix (tests); the
+        // first check runs this long after start().
+        QStringList updatesSearchPath;
+        QString updatesRoot;
+        int updatesFirstCheckDelayMs = 30000;
         // F4.2: GetRunners payload for the stored runner id (runnercatalog.h).
         // Unset: no "runners" capability (the catalogue needs QtGui, which
         // only aqtruncatd links).
@@ -120,6 +126,7 @@ private:
     std::unique_ptr<AutostartManager> m_autostart;
     std::unique_ptr<ProviderIntegration> m_claude;
     std::unique_ptr<ProviderIntegration> m_codex;
+    std::unique_ptr<UpdatesService> m_updates;
     std::optional<aqtruncat::metrics::SystemMetricsSnapshot> m_system;
     QList<aqtruncat::custommetrics::Source> m_sources;
     QJsonArray m_metrics;                  // last published, in API order

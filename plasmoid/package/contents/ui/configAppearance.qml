@@ -32,7 +32,7 @@ KCM.SimpleKCM {
         QQC2.CheckBox {
             id: showBuiltin
             Kirigami.FormData.label: "Popup:"
-            text: "System metrics"
+            text: "Built-in Metrics"
         }
         QQC2.CheckBox {
             id: showIntegrations

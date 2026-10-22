@@ -37,6 +37,8 @@ public:
     void showAndRaise();
     void setActiveRunner(const aqtruncat::Runner &runner);
     void setAvailableInterfaces(const std::vector<aqtruncat::metrics::InterfaceMetrics> &interfaces);
+    // F5: the GPUs the backend reports, for the Metrics Bar GPU choice.
+    void setAvailableGpus(const std::vector<aqtruncat::metrics::GpuDevice> &gpus);
     bool addCustomMetricFile(const QString &path, QString *error = nullptr);
 
 protected:
@@ -45,6 +47,7 @@ protected:
 private:
     void syncFromSettings();
     void rebuildInterfaces();
+    void rebuildGpus();
     void storeCheckedInterfaces();
     void rebuildCustomMetrics();
     void rebuildMetricsBar();
@@ -63,6 +66,7 @@ private:
     QList<RunnerOption> m_runners;
     QString m_activeRunnerId;
     std::vector<aqtruncat::metrics::InterfaceMetrics> m_availableInterfaces;
+    std::vector<std::pair<std::string, std::string>> m_availableGpus; // id, model
     bool m_rebuilding = false;
 
     QComboBox *m_runnerCombo = nullptr;
@@ -73,6 +77,10 @@ private:
     QRadioButton *m_networkManual = nullptr;
     QTreeWidget *m_interfaces = nullptr;
     QComboBox *m_refresh = nullptr;
+    QComboBox *m_gpuDevice = nullptr;
+    QComboBox *m_fpsSource = nullptr;
+    QComboBox *m_updatesInterval = nullptr;
+    QCheckBox *m_updatesRemote = nullptr;
     QCheckBox *m_autostart = nullptr;
     QTreeWidget *m_customMetricFiles = nullptr;
     QPushButton *m_removeCustomMetric = nullptr;

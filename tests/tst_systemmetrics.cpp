@@ -75,6 +75,14 @@ struct FakeMachine {
         s.statFilesystem = [](const std::string &, std::string *) -> std::optional<FilesystemStats> {
             return FilesystemStats{4096, 51328506, 21307900, 18682364};
         };
+        // F5 sources: nothing of the host (no /etc, no GPU tools, no MangoHud).
+        s.osRoot = tmp.filePath(QStringLiteral("root")).toStdString();
+        s.kernel = [](std::string *) -> std::optional<KernelInfo> {
+            return KernelInfo{"Linux", "6.6.0-fixture", "#1 SMP", "x86_64"};
+        };
+        s.pciIdsPaths = {};
+        s.nvml = nullptr;
+        s.fpsSource = FpsSourceOff;
         return s;
     }
 };
@@ -127,7 +135,11 @@ private slots:
                                      "Swap\n  Used:       1.0 GiB / 4.0 GiB  (25.0 %)",
                                      "Network (wlp2s0)\n  Download:   2.0 MiB/s\n  Upload:     64.0 KiB/s",
                                      "Storage /\n  Used:       114.5 GiB / 195.8 GiB  (61.6 %)",
-                                     "Disk I/O (nvme0n1)\n  Read:       4.0 MiB/s\n  Write:      1.0 MiB/s"})
+                                     "Disk I/O (nvme0n1)\n  Read:       4.0 MiB/s\n  Write:      1.0 MiB/s",
+                                     "Uptime\n  n/a: ",
+                                     "GPU\n  n/a: no GPU found",
+                                     "FPS\n  n/a: the FPS source is turned off",
+                                     "System\n  Kernel:     Linux 6.6.0-fixture (x86_64)\n  n/a: no os-release"})
             QVERIFY2(report.contains(QLatin1String(expected)), qPrintable(QStringLiteral("missing \"%1\" in:\n%2").arg(QLatin1String(expected), report)));
 
         const QString line = aqtruncat::cli::formatMetricsLine(s, QStringLiteral("12:00:00"));

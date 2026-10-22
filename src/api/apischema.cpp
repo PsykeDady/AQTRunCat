@@ -4,9 +4,13 @@
 #include "app/metricsbarids.h"
 #include "metrics/compactformat.h"
 #include "metrics/metricsformat.h"
+#include "metrics/uptime.h"
 
+#include <QDateTime>
 #include <QFileInfo>
 #include <QHash>
+#include <QLocale>
+#include <QTimeZone>
 
 #include <algorithm>
 
@@ -147,6 +151,341 @@ QJsonObject networkData(const metrics::NetworkMetrics &network)
                        {QStringLiteral("interfaces"), interfaces}};
 }
 
+// --- F5 -----------------------------------------------------------------
+
+QString epochText(const std::optional<std::int64_t> &seconds)
+{
+    return seconds ? QDateTime::fromSecsSinceEpoch(*seconds, QTimeZone::UTC).toString(Qt::ISODate) : QString();
+}
+
+QJsonValue epochValue(const std::optional<std::int64_t> &seconds)
+{
+    return seconds ? QJsonValue(epochText(seconds)) : QJsonValue();
+}
+
+std::optional<std::int64_t> epochOf(const QJsonValue &value)
+{
+    const QDateTime time = QDateTime::fromString(value.toString(), Qt::ISODate);
+    return time.isValid() ? std::optional<std::int64_t>(time.toSecsSinceEpoch()) : std::nullopt;
+}
+
+// "10:32" today, "Oct 16, 10:32" otherwise (local time, English month).
+QString whenText(std::int64_t seconds)
+{
+    const QDateTime time = QDateTime::fromSecsSinceEpoch(seconds).toLocalTime();
+    const QLocale c = QLocale::c();
+    return time.date() == QDate::currentDate() ? c.toString(time, QStringLiteral("HH:mm"))
+                                               : c.toString(time, QStringLiteral("MMM d, HH:mm"));
+}
+
+QString hexId(std::uint32_t id)
+{
+    return QStringLiteral("%1").arg(id, 4, 16, QLatin1Char('0'));
+}
+
+QJsonObject fieldObject(const MetricStatus &status)
+{
+    return sectionObject(status);
+}
+
+QJsonObject gpuItem(const QString &id, const QString &title, const MetricStatus &status, const QString &value,
+                    const QString &detail, const QJsonValue &normalized, const std::optional<std::string> &compact,
+                    const QString &label)
+{
+    const bool ok = status.ok();
+    return QJsonObject{{QStringLiteral("id"), id},
+                       {QStringLiteral("title"), title},
+                       {QStringLiteral("formattedValue"), ok ? value : QStringLiteral("N/A")},
+                       {QStringLiteral("detail"), ok ? detail : q(status.message)},
+                       {QStringLiteral("normalized"), ok ? normalized : QJsonValue()},
+                       {QStringLiteral("compactValue"), ok && compact ? QJsonValue(q(*compact)) : QJsonValue()},
+                       {QStringLiteral("compactLabel"), label},
+                       {QStringLiteral("warning"), false}};
+}
+
+QJsonObject gpuMetric(const metrics::GpuDevice &gpu)
+{
+    QJsonObject metric = metricObject(QStringLiteral("gpu:") + q(gpu.id), QStringLiteral("builtin"), QStringLiteral("system"),
+                                      q(gpu.model));
+    metric.insert(QStringLiteral("compactLabel"), QStringLiteral("GPU"));
+    metric.insert(QStringLiteral("unit"), QStringLiteral("percent"));
+    const bool intel = gpu.utilizationMethod == "rc6-residency";
+    QJsonArray items;
+    items.append(gpuItem(QStringLiteral("utilization"), intel ? QStringLiteral("Activity") : QStringLiteral("Utilization"),
+                         gpu.utilizationStatus,
+                         gpu.utilizationPercent ? q(metrics::formatPercent(*gpu.utilizationPercent)) : QString(),
+                         intel ? QStringLiteral("time out of the RC6 power-saving state") : QString(),
+                         gpu.utilizationPercent ? QJsonValue(std::clamp(*gpu.utilizationPercent / 100.0, 0.0, 1.0)) : QJsonValue(),
+                         gpu.utilizationPercent ? metrics::compactPercent(*gpu.utilizationPercent) : std::nullopt,
+                         QStringLiteral("GPU")));
+    const bool memory = gpu.memoryUsedBytes && gpu.memoryTotalBytes && *gpu.memoryTotalBytes > 0;
+    const double memoryPercent = memory ? 100.0 * double(*gpu.memoryUsedBytes) / double(*gpu.memoryTotalBytes) : 0.0;
+    items.append(gpuItem(QStringLiteral("memory"), QStringLiteral("Memory"), gpu.memoryStatus,
+                         memory ? q(metrics::formatBytes(*gpu.memoryUsedBytes)) + QStringLiteral(" / ")
+                                      + q(metrics::formatBytes(*gpu.memoryTotalBytes))
+                                : QString(),
+                         memory ? q(metrics::formatPercent(memoryPercent)) + QStringLiteral(" used") : QString(),
+                         memory ? QJsonValue(std::clamp(memoryPercent / 100.0, 0.0, 1.0)) : QJsonValue(),
+                         memory ? metrics::compactPercent(memoryPercent) : std::nullopt, QStringLiteral("VRAM")));
+    items.append(gpuItem(QStringLiteral("temperature"), QStringLiteral("Temperature"), gpu.temperatureStatus,
+                         gpu.temperatureCelsius ? q(metrics::formatCelsius(*gpu.temperatureCelsius)) : QString(),
+                         gpu.temperatureSensor.empty() || gpu.temperatureSensor == "nvml" ? QString()
+                                                                                         : QStringLiteral("sensor ") + q(gpu.temperatureSensor),
+                         QJsonValue(), gpu.temperatureCelsius ? metrics::compactCelsius(*gpu.temperatureCelsius) : std::nullopt,
+                         QStringLiteral("GPU°")));
+    metric.insert(QStringLiteral("items"), items);
+
+    // One state for the whole device: ok when any field has a value.
+    const std::vector<const MetricStatus *> fields{&gpu.utilizationStatus, &gpu.memoryStatus, &gpu.temperatureStatus};
+    const bool anyOk = std::any_of(fields.begin(), fields.end(), [](const MetricStatus *f) { return f->ok(); });
+    const bool anyPending = std::any_of(fields.begin(), fields.end(),
+                                        [](const MetricStatus *f) { return f->state == MetricState::Pending; });
+    if (anyOk) {
+        metric.insert(QStringLiteral("state"), QStringLiteral("ok"));
+    } else if (anyPending) {
+        setStatus(metric, MetricStatus::pending("waiting for the next sample"));
+    } else {
+        setStatus(metric, gpu.suspended ? gpu.utilizationStatus
+                                        : MetricStatus::unavailable("no telemetry from the " + gpu.driver + " driver"));
+    }
+    if (gpu.utilizationStatus.ok() && gpu.utilizationPercent) {
+        metric.insert(QStringLiteral("value"), *gpu.utilizationPercent);
+        metric.insert(QStringLiteral("formattedValue"), q(metrics::formatPercent(*gpu.utilizationPercent)));
+        // No "normalized" here: each item has its own bar (no duplicate).
+        metric.insert(QStringLiteral("compactValue"), optionalString(metrics::compactPercent(*gpu.utilizationPercent)));
+    } else if (anyOk) {
+        metric.insert(QStringLiteral("formattedValue"), QStringLiteral("N/A"));
+    }
+    QStringList detail;
+    if (!gpu.driver.empty())
+        detail << q(gpu.driver);
+    if (gpu.integrated)
+        detail << (*gpu.integrated ? QStringLiteral("integrated") : QStringLiteral("discrete"));
+    if (gpu.frequencyMHz && *gpu.frequencyMHz > 0)
+        detail << QStringLiteral("%1 MHz").arg(qRound(*gpu.frequencyMHz));
+    if (gpu.suspended)
+        detail << QStringLiteral("suspended");
+    if (gpu.selected)
+        detail << QStringLiteral("Metrics Bar GPU");
+    metric.insert(QStringLiteral("detail"), detail.join(QStringLiteral(" · ")));
+
+    auto optionalUnsigned = [](const std::optional<std::uint64_t> &value) {
+        return value ? QJsonValue(double(*value)) : QJsonValue();
+    };
+    QJsonObject utilization = fieldObject(gpu.utilizationStatus);
+    utilization.insert(QStringLiteral("percent"), optionalNumber(gpu.utilizationPercent));
+    utilization.insert(QStringLiteral("method"), q(gpu.utilizationMethod));
+    QJsonObject memoryData = fieldObject(gpu.memoryStatus);
+    memoryData.insert(QStringLiteral("usedBytes"), optionalUnsigned(gpu.memoryUsedBytes));
+    memoryData.insert(QStringLiteral("totalBytes"), optionalUnsigned(gpu.memoryTotalBytes));
+    QJsonObject temperature = fieldObject(gpu.temperatureStatus);
+    temperature.insert(QStringLiteral("celsius"), optionalNumber(gpu.temperatureCelsius));
+    temperature.insert(QStringLiteral("sensor"), q(gpu.temperatureSensor));
+    metric.insert(QStringLiteral("data"), QJsonObject{
+        {QStringLiteral("section"), sectionObject(MetricStatus::okStatus())},
+        {QStringLiteral("device"), q(gpu.id)},
+        {QStringLiteral("card"), q(gpu.card)},
+        {QStringLiteral("driver"), q(gpu.driver)},
+        {QStringLiteral("vendor"), q(gpu.vendor)},
+        {QStringLiteral("vendorId"), hexId(gpu.vendorId)},
+        {QStringLiteral("deviceId"), hexId(gpu.deviceId)},
+        {QStringLiteral("model"), q(gpu.model)},
+        {QStringLiteral("integrated"), gpu.integrated ? QJsonValue(*gpu.integrated) : QJsonValue()},
+        {QStringLiteral("bootVga"), gpu.bootVga},
+        {QStringLiteral("suspended"), gpu.suspended},
+        {QStringLiteral("selected"), gpu.selected},
+        {QStringLiteral("frequencyMHz"), optionalNumber(gpu.frequencyMHz)},
+        {QStringLiteral("utilization"), utilization},
+        {QStringLiteral("memory"), memoryData},
+        {QStringLiteral("temperature"), temperature}});
+    return metric;
+}
+
+QString fpsCondition(metrics::FpsCondition condition)
+{
+    switch (condition) {
+    case metrics::FpsCondition::Measured: return QStringLiteral("measured");
+    case metrics::FpsCondition::Stale: return QStringLiteral("stale");
+    case metrics::FpsCondition::Inactive: return QStringLiteral("inactive");
+    case metrics::FpsCondition::NotConfigured: return QStringLiteral("not-configured");
+    case metrics::FpsCondition::Missing: return QStringLiteral("missing");
+    case metrics::FpsCondition::Disabled: return QStringLiteral("disabled");
+    case metrics::FpsCondition::Unsupported: return QStringLiteral("unsupported");
+    }
+    return QStringLiteral("unsupported");
+}
+
+metrics::FpsCondition fpsConditionOf(const QString &name)
+{
+    using metrics::FpsCondition;
+    static const QHash<QString, FpsCondition> names{
+        {QStringLiteral("measured"), FpsCondition::Measured}, {QStringLiteral("stale"), FpsCondition::Stale},
+        {QStringLiteral("inactive"), FpsCondition::Inactive}, {QStringLiteral("not-configured"), FpsCondition::NotConfigured},
+        {QStringLiteral("missing"), FpsCondition::Missing}, {QStringLiteral("disabled"), FpsCondition::Disabled}};
+    return names.value(name, FpsCondition::Unsupported);
+}
+
+void fillFps(QJsonObject &metric, QJsonObject &data, const metrics::FpsMetrics &fps)
+{
+    metric.insert(QStringLiteral("unit"), QStringLiteral("fps"));
+    data.insert(QStringLiteral("source"), q(fps.source));
+    data.insert(QStringLiteral("condition"), fpsCondition(fps.condition));
+    data.insert(QStringLiteral("fps"), optionalNumber(fps.fps));
+    data.insert(QStringLiteral("frametimeMs"), optionalNumber(fps.frametimeMs));
+    data.insert(QStringLiteral("lastFps"), optionalNumber(fps.lastFps));
+    data.insert(QStringLiteral("ageSeconds"), optionalNumber(fps.ageSeconds));
+    data.insert(QStringLiteral("application"), q(fps.application));
+    if (!fps.status.ok() || !fps.fps) {
+        setStatus(metric, fps.status);
+        if (fps.condition == metrics::FpsCondition::Stale && fps.lastFps)
+            metric.insert(QStringLiteral("detail"), QStringLiteral("Last reading: %1%2")
+                                                        .arg(q(metrics::formatFps(*fps.lastFps)),
+                                                             fps.application.empty() ? QString() : QStringLiteral(" (") + q(fps.application) + u')'));
+        return;
+    }
+    metric.insert(QStringLiteral("state"), QStringLiteral("ok"));
+    metric.insert(QStringLiteral("value"), *fps.fps);
+    metric.insert(QStringLiteral("formattedValue"), q(metrics::formatFps(*fps.fps)));
+    metric.insert(QStringLiteral("compactValue"), optionalString(metrics::compactWhole(*fps.fps)));
+    QStringList detail{QStringLiteral("MangoHud")};
+    if (!fps.application.empty())
+        detail << q(fps.application);
+    if (fps.frametimeMs)
+        detail << QStringLiteral("%1 ms frame time").arg(*fps.frametimeMs, 0, 'f', 1);
+    metric.insert(QStringLiteral("detail"), detail.join(QStringLiteral(" · ")));
+}
+
+void fillUpdates(QJsonObject &metric, QJsonObject &data, const metrics::UpdatesMetrics &updates)
+{
+    metric.insert(QStringLiteral("unit"), QStringLiteral("count"));
+    data.insert(QStringLiteral("manager"), q(updates.manager));
+    data.insert(QStringLiteral("count"), updates.count ? QJsonValue(*updates.count) : QJsonValue());
+    data.insert(QStringLiteral("checking"), updates.checking);
+    data.insert(QStringLiteral("lastSuccess"), epochValue(updates.lastSuccess));
+    data.insert(QStringLiteral("metadataTime"), epochValue(updates.metadataTime));
+    data.insert(QStringLiteral("metadataStale"), updates.metadataStale);
+    data.insert(QStringLiteral("remote"), updates.remote);
+    data.insert(QStringLiteral("note"), q(updates.note));
+    data.insert(QStringLiteral("ignored"), updates.ignored);
+    if (updates.manager == "flatpak") {
+        data.insert(QStringLiteral("apps"), updates.apps);
+        data.insert(QStringLiteral("runtimes"), updates.runtimes);
+        QJsonArray installations;
+        for (const metrics::FlatpakInstallationCount &entry : updates.installations) {
+            installations.append(QJsonObject{{QStringLiteral("name"), q(entry.name)},
+                                             {QStringLiteral("state"), stateName(entry.status.state)},
+                                             {QStringLiteral("message"), q(entry.status.message)},
+                                             {QStringLiteral("apps"), entry.apps},
+                                             {QStringLiteral("runtimes"), entry.runtimes}});
+        }
+        data.insert(QStringLiteral("installations"), installations);
+    }
+    QStringList detail;
+    if (!updates.manager.empty() && updates.manager != "flatpak")
+        detail << q(updates.manager);
+    if (updates.manager == "flatpak" && updates.count && *updates.count > 0)
+        detail << QStringLiteral("%1 %2, %3 %4").arg(updates.apps).arg(updates.apps == 1 ? QStringLiteral("app") : QStringLiteral("apps"))
+                      .arg(updates.runtimes).arg(updates.runtimes == 1 ? QStringLiteral("runtime") : QStringLiteral("runtimes"));
+    if (updates.ignored > 0)
+        detail << QStringLiteral("%1 ignored").arg(updates.ignored);
+    if (updates.lastSuccess)
+        detail << QStringLiteral("checked %1").arg(whenText(*updates.lastSuccess));
+    if (updates.metadataTime && !updates.remote)
+        detail << QStringLiteral("metadata from %1%2").arg(whenText(*updates.metadataTime),
+                                                         updates.metadataStale ? QStringLiteral(" (out of date)") : QString());
+    if (updates.checking)
+        detail << QStringLiteral("checking…");
+    if (!updates.note.empty())
+        detail << q(updates.note);
+    metric.insert(QStringLiteral("detail"), detail.join(QStringLiteral(" · ")));
+    if (!updates.status.ok() || !updates.count) {
+        setStatus(metric, updates.status);
+        return;
+    }
+    metric.insert(QStringLiteral("state"), QStringLiteral("ok"));
+    metric.insert(QStringLiteral("value"), *updates.count);
+    metric.insert(QStringLiteral("formattedValue"), q(metrics::formatUpdateCount(*updates.count)));
+    metric.insert(QStringLiteral("compactValue"), optionalString(metrics::compactCount(*updates.count)));
+}
+
+metrics::UpdatesMetrics updatesOf(const QJsonObject &metric, const MetricStatus &status)
+{
+    const QJsonObject data = metric.value(QStringLiteral("data")).toObject();
+    metrics::UpdatesMetrics updates;
+    updates.status = status;
+    updates.manager = data.value(QStringLiteral("manager")).toString().toStdString();
+    if (status.ok() && data.value(QStringLiteral("count")).isDouble())
+        updates.count = data.value(QStringLiteral("count")).toInt();
+    updates.checking = data.value(QStringLiteral("checking")).toBool();
+    updates.lastSuccess = epochOf(data.value(QStringLiteral("lastSuccess")));
+    updates.metadataTime = epochOf(data.value(QStringLiteral("metadataTime")));
+    updates.metadataStale = data.value(QStringLiteral("metadataStale")).toBool();
+    updates.remote = data.value(QStringLiteral("remote")).toBool();
+    updates.note = data.value(QStringLiteral("note")).toString().toStdString();
+    updates.ignored = data.value(QStringLiteral("ignored")).toInt();
+    updates.apps = data.value(QStringLiteral("apps")).toInt();
+    updates.runtimes = data.value(QStringLiteral("runtimes")).toInt();
+    for (const QJsonValue &value : data.value(QStringLiteral("installations")).toArray()) {
+        const QJsonObject entry = value.toObject();
+        metrics::FlatpakInstallationCount count;
+        count.name = entry.value(QStringLiteral("name")).toString().toStdString();
+        const QString state = entry.value(QStringLiteral("state")).toString();
+        const std::string message = entry.value(QStringLiteral("message")).toString().toStdString();
+        count.status = state == QLatin1String("ok") ? MetricStatus::okStatus() : MetricStatus::error(message);
+        count.apps = entry.value(QStringLiteral("apps")).toInt();
+        count.runtimes = entry.value(QStringLiteral("runtimes")).toInt();
+        updates.installations.push_back(count);
+    }
+    return updates;
+}
+
+MetricStatus fieldStatus(const QJsonObject &field)
+{
+    const QString state = field.value(QStringLiteral("state")).toString();
+    const std::string message = field.value(QStringLiteral("message")).toString().toStdString();
+    if (state == QLatin1String("ok"))
+        return MetricStatus::okStatus();
+    if (state == QLatin1String("pending"))
+        return MetricStatus::pending(message);
+    if (state == QLatin1String("error"))
+        return MetricStatus::error(message);
+    return MetricStatus::unavailable(message);
+}
+
+metrics::GpuDevice gpuOf(const QJsonObject &metric)
+{
+    const QJsonObject data = metric.value(QStringLiteral("data")).toObject();
+    metrics::GpuDevice gpu;
+    gpu.id = data.value(QStringLiteral("device")).toString().toStdString();
+    gpu.card = data.value(QStringLiteral("card")).toString().toStdString();
+    gpu.driver = data.value(QStringLiteral("driver")).toString().toStdString();
+    gpu.vendor = data.value(QStringLiteral("vendor")).toString().toStdString();
+    gpu.vendorId = data.value(QStringLiteral("vendorId")).toString().toUInt(nullptr, 16);
+    gpu.deviceId = data.value(QStringLiteral("deviceId")).toString().toUInt(nullptr, 16);
+    gpu.model = data.value(QStringLiteral("model")).toString().toStdString();
+    if (data.value(QStringLiteral("integrated")).isBool())
+        gpu.integrated = data.value(QStringLiteral("integrated")).toBool();
+    gpu.bootVga = data.value(QStringLiteral("bootVga")).toBool();
+    gpu.suspended = data.value(QStringLiteral("suspended")).toBool();
+    gpu.selected = data.value(QStringLiteral("selected")).toBool();
+    gpu.frequencyMHz = numberOf(data.value(QStringLiteral("frequencyMHz")));
+    const QJsonObject utilization = data.value(QStringLiteral("utilization")).toObject();
+    gpu.utilizationStatus = fieldStatus(utilization);
+    gpu.utilizationPercent = numberOf(utilization.value(QStringLiteral("percent")));
+    gpu.utilizationMethod = utilization.value(QStringLiteral("method")).toString().toStdString();
+    const QJsonObject memory = data.value(QStringLiteral("memory")).toObject();
+    gpu.memoryStatus = fieldStatus(memory);
+    if (const auto used = numberOf(memory.value(QStringLiteral("usedBytes"))))
+        gpu.memoryUsedBytes = std::uint64_t(std::max(0.0, *used));
+    if (const auto total = numberOf(memory.value(QStringLiteral("totalBytes"))))
+        gpu.memoryTotalBytes = std::uint64_t(std::max(0.0, *total));
+    const QJsonObject temperature = data.value(QStringLiteral("temperature")).toObject();
+    gpu.temperatureStatus = fieldStatus(temperature);
+    gpu.temperatureCelsius = numberOf(temperature.value(QStringLiteral("celsius")));
+    gpu.temperatureSensor = temperature.value(QStringLiteral("sensor")).toString().toStdString();
+    return gpu;
+}
+
 QJsonObject iconObject(const custommetrics::Snapshot &snapshot)
 {
     if (snapshot.icon) {
@@ -195,6 +534,17 @@ QJsonArray builtInMetrics(const std::optional<metrics::SystemMetricsSnapshot> &s
         const QString &id = builtIn.id;
         if (id == QLatin1String("storage.home") && !separateHome)
             continue; // Home on the root filesystem: no separate entry
+        // GPUs: one object per device ("gpu:<device id>"), where the bar
+        // lists its three selected-GPU entries.
+        if (id == QLatin1String("gpu.memory") || id == QLatin1String("gpu.temperature"))
+            continue;
+        if (id == QLatin1String("gpu.utilization")) {
+            if (snapshot) {
+                for (const metrics::GpuDevice &gpu : snapshot->gpu.devices)
+                    result.append(gpuMetric(gpu));
+            }
+            continue;
+        }
         QJsonObject metric = metricObject(id, QStringLiteral("builtin"), QStringLiteral("system"), builtIn.label);
         metric.insert(QStringLiteral("compactLabel"), builtIn.shortLabel);
         if (!snapshot) {
@@ -270,10 +620,91 @@ QJsonArray builtInMetrics(const std::optional<metrics::SystemMetricsSnapshot> &s
                     setStatus(metric, storage->status);
                 }
             }
+        } else if (id == QLatin1String("uptime")) {
+            data = {{QStringLiteral("section"), sectionObject(s.uptime.status)},
+                    {QStringLiteral("seconds"), optionalNumber(s.uptime.seconds)}};
+            metric.insert(QStringLiteral("unit"), QStringLiteral("seconds"));
+            if (s.uptime.status.ok() && s.uptime.seconds) {
+                metric.insert(QStringLiteral("state"), QStringLiteral("ok"));
+                metric.insert(QStringLiteral("value"), std::floor(*s.uptime.seconds));
+                metric.insert(QStringLiteral("formattedValue"), q(metrics::formatDuration(*s.uptime.seconds)));
+                metric.insert(QStringLiteral("compactValue"), q(metrics::compactDuration(*s.uptime.seconds)));
+                metric.insert(QStringLiteral("detail"), QStringLiteral("since boot"));
+            } else {
+                setStatus(metric, s.uptime.status);
+            }
+        } else if (id == QLatin1String("fps")) {
+            data = {{QStringLiteral("section"), sectionObject(s.fps.status)}};
+            fillFps(metric, data, s.fps);
+        } else if (id == QLatin1String("updates.packages") || id == QLatin1String("updates.flatpak")) {
+            const metrics::UpdatesMetrics &updates = id == QLatin1String("updates.packages") ? s.packageUpdates : s.flatpakUpdates;
+            data = {{QStringLiteral("section"), sectionObject(updates.status)}};
+            fillUpdates(metric, data, updates);
         }
         metric.insert(QStringLiteral("data"), data);
         result.append(metric);
     }
+
+    // Informational text: no value, no unit, no Metrics Bar entry.
+    QJsonObject kernel = metricObject(QStringLiteral("kernel"), QStringLiteral("builtin"), QStringLiteral("system"),
+                                      QStringLiteral("Kernel"));
+    QJsonObject distribution = metricObject(QStringLiteral("distribution"), QStringLiteral("builtin"),
+                                            QStringLiteral("system"), QStringLiteral("Distribution"));
+    if (!snapshot) {
+        for (QJsonObject *metric : {&kernel, &distribution})
+            metric->insert(QStringLiteral("message"), QStringLiteral("waiting for the first sample"));
+    } else {
+        const metrics::KernelMetrics &k = snapshot->kernel;
+        QJsonObject kernelData{{QStringLiteral("section"), sectionObject(k.status)}};
+        if (k.status.ok() && k.info) {
+            kernelData.insert(QStringLiteral("sysname"), q(k.info->sysname));
+            kernelData.insert(QStringLiteral("release"), q(k.info->release));
+            kernelData.insert(QStringLiteral("version"), q(k.info->version));
+            kernelData.insert(QStringLiteral("machine"), q(k.info->machine));
+            kernel.insert(QStringLiteral("state"), QStringLiteral("ok"));
+            kernel.insert(QStringLiteral("formattedValue"), q(k.info->sysname + " " + k.info->release));
+            kernel.insert(QStringLiteral("detail"), q(k.info->machine));
+        } else {
+            setStatus(kernel, k.status);
+        }
+        kernel.insert(QStringLiteral("data"), kernelData);
+
+        const metrics::DistributionMetrics &d = snapshot->distribution;
+        QJsonObject distributionData{{QStringLiteral("section"), sectionObject(d.status)}};
+        if (d.status.ok() && d.info) {
+            const metrics::DistributionInfo &info = *d.info;
+            QJsonArray idLike;
+            for (const std::string &like : info.idLike)
+                idLike.append(q(like));
+            distributionData.insert(QStringLiteral("name"), q(info.name));
+            distributionData.insert(QStringLiteral("prettyName"), q(info.prettyName));
+            distributionData.insert(QStringLiteral("id"), q(info.id));
+            distributionData.insert(QStringLiteral("idLike"), idLike);
+            distributionData.insert(QStringLiteral("versionId"), q(info.versionId));
+            distributionData.insert(QStringLiteral("version"), q(info.version));
+            distributionData.insert(QStringLiteral("codename"), q(info.codename));
+            distributionData.insert(QStringLiteral("buildId"), q(info.buildId));
+            distributionData.insert(QStringLiteral("variant"), q(info.variant));
+            distributionData.insert(QStringLiteral("source"), q(info.source));
+            distribution.insert(QStringLiteral("state"), QStringLiteral("ok"));
+            distribution.insert(QStringLiteral("formattedValue"), q(info.prettyName.empty() ? info.id : info.prettyName));
+            QStringList detail;
+            if (!info.versionId.empty() && info.prettyName.find(info.versionId) == std::string::npos)
+                detail << q(info.versionId);
+            if (!info.buildId.empty())
+                detail << q(info.buildId);
+            if (!info.codename.empty() && info.prettyName.find(info.codename) == std::string::npos)
+                detail << q(info.codename);
+            if (!info.id.empty())
+                detail << QStringLiteral("ID %1").arg(q(info.id));
+            distribution.insert(QStringLiteral("detail"), detail.join(QStringLiteral(" · ")));
+        } else {
+            setStatus(distribution, d.status);
+        }
+        distribution.insert(QStringLiteral("data"), distributionData);
+    }
+    result.append(kernel);
+    result.append(distribution);
     return result;
 }
 
@@ -334,6 +765,10 @@ QJsonObject settingsObject(const AppSettings &settings)
         {QStringLiteral("metricsBarEnabled"), settings.metricsBarEnabled()},
         {QStringLiteral("metricsBarItems"), QJsonArray::fromStringList(settings.metricsBarItems())},
         {QStringLiteral("customMetricFiles"), QJsonArray::fromStringList(settings.customMetricFiles())},
+        {QStringLiteral("gpuDevice"), settings.gpuDevice()},
+        {QStringLiteral("fpsSource"), settings.fpsSource()},
+        {QStringLiteral("updatesIntervalMinutes"), settings.updatesIntervalMinutes()},
+        {QStringLiteral("updatesRemoteRefresh"), settings.updatesRemoteRefresh()},
     };
 }
 
@@ -416,6 +851,62 @@ metrics::SystemMetricsSnapshot systemSnapshotFromMetrics(const QJsonArray &array
     s.diskIo.countedDevices = data("disk.read").value(QStringLiteral("countedDevices")).toInt();
     s.diskIo.readBytesPerSecond = numberOf(byId.value(QStringLiteral("disk.read")).value(QStringLiteral("value")));
     s.diskIo.writeBytesPerSecond = numberOf(byId.value(QStringLiteral("disk.write")).value(QStringLiteral("value")));
+
+    // F5 (schema 2; an older backend has none of these: they stay pending).
+    s.uptime.status = status("uptime");
+    if (s.uptime.status.ok())
+        s.uptime.seconds = numberOf(data("uptime").value(QStringLiteral("seconds")));
+
+    for (const QJsonValue &value : array) {
+        const QJsonObject metric = value.toObject();
+        if (metric.value(QStringLiteral("category")) == QLatin1String("builtin")
+            && metric.value(QStringLiteral("id")).toString().startsWith(QLatin1String("gpu:")))
+            s.gpu.devices.push_back(gpuOf(metric));
+    }
+    s.gpu.status = !s.gpu.devices.empty() ? MetricStatus::okStatus()
+        : byId.contains(QStringLiteral("uptime")) && byId.value(QStringLiteral("uptime")).value(QStringLiteral("state")) != QLatin1String("pending")
+            ? MetricStatus::unavailable("no GPU found")
+            : MetricStatus::pending("waiting for the first sample");
+
+    s.fps.status = status("fps");
+    const QJsonObject fps = data("fps");
+    s.fps.source = fps.value(QStringLiteral("source")).toString().toStdString();
+    s.fps.condition = fpsConditionOf(fps.value(QStringLiteral("condition")).toString());
+    s.fps.fps = s.fps.status.ok() ? numberOf(fps.value(QStringLiteral("fps"))) : std::nullopt;
+    s.fps.frametimeMs = numberOf(fps.value(QStringLiteral("frametimeMs")));
+    s.fps.lastFps = numberOf(fps.value(QStringLiteral("lastFps")));
+    s.fps.ageSeconds = numberOf(fps.value(QStringLiteral("ageSeconds")));
+    s.fps.application = fps.value(QStringLiteral("application")).toString().toStdString();
+
+    s.packageUpdates = updatesOf(byId.value(QStringLiteral("updates.packages")), status("updates.packages"));
+    s.flatpakUpdates = updatesOf(byId.value(QStringLiteral("updates.flatpak")), status("updates.flatpak"));
+
+    s.kernel.status = status("kernel");
+    if (s.kernel.status.ok()) {
+        const QJsonObject kernel = data("kernel");
+        s.kernel.info = metrics::KernelInfo{kernel.value(QStringLiteral("sysname")).toString().toStdString(),
+                                            kernel.value(QStringLiteral("release")).toString().toStdString(),
+                                            kernel.value(QStringLiteral("version")).toString().toStdString(),
+                                            kernel.value(QStringLiteral("machine")).toString().toStdString()};
+    }
+    s.distribution.status = status("distribution");
+    if (s.distribution.status.ok()) {
+        const QJsonObject d = data("distribution");
+        metrics::DistributionInfo info;
+        auto text = [&d](const char *key) { return d.value(QLatin1String(key)).toString().toStdString(); };
+        info.name = text("name");
+        info.prettyName = text("prettyName");
+        info.id = text("id");
+        for (const QJsonValue &like : d.value(QStringLiteral("idLike")).toArray())
+            info.idLike.push_back(like.toString().toStdString());
+        info.versionId = text("versionId");
+        info.version = text("version");
+        info.codename = text("codename");
+        info.buildId = text("buildId");
+        info.variant = text("variant");
+        info.source = text("source");
+        s.distribution.info = info;
+    }
     return s;
 }
 

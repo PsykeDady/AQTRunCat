@@ -34,8 +34,9 @@ add_library(aqtruncat_runner STATIC
 target_link_libraries(aqtruncat_runner PUBLIC aqtruncat_core Qt6::Gui PRIVATE LibArchive::LibArchive)
 target_compile_options(aqtruncat_runner PRIVATE -Wall -Wextra -Wpedantic)
 
-# Linux system metrics (CPU, memory, network, storage, disk I/O) from /proc,
-# /sys and statvfs. Plain C++, no Qt; reuses core/cpustat for CPU usage.
+# Linux system metrics (CPU, memory, network, storage, disk I/O; F5: uptime,
+# GPU, FPS from MangoHud logs, kernel/distribution, update-check parsing)
+# from /proc, /sys, statvfs and release files. Plain C++, no Qt; reuses core/cpustat for CPU usage.
 # Shared by every consumer (CLI, Dashboard and Metrics Bar).
 add_library(aqtruncat_metrics STATIC
     metrics/compactformat.cpp
@@ -43,6 +44,10 @@ add_library(aqtruncat_metrics STATIC
     metrics/counterrates.h
     metrics/diskio.cpp
     metrics/diskio.h
+    metrics/fps.cpp
+    metrics/fps.h
+    metrics/gpu.cpp
+    metrics/gpu.h
     metrics/memory.cpp
     metrics/memory.h
     metrics/metricsformat.cpp
@@ -50,13 +55,20 @@ add_library(aqtruncat_metrics STATIC
     metrics/metricstatus.h
     metrics/network.cpp
     metrics/network.h
+    metrics/packageupdates.cpp
+    metrics/packageupdates.h
     metrics/storage.cpp
     metrics/storage.h
+    metrics/systeminfo.cpp
+    metrics/systeminfo.h
     metrics/systemmetrics.cpp
     metrics/systemmetrics.h
     metrics/textparse.cpp
-    metrics/textparse.h)
-target_link_libraries(aqtruncat_metrics PUBLIC aqtruncat_core)
+    metrics/textparse.h
+    metrics/uptime.cpp
+    metrics/uptime.h)
+# dlopen of NVML (F5.2): optional at run time, no link dependency.
+target_link_libraries(aqtruncat_metrics PUBLIC aqtruncat_core PRIVATE ${CMAKE_DL_LIBS})
 target_compile_options(aqtruncat_metrics PRIVATE -Wall -Wextra -Wpedantic)
 
 # Command line: grammar, help, "runner …" and "metrics" commands. Unit tested.
@@ -87,6 +99,8 @@ add_library(aqtruncat_engine STATIC
     app/autostartcommand.h
     app/autostartmanager.cpp
     app/autostartmanager.h
+    app/boundedprocess.cpp
+    app/boundedprocess.h
     app/cpumonitor.cpp
     app/cpumonitor.h
     app/custommetricpaths.cpp
@@ -98,6 +112,7 @@ add_library(aqtruncat_engine STATIC
     app/metricsampler.h
     app/metricsbarids.cpp
     app/metricsbarids.h
+    app/processgroup.h
     app/providerintegration.cpp
     app/providerintegration.h
     app/runpreferences.cpp
@@ -107,7 +122,9 @@ add_library(aqtruncat_engine STATIC
     app/snapshotthrottle.cpp
     app/snapshotthrottle.h
     app/storagepaths.cpp
-    app/storagepaths.h)
+    app/storagepaths.h
+    app/updatesservice.cpp
+    app/updatesservice.h)
 target_link_libraries(aqtruncat_engine PUBLIC aqtruncat_metrics Qt6::Core)
 target_compile_options(aqtruncat_engine PRIVATE -Wall -Wextra -Wpedantic)
 

@@ -22,24 +22,60 @@
 > AQTRunCat."* → **the initial roadmap M0–M9 is COMPLETE; M9 concluded it.**
 > AQTRunCat is in post-project development. The roadmap features are F1–F7 in
 > requirements.md (§13 here). **F1, F2, F3 and F4 (F4.1 headless backend +
-> D-Bus API + CLI; F4.2 native KDE Plasma 6 Plasmoid) are COMPLETE. F4.1 was
-> committed by the user (c9a7b87); F4.2 was implemented and validated on
-> 2026-10-21 on branch `feature/f4`, uncommitted at that time (the user owns
-> every Git write). F5, F6 and F7 are NOT STARTED; do not start any of them
-> without an explicit user instruction. F7 (Walking Goose, Crazy Dancing
-> Parrot) is blocked until the user provides the final assets.** Version
-> **1.4.2** (versioning rule in §1).
+> D-Bus API + CLI; F4.2 native KDE Plasma 6 Plasmoid) are COMPLETE; the user
+> officially closed F4 on 2026-10-21. Commits by the user: F4.1 c9a7b87, F4.2
+> 51dd48e (branch `feature/f4`). The user then moved to branch `feature/f5`
+> to start **F5 (Additional Built-in Metrics)**. **F5 is COMPLETE
+> (2026-10-22, uncommitted on `feature/f5`; the user owns every Git write):
+> uptime, GPU, FPS (MangoHud log), package and Flatpak updates, kernel and
+> distribution as Built-in Metrics (§13 F5, §5 F5 block,
+> `docs/F5-additional-built-in-metrics.md`).** F6 and F7 are NOT STARTED;
+> do not start them without an explicit user instruction. F7 (Walking
+> Goose, Crazy Dancing Parrot) is blocked until the user provides the final
+> assets. Version **1.5.6** (F5.1–F5.6; versioning rule in §1).
 >
-> Handoff state at the end of F4.2 (2026-10-21):
+> Handoff state at the end of F5 (2026-10-22):
+> - Last verified: clean build (fresh dir) 0 warnings, ctest **51/51**,
+>   `packaging-versions` 1.5.6, shellcheck clean, `git diff --check` clean.
+> - Runtime (private bus `build/tests/backendipc-bus.conf`, isolated XDG;
+>   the user's session and /usr/local 1.4.2 backend untouched): real Intel
+>   i915 GPU, real read-only pacman/Flatpak checks (strace: no non-Unix
+>   connect; pacman/Flatpak databases fingerprint unchanged), FPS with a
+>   simulated real-time MangoHud log (MangoHud is not installed here),
+>   Dashboard and Plasmoid offscreen with the real backend.
+> - Manual checks left to the user: tray Dashboard/Metrics Bar and the
+>   Plasmoid in the real session with F5 data, a real game with MangoHud,
+>   AMD/NVIDIA/hybrid hardware, apt/dnf on real desktops (only containers).
+> - F5 fix (2026-10-22, user prompt "Hide FPS When Provider Is OFF", still
+>   1.5.6, uncommitted): FPS source OFF hides FPS in Dashboard (and the
+>   Gaming section), Metrics Bar and Plasmoid; every other condition stays
+>   visible; API unchanged (`disabled`). Record:
+>   `docs/F5-additional-built-in-metrics.md` §5.4. ctest 51/51, clean build
+>   0 warnings.
+>   Verified by the user in the real session (2026-10-22): tray Dashboard/
+>   Metrics Bar OK; Plasmoid OK after plasmashell was restarted.
+> - install.sh opt-in Plasma restart (2026-10-22, user request after the
+>   Plasmoid kept the old QML: plasmashell started before the install).
+>   `--restart-plasma`/`--no-restart-plasma`, question default N; §5.5 of the
+>   F5 doc; installer 314 checks. Never restart the user's plasmashell
+>   yourself: the user's own restart took about a minute (probably the unit
+>   TimeoutSec=40 s to stop + start); suggest the command instead.
+> - Lesson (2026-10-22): a Bash `-c` script containing `rm -rf "$VAR"` is
+>   blocked by the harness safety check: use fresh scratch directories
+>   instead of removing; bash `printf %.3f` follows the Italian locale
+>   (comma) — use `LC_ALL=C` in generated fixtures.
+>
+> Handoff state at the end of F4 (2026-10-21):
 > - Plasmoid record: `docs/F4.2-plasma-plasmoid.md`; summary in §13 (F4.2)
 >   and frozen decisions in §5 (F4.2 block).
-> - Left for the user to verify by hand (their real Plasma session was never
->   modified): add the widget to a real panel/desktop, open the popup by
->   click, look in a vertical/auto-hide panel, CPU inside plasmashell.
-> - Open questions for the user: (a) resolved by F7's existence: "after the
->   7th feature → 2.0.0" now matches F1–F7 (confirm); (b) the `--no-build`
->   version question is in English like the rest of install.sh — the user
->   wrote it in Italian; confirm the language.
+> - Manual check by the user (2026-10-21): they started the Plasmoid in
+>   their real Plasma session and found it OK ("mi sembra ok"); no defects
+>   reported. No detailed per-item report (vertical/auto-hide panel, CPU in
+>   plasmashell) was given.
+> - Decisions confirmed by the user (2026-10-21): versioning "after the 7th
+>   feature → 2.0.0" with F1–F7 is correct (F5 → 1.5.x, F5.1 → 1.5.1, …);
+>   the `--no-build` version question stays in English like the rest of
+>   install.sh. No open questions left from F4.
 > - The user installed F4.1 system-wide in `/usr/local` on 2026-10-21 10:28
 >   (1.4.1 era); its `aqtruncatd` runs on the real session bus. Never touch
 >   it; tests must not depend on it (the test buses have no service
@@ -51,8 +87,8 @@
 >   and unset WAYLAND_DISPLAY/DISPLAY for offscreen runs. The shell sandbox
 >   cannot reach the user's AT-SPI bus (connection refused): AT-SPI driving
 >   of test windows is not available here.
-> - Last verified: clean build (fresh dir) 0 warnings, ctest 45/45,
->   `packaging-versions` 1.4.2, shellcheck clean, `git diff --check` clean.
+> - Last verified at the end of F4 (superseded by the F5 handoff above):
+>   clean build 0 warnings, ctest 45/45, `packaging-versions` 1.4.2.
 
 ---
 
@@ -112,8 +148,8 @@
 ## 1. Project identity
 
 - Name **AQTRunCat**, tagline **"A Cute Run Cat for Linux"**, executable
-  **`aqtruncat`**, version **1.4.2** (CMake `PROJECT_VERSION`; was 0.0.1 until
-  F4.1; 1.4.2 = F4.2). Versioning rule (user, 2026-10-21; requirements.md "Versioning"):
+  **`aqtruncat`**, version **1.5.6** (CMake `PROJECT_VERSION`; was 0.0.1 until
+  F4.1; 1.4.2 = F4.2; 1.5.6 = F5 with its six sub-features F5.1–F5.6). Versioning rule (user, 2026-10-21; requirements.md "Versioning"):
   1.0.0 = M0–M9; each completed feature F<n> raises the minor (F4 → 1.4.x),
   each completed sub-feature the patch (F4.1 → 1.4.1, F4.2 → 1.4.2); after
   the 7th feature → 2.0.0. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
@@ -162,12 +198,17 @@ F2 COMPLETE   Claude Code integration: usage quotas 5h/week (revised 2026-10-20)
 F3 COMPLETE   Codex integration: usage limits per window (local sessions + opt-in live app-server read), adapter over F1
 F4.1 COMPLETE Headless backend aqtruncatd (QtCore+QtDBus), D-Bus API io.github.psykedady.AQTRunCat1 (api 1, schema 1), CLI aqtruncatctl; tray = client
 F4.2 COMPLETE Native KDE Plasma 6 Plasmoid io.github.psykedady.aqtruncat (QML package, client of the API), GetRunners/"runners", install.sh --plasmoid/--no-plasmoid
-POST-PROJECT  F5, F6, F7 (requirements.md), NOT STARTED, need an explicit instruction (F7 blocked on the user's assets)
+F5 COMPLETE   Additional Built-in Metrics: uptime, GPU (per device), FPS (MangoHud log), package/Flatpak updates (read-only, local metadata by default), kernel, distribution; API schema 2
+POST-PROJECT  F6, F7 (requirements.md), NOT STARTED, need an explicit instruction (F7 blocked on the user's assets)
 ```
 
 - Build: `cmake -S . -B build && cmake --build build && ctest --test-dir build`.
   Clean build: **0 warnings** (`-Wall -Wextra -Wpedantic` on all targets).
-- Tests: **45 ctest suites, all passing** on the host (2026-10-21, after
+- Tests (2026-10-22, after F5): **51 ctest suites, all passing** (new
+  `uptime` 16, `systeminfo` 14, `gpu` 14, `fps` 12, `packageupdates` 10,
+  `updatesservice` 16; extended apischema 12, appsettings 16,
+  metricsbarmodel 19, dashboard 15, settingswindow 10, backendipc 13,
+  plasmoidlogic 18). Before F5: **45 ctest suites, all passing** on the host (2026-10-21, after
   F4.2: + `plasmoidlogic` qmltestrunner 15, `plasmoidclient` 10,
   `plasmoidpackage` 9, `backendipc` 12, installer 275 checks); containers
   skip 4 Qt cases (locale ×2, root permissions ×2). The plasmoid suites
@@ -255,6 +296,16 @@ frames listed by `GetRunners` locally at the received fps,
 `FullRepresentation.qml` is the Plasma popup. `aqtruncatd` gets the
 catalogue from `Config::runnerCatalog` (set in `daemon/main.cpp` with the
 bundled runners at `<bindir>/../share/aqtruncat/runners`).
+
+**Since F5** the same `SystemMetricsSampler` also fills `uptime`, `gpu`
+(`metrics::GpuSampler`: DRM discovery, amdgpu/i915/xe sysfs, NVML via
+dlopen), `fps` (`metrics::MangoHudFpsReader`), and every 10 min `kernel` /
+`distribution` (`metrics/systeminfo`); `packageUpdates`/`flatpakUpdates` are
+filled by the backend from `UpdatesService` (`src/app/updatesservice.*`,
+bounded subprocesses `BoundedProcess`, shared `app/processgroup.h` with F1)
+just before publishing. `apischema` turns them into `builtin` objects
+(`gpu:<id>` per device; schema 2) and back (`systemSnapshotFromMetrics`), so
+the Dashboard and the Metrics Bar keep reading one typed snapshot.
 
 ```text
                      src/app/main.cpp  (parse → dispatch only)
@@ -655,8 +706,17 @@ Key components:
 | Plasmoid form (F4.2) | QML-only Plasma package, no C++ plugin, D-Bus via `org.kde.plasma.workspace.dbus`, async calls only | a native plugin is not found by plasmashell from /usr/local or --local; no native code in plasmashell |
 | Plasmoid role (F4.2) | frontend only: no sampling, provider files, commands, scheduler or own settings store; shared settings via SetSetting & co. (immediate), widget options in Plasma's KConfig only | single engine (F4.1); no competing configuration |
 | Runner catalogue (F4.2) | `GetRunners`/capability `runners`, schema 1, frames as absolute files + `sequence`, `selected` = tray's start-up fallback; bundled runners also installed as files; QtGui kept out of aqtruncat_api/aqtruncatctl | no frames over IPC; generic for non-Qt clients |
-| Plasmoid install (F4.2) | default when Plasma 6 QML modules exist; `--plasmoid` fails without them; `--no-plasmoid` skips/removes; never edit panels, never restart plasmashell, never add an instance | user requirement F4.2.1; installing ≠ activating |
+| Plasmoid install (F4.2) | default when Plasma 6 QML modules exist; `--plasmoid` fails without them; `--no-plasmoid` skips/removes; never edit panels, never add an instance; plasmashell restarted **only on request**: after updating an installed widget while this user's plasmashell runs, ask on a terminal "Restart Plasma now …? [y/N]" (default N, no terminal = no), or `--restart-plasma`/`--no-restart-plasma`; restart = `systemctl --user restart plasma-plasmashell.service` (+ reset-failed/start if it is not back; kquitapp6+kstart without the unit), wait ≤ 90 s, else print the commands | user requirement F4.2.1; installing ≠ activating; restart opt-in added by the user on 2026-10-22 (a running plasmashell keeps the QML it loaded: removing/re-adding the widget does not reload it) |
 | Plasmoid packaging (F4.2) | inside the main package, weak dependency on plasma-workspace | smallest maintainable; non-KDE users get no Plasma deps |
+| F5 metric category | uptime, GPU, FPS, updates, kernel, distribution are **built-in** (`category builtin`, `kind system`), sections of `SystemMetricsSnapshot`; never Custom Metrics/Integrations | user requirement; one engine, one sampler |
+| F5 API | schema 2 (additive), api 1; ids `uptime`, `gpu:<PCI slot>` (one per GPU, sorted), `fps`, `updates.packages`, `updates.flatpak`, `kernel`, `distribution`; units `seconds`/`fps`/`count`; kernel/distribution `value` null; GPU object `normalized` null (items carry bars); no dedicated IPC methods | stable ids; multiple GPUs unambiguous; F4.1 contract kept |
+| F5 GPU | per-field state; Intel = *activity* from RC6 residency delta (method `rc6-residency`, label "Activity"), not per-engine utilization; amdgpu sysfs; NVIDIA via NVML `dlopen("libnvidia-ml.so.1")` only; integrated Intel: VRAM/temperature unavailable (no CPU-package substitute); runtime-suspended GPU never read; `integrated` null for AMD | no privileges, no subprocess, never wake a dGPU, never invent values |
+| F5 GPU selection | setting `gpuDevice` `auto` (first known discrete, else first) or id; resolved in the sampler, published as `data.selected`; absent chosen id stays persisted, auto meanwhile; Metrics Bar `gpu.utilization/memory/temperature` follow it | one GPU per bar slot without client logic |
+| F5 FPS | only MangoHud's CSV log (verified in MangoHud source: appended + flushed per sample); `output_folder` from `~/.config/MangoHud/*.conf` (re-read ≤ every 5 s); last complete row; fresh ≤ 3 s, stale ≤ 60 s (no value), else inactive; malformed row = error; setting `fpsSource` mangohud (default) / off; **off = FPS hidden everywhere** (Dashboard row + Gaming header, Metrics Bar item without a slot or placeholder, selection kept; Plasmoid row) via one rule `condition == disabled` (`metrics::fpsHidden`, `logic.js hiddenMetric`); API still reports `fps` as `disabled`; default `FpsMetrics::condition` is Inactive; a source change republishes FPS at once (fix 2026-10-22, still 1.5.6) | no injection, no overlay, never from GPU load/refresh rate; MangoHud control socket has no FPS |
+| F5 updates commands | `pacman -Qu` (remote opt-in: `checkupdates`), `apt-get -s -q -o Debug::NoLocking=true dist-upgrade` (no remote: needs root), `dnf -q -C check-update` (remote: `--refresh`), `flatpak remote-ls --user/--system/--installation=N --updates --cached --app/--runtime --columns=ref`; manager by installed capability, os-release only for ties | read-only, no root, local metadata by default, verified no network |
+| F5 updates scheduling | `UpdatesService` in the backend: two jobs, ≤1 command each, first check 30 s after start, next `updatesIntervalMinutes` (60; 0 off; 15–1440) after completion, remote ≥ 60 min; debounced (30 s) re-check on package-db/Flatpak `.changed` changes; 120 s timeout, 4 MiB/stream, process-group SIGKILL; LC_ALL=C, stdin /dev/null | infrequent, cached, non-overlapping, bounded |
+| F5 update semantics | count only when ok; error keeps `lastSuccess` but no count; metadata > 7 days = stale warning; Flatpak count = distinct refs per installation summed (apps + runtimes, no .Locale/.Debug); any failing installation → error (no partial sum); no Flatpak → unavailable | honest counts |
+| F5 tests hermetic | `backendipc`, `plasmoidclient`, `plasmoid-preview.sh` write `updates/intervalMinutes=0`; `tst_systemmetrics` injects kernel/osRoot/fps off/nvml null | never depend on host package databases or GPU |
 
 ---
 
@@ -822,6 +882,11 @@ sources exist but none has a rate → Pending; Δ0 → real 0 (Ok).
 | Network | `/proc/net/dev` + `/sys/class/net/<if>/device` | download/upload B/s aggregate, `interfaces[]` {name, kind Loopback/Physical/Virtual, counted, rates, counterReset} | aggregate = Physical only | no physical iface → Unavailable "no physical network interface" | VPN traffic measured encrypted on the NIC; links that exist only as virtual devices without a physical NIC (e.g. `ppp0` modem) are not counted; host↔container bridge traffic not counted; 32-bit wraps treated as resets |
 | Storage | `statvfs(path)` (default paths `{"/"}`) | per path: totalBytes, usedBytes, availableBytes, usagePercent | df semantics (§5) | statvfs failure → Unavailable; inconsistent stats (frsize/blocks 0, free>total, avail>free, overflow) → Error | btrfs/CoW approximate (as df); CLI uses `/`, Dashboard adds distinct Home |
 | Disk I/O | `/proc/diskstats` (sectors × 512 always) + `/sys/block/<d>/{device,hidden}` | read/write B/s aggregate, `devices[]` | aggregate = PhysicalDisk only | no physical disk → Unavailable "no physical disk" | no NFS/SMB/FUSE; md RAID counts member-disk bytes; eMMC boot partitions count as disks |
+| Uptime (F5) | `/proc/uptime` first field | seconds | each sample; `formatDuration` truncates to minutes | missing → Unavailable, malformed → Error | — |
+| GPU (F5) | `/sys/class/drm/card*/device` (+ hwmon), NVML dlopen | per device: utilization %, VRAM used/total, °C, MHz, per-field status | Intel: 100·(1−Δrc6/Δt) | no GPU → Unavailable; suspended → fields Unavailable, not read | see §11 item 24 |
+| FPS (F5) | newest MangoHud `*.csv` (not `_summary`) in `output_folder` | fps, frametime, condition | last complete row; ≤3 s fresh | stale/inactive/missing/not-configured/disabled → Unavailable; bad log → Error | §11 item 23 |
+| Kernel / distribution (F5) | `uname(2)`; os-release → lsb-release → release files | strings | every 600 s | Unavailable, never failure | — |
+| Updates (F5) | backend `UpdatesService` (not the sampler) | count, manager, lastSuccess, metadata age | §5 F5 rows | Unavailable (no tool/off), Error (failed), Pending (first check) | §11 item 25 |
 
 Sampling cost: `sample()` ≈ 108 µs (≈50 syscalls: 6 opens, 18 reads,
 ~14 stats for classification, 1 statfs); classification is redone every
@@ -1039,6 +1104,16 @@ SIGTERM handler (`SigCgt` bit 15). Never clean leftovers with `pkill -f`
     `/usage` at 11:44 showed 31%. Live updates need Pro/Max, the user-level
     status line (project/managed status lines take precedence) and a
     Claude response. `cachedUsageUtilization` is an internal format.
+23. F5 FPS exists only while MangoHud logs to a file; MANGOHUD_CONFIG env
+    and Flatpak MangoHud (sandbox paths) are invisible; newest log wins.
+24. F5 Intel GPUs: activity from RC6 residency, not per-engine utilization;
+    no iGPU temperature/VRAM; AMD integrated/discrete unknown; only gt0 read.
+25. F5 updates: counts as fresh as local metadata (stale note after 7
+    days); apt cannot refresh without root; dnf --refresh writes the user's
+    cache; one failing Flatpak installation blocks the Flatpak count.
+26. F5 validated on real hardware only for Intel i915; AMD/xe/NVIDIA/NVML/
+    nouveau, apt/dnf desktops and a real MangoHud game are fixture/
+    container-tested or left for manual checks.
 
 ---
 
@@ -1060,9 +1135,9 @@ RunCat Neo custom runner names (§11).
 
 M0–M9 are complete; M9 concluded the initial roadmap. `requirements.md`
 ("AQTRunCat — Post-Project Features") is the current source for future work
-and supersedes the earlier F1–F4 post-project ordering. **F1, F2, F3 and F4.1
-are COMPLETE. F4.2, F5 and F6 are NOT STARTED; do not start one without an
-explicit user instruction.**
+and supersedes the earlier F1–F4 post-project ordering. **F1, F2, F3, F4
+(F4.1, F4.2) and F5 are COMPLETE. F6 and F7 are NOT STARTED (F7 blocked on
+the user's assets); do not start one without an explicit user instruction.**
 
 Development baseline: future post-project work starts from `feature/base`.
 Each feature branch (`feature/f1`, `feature/f2`, `feature/f3`, …) is created
@@ -1368,18 +1443,37 @@ create or switch branches, commit or push without explicit permission.
     reachable from the widget; no runner-list change signal; auto-hide
     panels keep animating; `org.kde.plasma.workspace.dbus` is a
     plasma-workspace (not Frameworks) module.
-- **F5 — Additional Built-in Metrics**: system uptime (F5.1, prefer direct
-  interfaces); GPU metrics (F5.2: utilization, VRAM, temperature…,
-  vendor/driver differences, graceful degradation); FPS metrics for gaming
-  (F5.3: method to be investigated first, no unacceptable overhead);
-  system/package updates
-  (F5.4: per distribution family behind a common metric interface, failures
-  isolated); Flatpak updates (F5.5: optional, systems without Flatpak
-  unaffected); kernel and distribution information (F5.6: separate concepts,
-  no single required source — `uname`-equivalent kernel interfaces,
-  `/etc/os-release` when available, distribution-specific files, fallbacks;
-  unknown/unavailable instead of failure). All keep the valid / pending /
-  unavailable / error distinction and the existing metric architecture.
+- **F5 — Additional Built-in Metrics — COMPLETE (2026-10-22, 1.5.6,
+  uncommitted on `feature/f5`)**. Full record: `docs/F5-additional-built-in-metrics.md`
+  (+ `docs/F5-additional-built-in-metrics/{dashboard,plasmoid-light,plasmoid-dark}.png`);
+  normative summary in requirements.md (F5 "Implemented Behaviour").
+  - User prompt (2026-10-22): seven metrics as Built-in Metrics in the
+    existing architecture, one backend, explicit states, no invented
+    values, no root, no installs, no silent network, optional FPS only from
+    a genuine source; settings only where needed; Metrics Bar opt-in.
+  - Investigation: host = Intel i915 TigerLake only (no AMD/NVIDIA),
+    pacman + checkupdates + flatpak installed, no MangoHud. MangoHud
+    sources read (logging.cpp: per-sample append+flush; control.cpp: no
+    FPS). `flatpak remote-ls --cached` verified offline with strace;
+    `apt-get -s` (Ubuntu 25.04) and `dnf -C check-upgrade` (Fedora 44, uid
+    1500) verified as non-root in containers.
+  - Code: `src/metrics/{uptime,systeminfo,gpu,fps,packageupdates}`,
+    `src/app/{boundedprocess,updatesservice,processgroup.h}`; snapshot,
+    sampler, apischema (both ways), backend (UpdatesService, settings),
+    BackendClient (unavailable on loss), MetricsBarModel, Dashboard
+    (GPU/Gaming/Updates/System), Settings (Built-in Metrics group),
+    trayapp (GPU list), `aqtruncat metrics` report, `aqtruncatctl` help,
+    Plasmoid (section "Built-in Metrics", shared settings, logic.js
+    gpuChoices/updatesIntervalChoices/indexOfValue).
+  - Settings (INI / API): `gpu/device` `gpuDevice`, `fps/source`
+    `fpsSource`, `updates/intervalMinutes` `updatesIntervalMinutes`,
+    `updates/remoteRefresh` `updatesRemoteRefresh`; signal
+    `AppSettings::systemMetricsSettingsChanged`; Restore Defaults resets
+    them.
+  - Performance (60 s, private bus): backend F4 0.100 % / 21.0 MiB → F5
+    0.150 % / 21.8 MiB; one check round ≈ 1.8 s CPU in children (pacman
+    -Qu with gpg ≈ 0.7 s, 4 flatpak calls ≈ 1 s) → ≈ 0.05 % hourly.
+  - Limitations: see §11 items 23–26 and the F5 doc §17.
 - **F7 — Additional Built-in Animated Runners (NOT STARTED, blocked)**:
   Walking Goose and Crazy Dancing Parrot as official built-in runners
   (like Cat/Coffee, separate from user runners); blocked until the user
@@ -1475,7 +1569,10 @@ plasmoid/package/              F4.2 KDE Plasma 6 widget (QML only): metadata.jso
 src/api/runnercatalog.*        F4.2 GetRunners payload (lib aqtruncat_runner_catalog with app/runnerselection.*; QtGui; linked by aqtruncatd and the tray only)
 docs/F4.2-plasma-plasmoid.md   F4.2 strategy, package, IPC, compact/popup, settings, coexistence, install/packaging, security, perf, tests, runtime validation, limits (+ screenshots dir)
 tests/tst_plasmoidclient.cpp, tests/tst_plasmoidpackage.cpp, tests/plasmoid/tst_logic.qml   F4.2 tests (client on a private bus with activation wrapper; package/plasmoidviewer; qmltestrunner)
-tools/plasmoid-preview.{sh,qml}   offscreen popup/runner previews with demo data (light/dark PNG), private bus, isolated XDG
+tools/plasmoid-preview.{sh,qml}   offscreen popup/runner previews with demo data (light/dark PNG), private bus, isolated XDG (F5: update checks off)
+src/metrics/{uptime,systeminfo,gpu,fps,packageupdates}.*   F5 Qt-free sources: /proc/uptime, uname + os-release, DRM/sysfs/NVML GPUs, MangoHud log reader, update-check parsers/commands
+src/app/updatesservice.*, boundedprocess.*, processgroup.h   F5 backend update checks (two non-overlapping jobs), bounded subprocess (shared process-group rules with F1)
+docs/F5-additional-built-in-metrics.md   F5 investigation, ids/sources/units, GPU/FPS/updates semantics, API/CLI/UI, settings, performance, security, tests, runtime validation, limits (+ images dir)
 data/runners/<id>/metadata.json   AQTRunCat-authored metadata for bundled runners
 third_party/runcatneo/         upstream LICENSE + frames (cat, coffee bundled; engine spike-only)
 tests/                         Qt Test suites (tst_*.cpp), including F1 deterministic command helper/service cases and F2 Claude fixtures (synthetic registry/transcripts/fake /proc)

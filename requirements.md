@@ -56,9 +56,10 @@ Rule (user decision, 2026-10-21):
   F1 → 1.1.0, F2 → 1.2.0, F3 → 1.3.0, F4 → 1.4.x, F5 → 1.5.x, …
 - Each completed sub-feature raises the **patch** version within its feature:
   F4.1 → 1.4.1, F4.2 → 1.4.2; F5.1 → 1.5.1, and so on.
-- After the seventh feature the version moves to **2.0.0**.
+- After the seventh feature (F7) the version moves to **2.0.0** (confirmed
+  by the user, 2026-10-21).
 
-Current version: **1.4.2** (F4.2 complete). Earlier states were never
+Current version: **1.5.6** (F5 complete: F5.1–F5.6, 2026-10-22). Earlier states were never
 released under their own number (the project stayed at 0.0.1 until F4.1).
 
 
@@ -745,10 +746,16 @@ Record, design and validation: `docs/F4.2-plasma-plasmoid.md`. Normative:
   on a private bus (loading, signals, one backend with two widgets and the
   tray, settings and runner changes, backend restart, CPU); adding the
   widget to the user's real panel and opening the popup by click are left
-  for manual verification (the user's session was not modified).
+  for manual verification (the user's session was not modified); the user
+  then ran the widget in the real Plasma session, found it OK and closed F4
+  on 2026-10-21.
 
 
 ## F5 — Additional Built-in Metrics
+
+Status: COMPLETE (2026-10-22, version 1.5.6). Record, investigation and
+validation: `docs/F5-additional-built-in-metrics.md`; normative summary in
+"Implemented Behaviour (F5 complete)" below.
 
 Evaluate and add additional built-in metrics:
 
@@ -825,7 +832,70 @@ Unknown information must be represented as unavailable/unknown rather than
 causing a metric or application failure.
 
 
+### Implemented Behaviour (F5 complete, 2026-10-22)
+
+- All F5 metrics are **built-in** metrics (`category: builtin`,
+  `kind: system`): sections of the one `SystemMetricsSnapshot`, published by
+  the one backend, read by the Qt/SNI frontend, `aqtruncatctl` and the
+  Plasmoid through the existing API. API schema **2** (additive; `api` 1).
+  Ids: `uptime`, `gpu:<device id>` (one per GPU, PCI slot, ordered by id),
+  `fps`, `updates.packages`, `updates.flatpak`, `kernel`, `distribution`;
+  units `seconds`, `fps`, `count`; `kernel`/`distribution` have no `value`
+  (text). Every field keeps ok / pending / unavailable / error; missing
+  values are `null`, never 0; counts, durations and text are never
+  percentages.
+- **Uptime**: `/proc/uptime` (system, not process), each sample; days,
+  hours, minutes.
+- **GPU**: DRM discovery (connectors, firmware framebuffers and non-display
+  PCI classes skipped); amdgpu sysfs (busy %, VRAM, hwmon temperature);
+  Intel i915/xe *activity* = time out of RC6 (no privileges needed; not
+  per-engine utilization); NVIDIA through NVML loaded at run time with
+  `dlopen` (no build or runtime dependency); other drivers: hwmon
+  temperature only. Per-field availability; integrated Intel GPUs report no
+  VRAM or temperature of their own. A runtime-suspended GPU is never read.
+  Shared setting `gpuDevice` (`auto` = first discrete, else first) selects
+  the GPU of the Metrics Bar entries `gpu.utilization`, `gpu.memory`,
+  `gpu.temperature`.
+- **FPS**: only measured values from the CSV log MangoHud appends while
+  logging (`output_folder` in `~/.config/MangoHud/*.conf`); conditions
+  measured (≤ 3 s), stale (≤ 60 s, no current value), inactive, missing,
+  not-configured, disabled, unsupported. Never inferred from GPU/CPU load or
+  refresh rate; no injection, no overlay requirement. Shared setting
+  `fpsSource` (`mangohud` default, `off`).
+- **Package updates**: manager detected from what is installed (pacman,
+  apt, dnf; os-release only breaks ties). Read-only commands with local
+  metadata by default (`pacman -Qu`, `apt-get -s … dist-upgrade`,
+  `dnf -C check-update`); opt-in remote refresh (`updatesRemoteRefresh`:
+  `checkupdates` for pacman, `dnf --refresh`; apt impossible without root),
+  at most hourly. Count, manager, last successful check, metadata age
+  (stale after 7 days), errors as errors.
+- **Flatpak updates**: `flatpak remote-ls --updates --cached` per
+  installation (user, system, `installations.d`), apps and runtimes; count =
+  distinct refs per installation, summed; any failing installation makes
+  the metric an error; no Flatpak → unavailable.
+- **Kernel / distribution**: `uname(2)`; os-release parsed as data (never
+  executed), fallbacks `/usr/lib/os-release`, `lsb-release`,
+  distribution-specific files; re-read every 10 minutes.
+- **Scheduling**: uptime, GPU and FPS with the 1 Hz system sample; update
+  checks in the backend's `UpdatesService`, one non-overlapping bounded
+  command per job (direct executable, fixed arguments, own process group,
+  C locale, stdin `/dev/null`, 120 s timeout, 4 MiB output limit), first
+  check 30 s after start, then `updatesIntervalMinutes` (60 default; 0 =
+  off) after the previous one finished, plus one debounced re-check when the
+  package databases change. Never sudo/pkexec, never install/upgrade/remove,
+  no silent network access (verified with strace).
+- **Frontends**: Qt Dashboard sections GPU, Gaming, Updates, System; the
+  Plasmoid presents them generically under "Built-in Metrics" and offers
+  the four shared settings; Metrics Bar ids `uptime`, `gpu.*`, `fps`,
+  `updates.packages`, `updates.flatpak`, none selected by default, the
+  3-item limit unchanged, kernel/distribution not offered.
+- **Packaging**: no new mandatory dependency; weak dependencies hwdata /
+  pci.ids, flatpak, pacman-contrib (Arch), mangohud.
+
+
 ## F6 — Hover Information
+
+Status: NOT STARTED.
 
 Provide compact information when the pointer hovers over an AQTRunCat
 tray/applet item. At minimum, expose:

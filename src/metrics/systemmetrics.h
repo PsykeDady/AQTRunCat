@@ -8,10 +8,15 @@
 #include "core/cpustat.h"
 #include "counterrates.h"
 #include "diskio.h"
+#include "fps.h"
+#include "gpu.h"
 #include "memory.h"
 #include "metricstatus.h"
 #include "network.h"
+#include "packageupdates.h"
 #include "storage.h"
+#include "systeminfo.h"
+#include "uptime.h"
 
 #include <functional>
 #include <optional>
@@ -78,7 +83,22 @@ struct SystemMetricsSnapshot {
     NetworkMetrics network;
     std::vector<StorageMetrics> storage; // one per configured path
     DiskIoMetrics diskIo;
+    // F5. Uptime, GPU and FPS are read with every sample; kernel and
+    // distribution only every InfoRefreshSeconds. The two update counts are
+    // not sampled here: the backend's update checks fill them in.
+    UptimeMetrics uptime;
+    GpuMetrics gpu;
+    FpsMetrics fps;
+    KernelMetrics kernel;
+    DistributionMetrics distribution;
+    UpdatesMetrics packageUpdates;
+    UpdatesMetrics flatpakUpdates;
 };
+
+// The real system's defaults for the F5 sources (from HOME, XDG_CONFIG_HOME,
+// XDG_DATA_HOME and PATH).
+FpsSources systemFpsSources();
+std::vector<std::string> systemPciIdsPaths();
 
 struct MetricsSources {
     std::string procRoot = "/proc";
@@ -86,7 +106,18 @@ struct MetricsSources {
     std::vector<std::string> storagePaths{"/"};
     NetworkSelection networkSelection;
     std::function<std::optional<FilesystemStats>(const std::string &path, std::string *error)> statFilesystem = queryFilesystem;
+    // F5
+    std::string osRoot;                 // prefix of /etc and /usr/lib ("" = the real root)
+    std::function<std::optional<KernelInfo>(std::string *error)> kernel = queryKernel;
+    std::vector<std::string> pciIdsPaths = systemPciIdsPaths();
+    NvmlQuery nvml = systemNvml();
+    std::string gpuPreference = AutoGpu;
+    std::string fpsSource = FpsSourceMangoHud;
+    FpsSources fpsSources = systemFpsSources();
 };
+
+// Kernel and distribution rarely change: re-read every ten minutes.
+inline constexpr double InfoRefreshSeconds = 600.0;
 
 class SystemMetricsSampler
 {
@@ -101,6 +132,12 @@ public:
     // sections keep their independent state.
     void setNetworkSelection(NetworkSelection selection);
     const NetworkSelection &networkSelection() const { return m_sources.networkSelection; }
+    // F5 settings: which GPU single-GPU consumers follow, and the FPS source.
+    void setGpuPreference(std::string preference) { m_sources.gpuPreference = std::move(preference); }
+    void setFpsSource(std::string source) { m_sources.fpsSource = std::move(source); }
+    // FPS alone, from the current source (no file access when it is off),
+    // so that a source change shows without waiting for the next sample.
+    FpsMetrics sampleFps() { return m_fps.sample(m_sources.fpsSource); }
 
     // Monotonic clock in seconds, for callers without their own.
     static double now();
@@ -110,11 +147,17 @@ private:
     MemoryMetrics sampleMemory() const;
     NetworkMetrics sampleNetwork(double time);
     DiskIoMetrics sampleDiskIo(double time);
+    UptimeMetrics sampleUptime() const;
 
     MetricsSources m_sources;
     CpuSampler m_cpu;
     CounterRateTracker m_network;
     CounterRateTracker m_disk;
+    GpuSampler m_gpu;
+    MangoHudFpsReader m_fps;
+    std::optional<double> m_infoTime;
+    KernelMetrics m_kernel;
+    DistributionMetrics m_distribution;
 };
 
 } // namespace aqtruncat::metrics

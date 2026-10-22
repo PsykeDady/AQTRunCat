@@ -45,4 +45,30 @@ std::optional<std::string> compactRate(double bytesPerSecond)
     return std::string(">999E");
 }
 
+std::optional<std::string> compactCount(long long count)
+{
+    if (count < 0)
+        return std::nullopt;
+    if (count > 9999)
+        return std::string("10k+");
+    return std::to_string(count);
+}
+
+std::optional<std::string> compactWhole(double value)
+{
+    if (!std::isfinite(value) || value < 0.0)
+        return std::nullopt;
+    return fixed(std::min(std::round(value), 9999.0), 0);
+}
+
+std::optional<std::string> compactCelsius(double celsius)
+{
+    if (!std::isfinite(celsius))
+        return std::nullopt;
+    const double rounded = std::round(celsius);
+    if (rounded < -99.0 || rounded > 999.0)
+        return std::nullopt;
+    return fixed(rounded, 0) + "°";
+}
+
 } // namespace aqtruncat::metrics

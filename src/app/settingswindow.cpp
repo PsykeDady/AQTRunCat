@@ -126,6 +126,45 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
     networkLayout->addWidget(m_interfaces);
     root->addWidget(networkBox);
 
+    // F5 built-in metrics: only the choices that have no single right answer.
+    auto *builtInBox = group(tr("Built-in Metrics"), this);
+    builtInBox->setObjectName(QStringLiteral("builtInMetricsBox"));
+    auto *builtInForm = new QFormLayout(builtInBox);
+    m_gpuDevice = new QComboBox(builtInBox);
+    m_gpuDevice->setObjectName(QStringLiteral("gpuDevice"));
+    m_gpuDevice->setToolTip(tr("The GPU whose utilization, memory and temperature the Metrics Bar shows. "
+                               "The Dashboard always lists every GPU."));
+    builtInForm->addRow(tr("Metrics Bar GPU:"), m_gpuDevice);
+    m_fpsSource = new QComboBox(builtInBox);
+    m_fpsSource->setObjectName(QStringLiteral("fpsSource"));
+    m_fpsSource->addItem(tr("MangoHud log"), QStringLiteral("mangohud"));
+    m_fpsSource->addItem(tr("Off"), QStringLiteral("off"));
+    builtInForm->addRow(tr("FPS source:"), m_fpsSource);
+    auto *fpsNote = new QLabel(tr("FPS is read from the CSV log MangoHud writes while it logs a game "
+                                  "(output_folder and log_interval in MangoHud.conf). AQTRunCat never "
+                                  "injects anything into games."), builtInBox);
+    fpsNote->setWordWrap(true);
+    builtInForm->addRow(fpsNote);
+    m_updatesInterval = new QComboBox(builtInBox);
+    m_updatesInterval->setObjectName(QStringLiteral("updatesInterval"));
+    for (const int minutes : aqtruncat::AppSettings::updatesIntervals()) {
+        const QString text = minutes == 0  ? tr("Off")
+            : minutes < 60                 ? tr("Every %1 minutes").arg(minutes)
+            : minutes == 60                ? tr("Every hour")
+            : minutes == 1440              ? tr("Once a day")
+                                           : tr("Every %1 hours").arg(minutes / 60);
+        m_updatesInterval->addItem(text, minutes);
+    }
+    builtInForm->addRow(tr("Check for updates:"), m_updatesInterval);
+    m_updatesRemote = new QCheckBox(tr("Download fresh package metadata (uses the network)"), builtInBox);
+    m_updatesRemote->setObjectName(QStringLiteral("updatesRemote"));
+    m_updatesRemote->setToolTip(tr("Off: only the metadata your system already downloaded is read. On: pacman uses "
+                                   "checkupdates (pacman-contrib), dnf refreshes its own cache and Flatpak downloads "
+                                   "remote summaries, at most once an hour. apt cannot refresh without root. "
+                                   "Nothing is ever installed."));
+    builtInForm->addRow(m_updatesRemote);
+    root->addWidget(builtInBox);
+
     QGroupBox *integrationsBox = nullptr;
     QVBoxLayout *integrations = nullptr;
     auto providerName = [&](const QString &text) {
@@ -338,6 +377,23 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
             m_settings->setDashboardRefreshSeconds(m_refresh->itemData(index).toInt());
     });
     connect(m_autostart, &QCheckBox::toggled, m_settings, &aqtruncat::AppSettings::setAutostartEnabled);
+    connect(m_gpuDevice, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (!m_rebuilding && index >= 0)
+            m_settings->setGpuDevice(m_gpuDevice->itemData(index).toString());
+    });
+    connect(m_fpsSource, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (!m_rebuilding && index >= 0)
+            m_settings->setFpsSource(m_fpsSource->itemData(index).toString());
+    });
+    connect(m_updatesInterval, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (!m_rebuilding && index >= 0)
+            m_settings->setUpdatesIntervalMinutes(m_updatesInterval->itemData(index).toInt());
+    });
+    connect(m_updatesRemote, &QCheckBox::toggled, this, [this](bool checked) {
+        if (!m_rebuilding)
+            m_settings->setUpdatesRemoteRefresh(checked);
+    });
+    connect(m_settings, &aqtruncat::AppSettings::systemMetricsSettingsChanged, this, [this] { syncFromSettings(); });
     connect(addCustomMetric, &QPushButton::clicked, this, [this] {
         if (!m_customMetrics)
             return;
@@ -677,8 +733,41 @@ void SettingsWindow::syncFromSettings()
     const int refresh = m_refresh->findData(m_settings->dashboardRefreshSeconds());
     m_refresh->setCurrentIndex(refresh >= 0 ? refresh : 0);
     m_autostart->setChecked(m_settings->autostartEnabled());
+    m_fpsSource->setCurrentIndex(std::max(0, m_fpsSource->findData(m_settings->fpsSource())));
+    const int interval = m_updatesInterval->findData(m_settings->updatesIntervalMinutes());
+    m_updatesInterval->setCurrentIndex(interval >= 0 ? interval : 0);
+    m_updatesRemote->setChecked(m_settings->updatesRemoteRefresh());
+    m_updatesRemote->setEnabled(m_settings->updatesIntervalMinutes() > 0);
     m_rebuilding = false;
     rebuildInterfaces();
+    rebuildGpus();
+}
+
+void SettingsWindow::setAvailableGpus(const std::vector<aqtruncat::metrics::GpuDevice> &gpus)
+{
+    std::vector<std::pair<std::string, std::string>> available;
+    for (const auto &gpu : gpus)
+        available.emplace_back(gpu.id, gpu.model);
+    if (available == m_availableGpus)
+        return;
+    m_availableGpus = std::move(available);
+    rebuildGpus();
+}
+
+void SettingsWindow::rebuildGpus()
+{
+    m_rebuilding = true;
+    m_gpuDevice->clear();
+    m_gpuDevice->addItem(tr("Automatic (discrete GPU first)"), QStringLiteral("auto"));
+    for (const auto &[id, model] : m_availableGpus)
+        m_gpuDevice->addItem(QStringLiteral("%1 (%2)").arg(QString::fromStdString(model), QString::fromStdString(id)),
+                             QString::fromStdString(id));
+    // A chosen GPU that is not present now (eGPU, other machine) stays chosen.
+    const QString chosen = m_settings->gpuDevice();
+    if (m_gpuDevice->findData(chosen) < 0)
+        m_gpuDevice->addItem(tr("%1 (not present)").arg(chosen), chosen);
+    m_gpuDevice->setCurrentIndex(m_gpuDevice->findData(chosen));
+    m_rebuilding = false;
 }
 
 void SettingsWindow::rebuildInterfaces()

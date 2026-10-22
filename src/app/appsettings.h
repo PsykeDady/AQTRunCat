@@ -33,6 +33,17 @@ public:
     bool metricsBarEnabled() const { return m_metricsBarEnabled; }
     QStringList metricsBarItems() const { return m_metricsBarItems; }
     static QStringList defaultMetricsBarItems();
+    // F5 built-in metrics: the GPU single-GPU consumers follow ("auto" or a
+    // device id), the FPS source ("mangohud" or "off"), and the update-check
+    // policy (interval in minutes, 0 = off; remote metadata refresh opt-in).
+    QString gpuDevice() const { return m_gpuDevice; }
+    QString fpsSource() const { return m_fpsSource; }
+    int updatesIntervalMinutes() const { return m_updatesIntervalMinutes; }
+    bool updatesRemoteRefresh() const { return m_updatesRemoteRefresh; }
+    static bool isValidGpuDevice(const QString &id);
+    static bool isValidFpsSource(const QString &source);
+    static bool isValidUpdatesInterval(int minutes);
+    static QList<int> updatesIntervals();
     QString fileName() const { return m_settings.fileName(); }
 
     static bool isValidStoredRunnerId(const QString &id);
@@ -49,6 +60,10 @@ public slots:
     void setCustomMetricFiles(QStringList files);
     void setMetricsBarEnabled(bool enabled);
     void setMetricsBarItems(QStringList ids);
+    void setGpuDevice(const QString &id);
+    void setFpsSource(const QString &source);
+    void setUpdatesIntervalMinutes(int minutes);
+    void setUpdatesRemoteRefresh(bool remote);
     void restoreDefaults();
     // Re-reads the file (written by another process: the backend, a
     // frontend, "aqtruncat autostart") and emits the signals of the values
@@ -63,6 +78,7 @@ signals:
     void autostartEnabledChanged(bool enabled);
     void customMetricFilesChanged(const QStringList &files);
     void metricsBarChanged();
+    void systemMetricsSettingsChanged(); // any of the F5 settings
 
 private:
     void load();
@@ -82,6 +98,10 @@ private:
     QStringList m_customMetricFiles;
     bool m_metricsBarEnabled = false;
     QStringList m_metricsBarItems;
+    QString m_gpuDevice = QStringLiteral("auto");
+    QString m_fpsSource = QStringLiteral("mangohud");
+    int m_updatesIntervalMinutes = 60;
+    bool m_updatesRemoteRefresh = false;
 };
 
 } // namespace aqtruncat

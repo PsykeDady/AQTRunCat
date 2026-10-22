@@ -155,6 +155,63 @@ KCM.SimpleKCM {
             }
         }
 
+        Kirigami.Separator {
+            Layout.fillWidth: true
+            visible: builtInForm.visible
+        }
+
+        // F5 (schema 2): absent with an older backend.
+        Kirigami.FormLayout {
+            id: builtInForm
+            Layout.fillWidth: true
+            enabled: client.connected
+            visible: client.settings.gpuDevice !== undefined
+
+            readonly property var gpuChoices: Logic.gpuChoices(client.metrics, client.settings.gpuDevice)
+            readonly property var intervalChoices: Logic.updatesIntervalChoices()
+
+            Item {
+                Kirigami.FormData.isSection: true
+                Kirigami.FormData.label: "Built-in Metrics"
+            }
+            QQC2.ComboBox {
+                Kirigami.FormData.label: "Metrics Bar GPU:"
+                model: builtInForm.gpuChoices
+                textRole: "text"
+                valueRole: "value"
+                currentIndex: Logic.indexOfValue(builtInForm.gpuChoices, client.settings.gpuDevice)
+                onActivated: index => client.setSetting("gpuDevice", builtInForm.gpuChoices[index].value)
+            }
+            QQC2.ComboBox {
+                Kirigami.FormData.label: "FPS source:"
+                model: [{ text: "MangoHud log", value: "mangohud" }, { text: "Off", value: "off" }]
+                textRole: "text"
+                valueRole: "value"
+                currentIndex: client.settings.fpsSource === "off" ? 1 : 0
+                onActivated: index => client.setSetting("fpsSource", index === 1 ? "off" : "mangohud")
+            }
+            QQC2.ComboBox {
+                Kirigami.FormData.label: "Check for updates:"
+                model: builtInForm.intervalChoices
+                textRole: "text"
+                valueRole: "value"
+                currentIndex: Logic.indexOfValue(builtInForm.intervalChoices, client.settings.updatesIntervalMinutes)
+                onActivated: index => client.setSetting("updatesIntervalMinutes", builtInForm.intervalChoices[index].value)
+            }
+            QQC2.CheckBox {
+                text: "Download fresh package metadata (uses the network)"
+                enabled: client.settings.updatesIntervalMinutes > 0
+                checked: client.settings.updatesRemoteRefresh === true
+                onToggled: client.setSetting("updatesRemoteRefresh", checked)
+            }
+            QQC2.Label {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                opacity: 0.7
+                text: "Update checks only read: by default the metadata the system already downloaded. FPS comes from the log MangoHud writes while it logs a game."
+            }
+        }
+
         Kirigami.Separator { Layout.fillWidth: true }
 
         Kirigami.Heading {

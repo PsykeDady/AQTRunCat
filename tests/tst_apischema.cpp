@@ -65,6 +65,70 @@ QJsonObject byId(const QJsonArray &array, const QString &id)
     return {};
 }
 
+// F5 sections on top of sample().
+metrics::SystemMetricsSnapshot sampleF5()
+{
+    metrics::SystemMetricsSnapshot s = sample();
+    s.uptime.status = MetricStatus::okStatus();
+    s.uptime.seconds = 90061.6;
+    s.gpu.status = MetricStatus::okStatus();
+    metrics::GpuDevice intel;
+    intel.id = "0000:00:02.0";
+    intel.card = "card1";
+    intel.driver = "i915";
+    intel.vendor = "Intel";
+    intel.vendorId = 0x8086;
+    intel.deviceId = 0x9a49;
+    intel.model = "Intel Iris Xe";
+    intel.integrated = true;
+    intel.utilizationStatus = MetricStatus::okStatus();
+    intel.utilizationPercent = 12.5;
+    intel.utilizationMethod = "rc6-residency";
+    intel.memoryStatus = MetricStatus::unavailable("integrated GPU: it uses shared system memory");
+    intel.temperatureStatus = MetricStatus::unavailable("integrated GPU: no sensor of its own");
+    intel.frequencyMHz = 350.0;
+    metrics::GpuDevice amd;
+    amd.id = "0000:03:00.0";
+    amd.driver = "amdgpu";
+    amd.vendor = "AMD";
+    amd.vendorId = 0x1002;
+    amd.deviceId = 0x73bf;
+    amd.model = "AMD Radeon RX 6800 XT";
+    amd.selected = true;
+    amd.suspended = true;
+    for (MetricStatus *status : {&amd.utilizationStatus, &amd.memoryStatus, &amd.temperatureStatus})
+        *status = MetricStatus::unavailable("the GPU is suspended (runtime power management); not woken up to read it");
+    s.gpu.devices = {intel, amd};
+    s.fps.status = MetricStatus::okStatus();
+    s.fps.condition = metrics::FpsCondition::Measured;
+    s.fps.source = "mangohud";
+    s.fps.fps = 143.6;
+    s.fps.lastFps = 143.6;
+    s.fps.frametimeMs = 6.96;
+    s.fps.ageSeconds = 0.4;
+    s.fps.application = "Game";
+    s.packageUpdates.status = MetricStatus::okStatus();
+    s.packageUpdates.manager = "pacman";
+    s.packageUpdates.count = 3;
+    s.packageUpdates.ignored = 1;
+    s.packageUpdates.lastSuccess = 1'800'000'000;
+    s.packageUpdates.metadataTime = 1'799'000'000;
+    s.packageUpdates.metadataStale = true;
+    s.flatpakUpdates.status = MetricStatus::error("system installation: No cached summary");
+    s.flatpakUpdates.manager = "flatpak";
+    s.flatpakUpdates.lastSuccess = 1'799'999'000;
+    s.kernel.status = MetricStatus::okStatus();
+    s.kernel.info = metrics::KernelInfo{"Linux", "7.2.10-zen1-1-zen", "#1 ZEN SMP", "x86_64"};
+    s.distribution.status = MetricStatus::okStatus();
+    metrics::DistributionInfo d;
+    d.name = d.prettyName = "Arch Linux";
+    d.id = "arch";
+    d.buildId = "rolling";
+    d.source = "/etc/os-release";
+    s.distribution.info = d;
+    return s;
+}
+
 custommetrics::Source quotaSource()
 {
     custommetrics::Source source;
@@ -147,6 +211,132 @@ private slots:
         QCOMPARE(home.value(QStringLiteral("message")).toString(), QStringLiteral("statvfs failed"));
         // Valid JSON for any client.
         QVERIFY(QJsonDocument::fromJson(QJsonDocument(metrics).toJson()).isArray());
+    }
+
+    void f5MetricsHaveStableIdsTypesAndStates()
+    {
+        const QJsonArray metrics = api::builtInMetrics(sampleF5(), "/home/alice");
+        QStringList ids;
+        for (const QJsonValue &value : metrics)
+            ids << value.toObject().value(QStringLiteral("id")).toString();
+        QCOMPARE(ids.mid(ids.indexOf(QStringLiteral("disk.write"))),
+                 (QStringList{"disk.write", "uptime", "gpu:0000:00:02.0", "gpu:0000:03:00.0", "fps", "updates.packages",
+                              "updates.flatpak", "kernel", "distribution"}));
+
+        const QJsonObject uptime = byId(metrics, QStringLiteral("uptime"));
+        QCOMPARE(uptime.value(QStringLiteral("value")).toDouble(), 90061.0);
+        QCOMPARE(uptime.value(QStringLiteral("unit")).toString(), QStringLiteral("seconds"));
+        QCOMPARE(uptime.value(QStringLiteral("formattedValue")).toString(), QStringLiteral("1d 1h 1m"));
+        QCOMPARE(uptime.value(QStringLiteral("compactValue")).toString(), QStringLiteral("1d"));
+        QVERIFY(uptime.value(QStringLiteral("normalized")).isNull()); // no meaningless bar
+
+        const QJsonObject intel = byId(metrics, QStringLiteral("gpu:0000:00:02.0"));
+        QCOMPARE(intel.value(QStringLiteral("title")).toString(), QStringLiteral("Intel Iris Xe"));
+        QCOMPARE(intel.value(QStringLiteral("state")).toString(), QStringLiteral("ok"));
+        QCOMPARE(intel.value(QStringLiteral("value")).toDouble(), 12.5);
+        QVERIFY(intel.value(QStringLiteral("normalized")).isNull()); // the items carry the bars
+        const QJsonArray items = intel.value(QStringLiteral("items")).toArray();
+        QCOMPARE(items.size(), 3);
+        QCOMPARE(items.at(0).toObject().value(QStringLiteral("title")).toString(), QStringLiteral("Activity"));
+        QCOMPARE(items.at(1).toObject().value(QStringLiteral("formattedValue")).toString(), QStringLiteral("N/A"));
+        QVERIFY(items.at(1).toObject().value(QStringLiteral("compactValue")).isNull());
+        QVERIFY(items.at(1).toObject().value(QStringLiteral("detail")).toString().contains(QLatin1String("shared system memory")));
+        const QJsonObject intelData = intel.value(QStringLiteral("data")).toObject();
+        QCOMPARE(intelData.value(QStringLiteral("vendorId")).toString(), QStringLiteral("8086"));
+        QCOMPARE(intelData.value(QStringLiteral("integrated")).toBool(), true);
+        QCOMPARE(intelData.value(QStringLiteral("utilization")).toObject().value(QStringLiteral("method")).toString(),
+                 QStringLiteral("rc6-residency"));
+        QVERIFY(intelData.value(QStringLiteral("memory")).toObject().value(QStringLiteral("usedBytes")).isNull());
+        QCOMPARE(intelData.value(QStringLiteral("selected")).toBool(), false);
+
+        const QJsonObject amd = byId(metrics, QStringLiteral("gpu:0000:03:00.0"));
+        QCOMPARE(amd.value(QStringLiteral("state")).toString(), QStringLiteral("unavailable"));
+        QVERIFY(amd.value(QStringLiteral("message")).toString().contains(QLatin1String("suspended")));
+        QVERIFY(amd.value(QStringLiteral("value")).isNull());
+        QVERIFY(amd.value(QStringLiteral("data")).toObject().value(QStringLiteral("integrated")).isNull());
+        QCOMPARE(amd.value(QStringLiteral("data")).toObject().value(QStringLiteral("selected")).toBool(), true);
+
+        const QJsonObject fps = byId(metrics, QStringLiteral("fps"));
+        QCOMPARE(fps.value(QStringLiteral("value")).toDouble(), 143.6);
+        QCOMPARE(fps.value(QStringLiteral("unit")).toString(), QStringLiteral("fps"));
+        QCOMPARE(fps.value(QStringLiteral("formattedValue")).toString(), QStringLiteral("144 FPS"));
+        QCOMPARE(fps.value(QStringLiteral("compactValue")).toString(), QStringLiteral("144"));
+        QCOMPARE(fps.value(QStringLiteral("data")).toObject().value(QStringLiteral("condition")).toString(), QStringLiteral("measured"));
+        QVERIFY(fps.value(QStringLiteral("normalized")).isNull());
+
+        const QJsonObject packages = byId(metrics, QStringLiteral("updates.packages"));
+        QCOMPARE(packages.value(QStringLiteral("value")).toInt(), 3);
+        QVERIFY(packages.value(QStringLiteral("value")).isDouble()); // a JSON number
+        QCOMPARE(packages.value(QStringLiteral("unit")).toString(), QStringLiteral("count"));
+        QCOMPARE(packages.value(QStringLiteral("formattedValue")).toString(), QStringLiteral("3 updates"));
+        QCOMPARE(packages.value(QStringLiteral("compactValue")).toString(), QStringLiteral("3"));
+        QVERIFY(packages.value(QStringLiteral("normalized")).isNull()); // a count is not a percentage
+        const QJsonObject packagesData = packages.value(QStringLiteral("data")).toObject();
+        QCOMPARE(packagesData.value(QStringLiteral("manager")).toString(), QStringLiteral("pacman"));
+        QCOMPARE(packagesData.value(QStringLiteral("lastSuccess")).toString(), QStringLiteral("2027-01-15T08:00:00Z"));
+        QCOMPARE(packagesData.value(QStringLiteral("metadataStale")).toBool(), true);
+        QVERIFY(packages.value(QStringLiteral("detail")).toString().contains(QLatin1String("out of date")));
+
+        const QJsonObject flatpak = byId(metrics, QStringLiteral("updates.flatpak"));
+        QCOMPARE(flatpak.value(QStringLiteral("state")).toString(), QStringLiteral("error"));
+        QVERIFY(flatpak.value(QStringLiteral("value")).isNull());
+
+        const QJsonObject kernel = byId(metrics, QStringLiteral("kernel"));
+        QCOMPARE(kernel.value(QStringLiteral("formattedValue")).toString(), QStringLiteral("Linux 7.2.10-zen1-1-zen"));
+        QVERIFY(kernel.value(QStringLiteral("value")).isNull()); // text, not a number
+        QVERIFY(kernel.value(QStringLiteral("unit")).isNull());
+        QVERIFY(kernel.value(QStringLiteral("compactValue")).isNull()); // not offered to the Metrics Bar
+        QCOMPARE(kernel.value(QStringLiteral("data")).toObject().value(QStringLiteral("machine")).toString(), QStringLiteral("x86_64"));
+        const QJsonObject distribution = byId(metrics, QStringLiteral("distribution"));
+        QCOMPARE(distribution.value(QStringLiteral("formattedValue")).toString(), QStringLiteral("Arch Linux"));
+        QCOMPARE(distribution.value(QStringLiteral("data")).toObject().value(QStringLiteral("id")).toString(), QStringLiteral("arch"));
+        QVERIFY(distribution.value(QStringLiteral("value")).isNull());
+        QCOMPARE(api::SchemaVersion, 2);
+    }
+
+    void f5SnapshotRoundTrips()
+    {
+        const metrics::SystemMetricsSnapshot original = sampleF5();
+        const metrics::SystemMetricsSnapshot s = api::systemSnapshotFromMetrics(api::builtInMetrics(original, "/home/alice"));
+        QCOMPARE(*s.uptime.seconds, 90061.6);
+        QCOMPARE(s.gpu.devices.size(), std::size_t(2));
+        const metrics::GpuDevice &intel = s.gpu.devices[0];
+        QCOMPARE(intel.id, std::string("0000:00:02.0"));
+        QCOMPARE(intel.vendorId, 0x8086u);
+        QCOMPARE(*intel.utilizationPercent, 12.5);
+        QCOMPARE(intel.memoryStatus.state, metrics::MetricState::Unavailable);
+        QCOMPARE(*intel.frequencyMHz, 350.0);
+        QVERIFY(*intel.integrated);
+        QVERIFY(s.gpu.devices[1].selected && s.gpu.devices[1].suspended);
+        QCOMPARE(*s.fps.fps, 143.6);
+        QCOMPARE(s.fps.condition, metrics::FpsCondition::Measured);
+        QCOMPARE(s.fps.application, std::string("Game"));
+        QCOMPARE(*s.packageUpdates.count, 3);
+        QCOMPARE(s.packageUpdates.ignored, 1);
+        QCOMPARE(*s.packageUpdates.lastSuccess, std::int64_t(1'800'000'000));
+        QVERIFY(s.packageUpdates.metadataStale);
+        QCOMPARE(s.flatpakUpdates.status.state, metrics::MetricState::Error);
+        QVERIFY(!s.flatpakUpdates.count);
+        QCOMPARE(s.kernel.info->release, std::string("7.2.10-zen1-1-zen"));
+        QCOMPARE(s.distribution.info->buildId, std::string("rolling"));
+    }
+
+    void schemaOneBackendLeavesF5Pending()
+    {
+        // A frontend of this version talking to an F4 backend (schema 1).
+        QJsonArray old;
+        for (const QJsonValue &value : api::builtInMetrics(sample(), "/home/alice")) {
+            const QString id = value.toObject().value(QStringLiteral("id")).toString();
+            if (QStringList{"cpu", "memory", "swap", "network.download", "network.upload", "storage.root",
+                            "storage.home", "disk.read", "disk.write"}.contains(id))
+                old.append(value);
+        }
+        const metrics::SystemMetricsSnapshot s = api::systemSnapshotFromMetrics(old);
+        QVERIFY(s.cpu.status.ok());
+        for (const metrics::MetricStatus *status : {&s.uptime.status, &s.gpu.status, &s.fps.status, &s.kernel.status,
+                                                     &s.distribution.status, &s.packageUpdates.status})
+            QCOMPARE(status->state, metrics::MetricState::Pending);
+        QVERIFY(s.gpu.devices.empty());
     }
 
     void systemSnapshotRoundTrips()
@@ -250,10 +440,15 @@ private slots:
         settings.setSpeedMode(SpeedMode::SlowDown);
         const QJsonObject object = api::settingsObject(settings);
         for (const char *key : {"runnerId", "speedMode", "networkMode", "networkInterfaces", "dashboardRefreshSeconds",
-                                "autostart", "metricsBarEnabled", "metricsBarItems", "customMetricFiles"})
+                                "autostart", "metricsBarEnabled", "metricsBarItems", "customMetricFiles",
+                                "gpuDevice", "fpsSource", "updatesIntervalMinutes", "updatesRemoteRefresh"})
             QVERIFY2(object.contains(QLatin1String(key)), key);
         QCOMPARE(object.value(QStringLiteral("speedMode")).toString(), QStringLiteral("slow-down"));
         QCOMPARE(object.value(QStringLiteral("runnerId")).toString(), QStringLiteral("cat"));
+        QCOMPARE(object.value(QStringLiteral("gpuDevice")).toString(), QStringLiteral("auto"));
+        QCOMPARE(object.value(QStringLiteral("fpsSource")).toString(), QStringLiteral("mangohud"));
+        QCOMPARE(object.value(QStringLiteral("updatesIntervalMinutes")).toInt(), 60);
+        QCOMPARE(object.value(QStringLiteral("updatesRemoteRefresh")).toBool(), false);
     }
 
     void reloadPicksUpAnotherWriter()

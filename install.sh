@@ -19,7 +19,7 @@ AQTRunCat installer - A Cute Run Cat for Linux
 
 Usage:
   ./install.sh [--local] [--no-build] [-A | --autostart=true | -na | --autostart=false]
-               [--plasmoid | --no-plasmoid]
+               [--plasmoid | --no-plasmoid] [--restart-plasma | --no-restart-plasma]
   ./install.sh [--local] -U | --uninstall
   ./install.sh -h | --help
 
@@ -118,10 +118,21 @@ Plasma widget (Plasmoid, F4.2) - installed when KDE Plasma 6 is found:
   (QML only) and nothing KDE is needed by the rest of AQTRunCat.
   Installing the widget does not put it anywhere: add it yourself (panel or
   desktop > Add or Manage Widgets > "AQTRunCat"). Panels and desktop layouts
-  are never changed and plasmashell is never restarted; a widget that is
-  already shown keeps the previous version until Plasma starts again (next
-  login). The widget and the tray application are independent: either,
-  both or none can run; autostart only concerns the tray application.
+  are never changed. A widget that is already shown keeps the previous
+  version until Plasma starts again: when an installed widget is updated
+  while your Plasma is running, on a terminal you are asked "Restart Plasma
+  now ...? [y/N]" (N, or no terminal: Plasma is left alone and loads the
+  new version at the next login). Restarting Plasma makes panels and the
+  desktop disappear for a while, up to about a minute; open windows are not
+  affected. The installer waits until Plasma is back and, if it is not,
+  says how to start it again.
+  --restart-plasma        answer yes without asking (also without a terminal)
+  --no-restart-plasma     answer no without asking
+  To restart Plasma yourself:  systemctl --user restart plasma-plasmashell
+  If it does not come back:    systemctl --user start plasma-plasmashell
+  (without systemd: kquitapp6 plasmashell; kstart plasmashell)
+  The widget and the tray application are independent: either, both or
+  none can run; autostart only concerns the tray application.
 
 Uninstallation:
   -U, --uninstall         remove the system-wide installation (prefix /usr/local
@@ -158,6 +169,7 @@ Examples:
   ./install.sh --local --autostart=false
   ./install.sh --local -U          remove my --local installation
   ./install.sh --no-plasmoid       without the Plasma widget
+  ./install.sh --restart-plasma    update and reload a widget already shown
   ./install.sh --local --plasmoid -na
                                    only for me, with the widget, no tray autostart
   sudo ./install.sh --uninstall    remove the system-wide installation
@@ -191,6 +203,8 @@ reuse_previous_version=0
 dry_run=0
 plasmoid=""        # "", true or false (command line)
 plasmoid_option=""
+restart_plasma=""  # "", true or false (command line); "" asks
+restart_plasma_option=""
 
 set_autostart() {
     if [[ -n $autostart && $autostart != "$1" ]]; then
@@ -221,6 +235,15 @@ for arg in "$@"; do
             plasmoid=$value
             plasmoid_option=$arg
             ;;
+        --restart-plasma | --no-restart-plasma)
+            value=true
+            [[ $arg == --no-restart-plasma ]] && value=false
+            if [[ -n $restart_plasma && $restart_plasma != "$value" ]]; then
+                usage_error "conflicting options: $restart_plasma_option and $arg"
+            fi
+            restart_plasma=$value
+            restart_plasma_option=$arg
+            ;;
         *) usage_error "unknown option \"$arg\"" ;;
     esac
 done
@@ -236,6 +259,12 @@ if [[ $action == uninstall && $no_build == 1 ]]; then
 fi
 if [[ $action == uninstall && -n $plasmoid ]]; then
     usage_error "$plasmoid_option only applies to installation (uninstalling removes this installation's widget, if any)"
+fi
+if [[ $action == uninstall && -n $restart_plasma ]]; then
+    usage_error "$restart_plasma_option only applies to installation"
+fi
+if [[ $restart_plasma == true && $plasmoid == false ]]; then
+    usage_error "--restart-plasma reloads the widget: it cannot be used with --no-plasmoid"
 fi
 if [[ $scope == local && $prefix_given == 1 ]]; then
     usage_error "--prefix is for system-wide installation; --local uses the XDG directories"
@@ -396,11 +425,17 @@ authenticate_sudo() { # authenticate_sudo HINT
 # backend can be D-Bus activated without logging out (dbus-broker does not
 # watch the directories). Best effort: without a session bus the clients
 # start the backend themselves.
-reload_session_bus() {
+session_bus_address() {
     local address=${DBUS_SESSION_BUS_ADDRESS:-}
     if [[ -z $address && -S /run/user/$real_uid/bus ]]; then
         address=unix:path=/run/user/$real_uid/bus
     fi
+    printf '%s\n' "$address"
+}
+
+reload_session_bus() {
+    local address
+    address=$(session_bus_address)
     [[ -n $address ]] || return 0
     if command -v busctl > /dev/null; then
         as_user env DBUS_SESSION_BUS_ADDRESS="$address" busctl --user call org.freedesktop.DBus /org/freedesktop/DBus \
@@ -746,6 +781,91 @@ decide_plasmoid() {
     fi
 }
 
+# --- Plasma restart (opt-in, after a widget update) -------------------------
+
+readonly PLASMA_UNIT=plasma-plasmashell.service
+# Overridable for tests: the process name looked for, and how long (seconds)
+# to wait for Plasma to come back.
+plasma_shell_name=${AQTRUNCAT_PLASMASHELL_NAME:-plasmashell}
+plasma_timeout=${AQTRUNCAT_PLASMA_TIMEOUT:-90}
+[[ $plasma_timeout =~ ^[1-9][0-9]{0,2}$ ]] || usage_error "AQTRUNCAT_PLASMA_TIMEOUT must be 1-999 seconds"
+readonly PLASMA_RESTART_HINT="systemctl --user restart plasma-plasmashell (if it stays down: systemctl --user start plasma-plasmashell; without systemd: kquitapp6 plasmashell; kstart plasmashell)"
+
+# This user's plasmashell is running.
+plasma_running() {
+    local dir comm
+    for dir in /proc/[0-9]*; do
+        { IFS= read -r comm < "$dir/comm"; } 2> /dev/null || continue
+        [[ $comm == "$plasma_shell_name" ]] || continue
+        [[ $(process_uid "${dir#/proc/}") == "$real_uid" ]] && return 0
+    done
+    return 1
+}
+
+wait_for_plasma() {
+    local waited=0
+    until plasma_running; do
+        ((waited < plasma_timeout * 10)) || return 1
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+}
+
+# A command in the real user's session (systemd user manager, session bus),
+# also under sudo.
+in_session() {
+    local runtime=${XDG_RUNTIME_DIR:-/run/user/$real_uid}
+    ((EUID != 0)) || runtime=/run/user/$real_uid
+    as_user env XDG_RUNTIME_DIR="$runtime" DBUS_SESSION_BUS_ADDRESS="$(session_bus_address)" "$@"
+}
+
+restart_plasma_now() {
+    say "Restarting Plasma: panels and the desktop disappear meanwhile, up to about a minute (open windows are not affected) ..."
+    if in_session systemctl --user --quiet is-active "$PLASMA_UNIT" 2> /dev/null; then
+        # Blocks until the new plasmashell owns its D-Bus name (the unit
+        # allows 40 s to stop and 40 s to start).
+        in_session systemctl --user restart "$PLASMA_UNIT" 2> /dev/null || true
+        if ! plasma_running; then
+            # A failed start or the unit's start limit: start it once more.
+            in_session systemctl --user reset-failed "$PLASMA_UNIT" 2> /dev/null || true
+            in_session systemctl --user start "$PLASMA_UNIT" 2> /dev/null || true
+        fi
+    elif ((EUID != 0)) && command -v kquitapp6 > /dev/null && command -v kstart > /dev/null; then
+        # Plasma not started by systemd: quit it (kquitapp6 waits for the
+        # exit), then start it detached from this terminal.
+        kquitapp6 plasmashell > /dev/null 2>&1 || true
+        kstart plasmashell > /dev/null 2>&1 || true
+    else
+        warn "Plasma was not restarted (no systemd unit $PLASMA_UNIT, and kquitapp6/kstart need your own session, not sudo); restart it yourself: $PLASMA_RESTART_HINT"
+        return 0
+    fi
+    if wait_for_plasma; then
+        say "Plasma is running again: the widget uses the new version."
+    else
+        warn "Plasma did not come back within ${plasma_timeout} s. From a terminal (or a text console, Ctrl+Alt+F3), run: $PLASMA_RESTART_HINT"
+    fi
+}
+
+# After a widget update: the running Plasma still has the previous version.
+offer_plasma_restart() {
+    plasma_running || return 0 # no Plasma of this user: it loads the new one when it starts
+    local answer=""
+    case $restart_plasma in
+        true) answer=y ;;
+        false) ;;
+        *)
+            if [[ -t 0 ]]; then
+                read -r -p "Restart Plasma now so that the widget already shown uses the new version? Panels and the desktop disappear meanwhile, up to about a minute; open windows are not affected. [y/N] " answer || answer=""
+            fi
+            ;;
+    esac
+    if [[ $answer == [yY] || $answer == [yY][eE][sS] ]]; then
+        restart_plasma_now
+    else
+        say "  A widget already shown keeps the previous version until Plasma starts again (next login), or restart Plasma yourself: $PLASMA_RESTART_HINT"
+    fi
+}
+
 # Plasma finds widgets in $XDG_DATA_HOME and $XDG_DATA_DIRS; the backend's
 # D-Bus activation file is found the same way.
 data_dir_searched() {
@@ -911,6 +1031,11 @@ print_options() {
         fi
         option "autostart" "$autostart (${autostart_option:-default})"
         option "plasmoid" "$plasmoid_reason"
+        case $restart_plasma in
+            true) option "restart Plasma" "true (--restart-plasma: after a widget update, if Plasma runs)" ;;
+            false) option "restart Plasma" "false (--no-restart-plasma)" ;;
+            *) option "restart Plasma" "ask (default: after a widget update, if Plasma runs, on a terminal; otherwise no)" ;;
+        esac
     fi
     option "dry run" "$( ((dry_run)) && echo true || echo false)"
     option "binary" "$installed_bin"
@@ -1109,7 +1234,7 @@ do_install() {
         say "Plasma widget installed: $datadir/plasma/plasmoids/$PLASMOID_ID"
         say "  Add it yourself: right-click a panel or the desktop > Add or Manage Widgets > AQTRunCat."
         if ((had_plasmoid)); then
-            say "  A widget already on a panel keeps the previous version until Plasma starts again (next login); plasmashell is not restarted."
+            offer_plasma_restart
         fi
         if ! data_dir_searched; then
             warn "Plasma looks for widgets (and D-Bus for the backend) in XDG_DATA_DIRS=${XDG_DATA_DIRS:-/usr/local/share:/usr/share}, which does not contain $datadir: add it to XDG_DATA_DIRS of your session, or install with the default prefix or --local"

@@ -1,3 +1,10 @@
+aqtruncat (1.5.6-1) unstable; urgency=medium
+
+  * F5: built-in uptime, GPU, FPS (MangoHud log), package and Flatpak update
+    counts (read-only, local metadata by default), kernel and distribution.
+
+ -- AQTRunCat maintainers <maintainers@aqtruncat.invalid>  Thu, 22 Oct 2026 12:00:00 +0200
+
 aqtruncat (1.4.2-1) unstable; urgency=medium
 
   * F4.2: native KDE Plasma 6 widget (Plasmoid), a client of the backend;

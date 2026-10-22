@@ -24,7 +24,10 @@ the primary target is KDE Plasma 6 on Wayland.
 - **Runners**: Cat (default) and Coffee are built in; import any
   [RunCat Runner Gallery](https://github.com/runcat-dev/RunnerGallery) ZIP.
 - **Dashboard**: CPU, memory, swap, network, Root/Home storage and disk
-  activity, read directly from `/proc`, `/sys` and `statvfs`.
+  activity, read directly from `/proc`, `/sys` and `statvfs`; uptime, every
+  GPU (utilization, memory, temperature where the driver reports them), game
+  FPS from MangoHud's log, available package and Flatpak updates, kernel and
+  distribution.
 - **Custom Metrics**: keep using RunCat Neo-compatible JSON snapshots, or let
   AQTRunCat periodically run an explicitly configured executable.
 - **Integrations**: Claude Code plan usage (current 5-hour session and
@@ -96,6 +99,7 @@ updates the installation in place.
 | `-na`, `--autostart=false` | do not start at login |
 | `-U`, `--uninstall` | uninstall (add `--local` for a local installation) |
 | `--plasmoid` / `--no-plasmoid` | install the KDE Plasma 6 widget even outside Plasma (fails, with the packages to install, if Plasma 6's QML modules are missing) / never install it; by default it is installed when Plasma 6 is found |
+| `--restart-plasma` / `--no-restart-plasma` | after updating an installed widget while Plasma runs: restart Plasma so that it loads the new version / leave Plasma alone; by default the installer asks on a terminal (N) and does not restart without one |
 | `--no-build` | install the existing build in `~/.cache/aqtruncat/install-build` without compiling (must be up to date); if it is another AQTRunCat version than the sources, you are asked whether to install that previous version (y) or build the new one (N, default) |
 | `--dry-run` | show what would happen (every run starts with a summary of the effective options) |
 | `-h`, `--help` | full help |
@@ -212,9 +216,17 @@ When KDE Plasma 6 is found, the installer also installs the AQTRunCat widget
 (`share/plasma/plasmoids/io.github.psykedady.aqtruncat`; native packages
 ship it too). Installing it does not put it anywhere: right-click a panel or
 the desktop, choose **Add or Manage Widgets…**, search for **AQTRunCat** and
-drag it where you want it. The installer never edits your panels and never
-restarts Plasma; a widget already on a panel picks up an update at the next
-login.
+drag it where you want it. The installer never edits your panels. A widget
+already on a panel keeps running the previous version until Plasma starts
+again: when an update replaces an installed widget while your Plasma is
+running, the installer asks (on a terminal) whether to restart Plasma now
+(`--restart-plasma` / `--no-restart-plasma` answer without asking; the
+default is no). Panels and the desktop disappear meanwhile, up to about a
+minute; open windows are not affected, and the installer waits until Plasma
+is back. To do it yourself: `systemctl --user restart plasma-plasmashell`
+(if Plasma stays down: `systemctl --user start plasma-plasmashell`).
+Removing and re-adding the widget is not enough: the running Plasma keeps
+the code it loaded first.
 
 In a panel the widget shows the runner, sized to the panel (horizontal or
 vertical) and coloured like the theme's text; a click opens a Plasma popup
@@ -373,10 +385,41 @@ aqtruncat-codex-metric upgrade      # done by install.sh after an update
 Codex is not required to install or run AQTRunCat. Details:
 [docs/F3-codex-metric.md](docs/F3-codex-metric.md).
 
+### Built-in system metrics
+
+Besides CPU, memory, network and storage, AQTRunCat shows:
+
+- **Uptime** since boot (from `/proc/uptime`).
+- **GPU**: every GPU on its own, with utilization, video memory and
+  temperature where the driver reports them (AMD `amdgpu`; Intel `i915`/`xe`
+  as *activity*, the time out of the RC6 power-saving state; NVIDIA through
+  the NVML library of its own driver, if installed). A field the driver does
+  not report shows `N/A` with the reason, never `0`; a sleeping laptop GPU
+  is not woken up to read it. Settings › Built-in Metrics chooses the GPU of
+  the Metrics Bar (automatic: the discrete one first).
+- **FPS** of a game, read from the CSV log that
+  [MangoHud](https://github.com/flightlessmango/MangoHud) writes while it
+  logs: set `output_folder` (and `log_interval=100`) in
+  `~/.config/MangoHud/MangoHud.conf` and start logging (`Shift_L+F2` or
+  `autostart_log`). AQTRunCat never injects anything into games; without a
+  MangoHud log it says why there is no FPS.
+- **Package updates** (pacman, apt or dnf, whichever is installed) and
+  **Flatpak updates**: counts from read-only checks, once an hour by default
+  (Settings or `aqtruncatctl settings set updatesIntervalMinutes …`, `0` =
+  off). By default only the metadata your system has already downloaded is
+  used, so there is no network access; *Download fresh package metadata* is
+  opt-in (pacman needs `checkupdates` from pacman-contrib; apt cannot do it
+  without root). Nothing is ever installed and root is never asked for.
+- **Kernel** and **distribution** (from `uname` and `/etc/os-release`, read
+  as data).
+
+Details: [docs/F5-additional-built-in-metrics.md](docs/F5-additional-built-in-metrics.md).
+
 ### Metrics Bar
 
 Enable it in Settings and choose up to **three** metrics (CPU, memory, swap,
-network down/up, Root/Home storage, disk read/write, a Custom Metric with
+network down/up, Root/Home storage, disk read/write, uptime, GPU
+utilization/memory/temperature, FPS, package or Flatpak updates, a Custom Metric with
 a `metricsBarValue`, or a single value of a multi-value metric such as the
 Claude Code 5-hour or weekly usage, shown as `5h`/`7d` over the percentage).
 Each one is a small tray icon next to the runner; hover it for the full value.
@@ -395,9 +438,12 @@ The runner itself is always there and is not counted.
 - Wayland does not let applications position windows next to the tray; the
   Dashboard and Settings are normal windows placed by the compositor.
 - The backend `aqtruncatd` stays until you log out, even with no client
-  (about 17 MB). Right after a first installation, `aqtruncatctl` may report
+  (about 20 MB). Right after a first installation, `aqtruncatctl` may report
   the backend as not running until the tray has started it once or you log in
   again, if the session bus did not reload its service files.
+- Game FPS needs MangoHud logging to a file; Intel GPUs show activity
+  (time out of RC6), not per-engine utilization; update counts are only as
+  fresh as the package metadata (an "out of date" note says so).
 - The Plasma widget starts the backend only through D-Bus activation; it
   cannot open the tray's Settings window (start at login, Metrics Bar and
   Dashboard refresh are set there or with `aqtruncatctl`).
@@ -418,5 +464,6 @@ AQTRunCat icon is original artwork.
 - [docs/](docs/): design and validation reports per milestone (runners,
   metrics, Dashboard, Settings, Custom Metrics, Metrics Bar, desktop
   compatibility, packaging, executable Custom Metrics, Claude Code and Codex
-  integrations, backend/D-Bus API/`aqtruncatctl`, KDE Plasma widget)
+  integrations, backend/D-Bus API/`aqtruncatctl`, KDE Plasma widget,
+  additional built-in metrics)
 - [`tools/`](tools/): diagnostic scripts for developers (not needed by users)

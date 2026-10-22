@@ -24,4 +24,12 @@ std::optional<std::string> compactPercent(double percent);
 // rates have no value (nullopt).
 std::optional<std::string> compactRate(double bytesPerSecond);
 
+// F5. A count ("0", "12", "9999", then "10k+"); negative → nullopt.
+std::optional<std::string> compactCount(long long count);
+// A whole number, rounded ("143" FPS); ≥ 9999.5 → "9999"; negative or
+// non-finite → nullopt.
+std::optional<std::string> compactWhole(double value);
+// Degrees Celsius, rounded: "54°", "-5°"; out of [-99, 999] → nullopt.
+std::optional<std::string> compactCelsius(double celsius);
+
 } // namespace aqtruncat::metrics

@@ -3,6 +3,7 @@
 #include "customsymbol.h"
 #include "metrics/compactformat.h"
 #include "metrics/metricsformat.h"
+#include "metrics/uptime.h"
 
 #include <QFileInfo>
 
@@ -200,6 +201,65 @@ std::optional<Item> MetricsBarModel::builtIn(const BuiltInMetric &metric) const
                 setPercent(item, storage->info->usagePercent, QStringLiteral(" (%1 available)").arg(
                     q(aqtruncat::metrics::formatBytes(storage->info->availableBytes))));
             }
+        }
+    } else if (metric.id == QLatin1String("uptime")) {
+        applyStatus(item, s.uptime.status);
+        if (s.uptime.status.ok() && s.uptime.seconds) {
+            item.shortValue = q(aqtruncat::metrics::compactDuration(*s.uptime.seconds));
+            item.detail = q(aqtruncat::metrics::formatDuration(*s.uptime.seconds));
+        }
+    } else if (metric.id.startsWith(QLatin1String("gpu."))) {
+        // The selected GPU (setting gpuDevice; resolved by the backend).
+        const auto gpu = std::find_if(s.gpu.devices.cbegin(), s.gpu.devices.cend(), [](const auto &d) { return d.selected; });
+        if (gpu == s.gpu.devices.cend()) {
+            applyStatus(item, s.gpu.status.ok() ? MetricStatus::unavailable("no GPU selected") : s.gpu.status);
+        } else {
+            item.label = metric.label + QStringLiteral(" — ") + q(gpu->model);
+            std::optional<std::string> compact;
+            QString detail;
+            if (metric.id == QLatin1String("gpu.utilization")) {
+                applyStatus(item, gpu->utilizationStatus);
+                if (gpu->utilizationStatus.ok() && gpu->utilizationPercent) {
+                    compact = aqtruncat::metrics::compactPercent(*gpu->utilizationPercent);
+                    detail = q(aqtruncat::metrics::formatPercent(*gpu->utilizationPercent));
+                }
+            } else if (metric.id == QLatin1String("gpu.memory")) {
+                applyStatus(item, gpu->memoryStatus);
+                if (gpu->memoryStatus.ok() && gpu->memoryUsedBytes && gpu->memoryTotalBytes && *gpu->memoryTotalBytes) {
+                    const double percent = 100.0 * double(*gpu->memoryUsedBytes) / double(*gpu->memoryTotalBytes);
+                    compact = aqtruncat::metrics::compactPercent(percent);
+                    detail = QStringLiteral("%1 / %2").arg(q(aqtruncat::metrics::formatBytes(*gpu->memoryUsedBytes)),
+                                                           q(aqtruncat::metrics::formatBytes(*gpu->memoryTotalBytes)));
+                }
+            } else {
+                applyStatus(item, gpu->temperatureStatus);
+                if (gpu->temperatureStatus.ok() && gpu->temperatureCelsius) {
+                    compact = aqtruncat::metrics::compactCelsius(*gpu->temperatureCelsius);
+                    detail = q(aqtruncat::metrics::formatCelsius(*gpu->temperatureCelsius));
+                }
+            }
+            if (compact) {
+                item.shortValue = q(*compact);
+                item.detail = detail;
+            }
+        }
+    } else if (metric.id == QLatin1String("fps")) {
+        // Source OFF: no item, not a placeholder; the selection is kept so
+        // FPS comes back by itself when a source is chosen again.
+        if (aqtruncat::metrics::fpsHidden(s.fps))
+            return std::nullopt;
+        applyStatus(item, s.fps.status);
+        if (s.fps.status.ok() && s.fps.fps) {
+            item.shortValue = q(aqtruncat::metrics::compactWhole(*s.fps.fps).value_or(std::string()));
+            item.detail = q(aqtruncat::metrics::formatFps(*s.fps.fps))
+                + (s.fps.application.empty() ? QString() : QStringLiteral(" — ") + q(s.fps.application));
+        }
+    } else if (metric.id.startsWith(QLatin1String("updates."))) {
+        const auto &updates = metric.id == QLatin1String("updates.packages") ? s.packageUpdates : s.flatpakUpdates;
+        applyStatus(item, updates.status);
+        if (updates.status.ok() && updates.count) {
+            item.shortValue = q(aqtruncat::metrics::compactCount(*updates.count).value_or(std::string()));
+            item.detail = q(aqtruncat::metrics::formatUpdateCount(*updates.count));
         }
     }
     if (item.status == Status::Available && item.shortValue.isEmpty()) {

@@ -28,6 +28,16 @@ void MetricSampler::setNetworkSelection(aqtruncat::metrics::NetworkSelection sel
     m_sampler.setNetworkSelection(std::move(selection));
 }
 
+void MetricSampler::setGpuPreference(const QString &device)
+{
+    m_sampler.setGpuPreference(device.toStdString());
+}
+
+void MetricSampler::setFpsSource(const QString &source)
+{
+    m_sampler.setFpsSource(source.toStdString());
+}
+
 void MetricSampler::sampleNow()
 {
     emit snapshotReady(m_sampler.sample(aqtruncat::metrics::SystemMetricsSampler::now()));

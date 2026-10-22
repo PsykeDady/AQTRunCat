@@ -168,6 +168,12 @@ private slots:
             QDir().mkpath(testHome() + u'/' + QLatin1String(dir));
         QFile::setPermissions(testHome() + QStringLiteral("/runtime"),
                               QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        // F5: no real package-manager or Flatpak checks from this test.
+        QDir().mkpath(testHome() + QStringLiteral("/config/AQTRunCat"));
+        QFile ini(testHome() + QStringLiteral("/config/AQTRunCat/AQTRunCat.ini"));
+        QVERIFY(ini.open(QIODevice::WriteOnly));
+        ini.write("[updates]\nintervalMinutes=0\n");
+        ini.close();
         QVERIFY(!backendRegistered());
 
         connect(&m_engine, &QQmlEngine::warnings, this, [this](const QList<QQmlError> &warnings) {

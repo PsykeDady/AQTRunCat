@@ -83,7 +83,12 @@ private slots:
         for (const BuiltInMetric &metric : builtInMetrics())
             all.append(metric.id);
         QCOMPARE(all, (QStringList{"cpu", "memory", "swap", "network.download", "network.upload",
-                                   "storage.root", "storage.home", "disk.read", "disk.write"}));
+                                   "storage.root", "storage.home", "disk.read", "disk.write",
+                                   // F5; kernel and distribution are text, not bar values
+                                   "uptime", "gpu.utilization", "gpu.memory", "gpu.temperature", "fps",
+                                   "updates.packages", "updates.flatpak"}));
+        QVERIFY(!isBuiltInId(QStringLiteral("kernel")));
+        QVERIFY(!isBuiltInId(QStringLiteral("distribution")));
         QVERIFY(isBuiltInId(QStringLiteral("cpu")));
         QVERIFY(!isBuiltInId(QStringLiteral("battery")));
         QCOMPARE(customId(QStringLiteral("/a/b.json")), QStringLiteral("custom:/a/b.json"));
@@ -130,6 +135,129 @@ private slots:
         QCOMPARE(find(model.items(), QStringLiteral("network.download"))->shortValue, QStringLiteral("1.2M"));
         QCOMPARE(find(model.items(), QStringLiteral("network.download"))->detail, QStringLiteral("1.2 MiB/s"));
         QCOMPARE(find(model.items(), QStringLiteral("storage.root"))->shortValue, QStringLiteral("62%"));
+    }
+
+    void f5ItemsFollowTheSelectedGpuAndNeverInventValues()
+    {
+        MetricsBarModel model("/home/test");
+        model.setConfiguration(true, {QStringLiteral("gpu.utilization"), QStringLiteral("gpu.temperature"),
+                                      QStringLiteral("fps")});
+        SystemMetricsSnapshot s = snapshot();
+        s.gpu.status = MetricStatus::okStatus();
+        aqtruncat::metrics::GpuDevice igpu;
+        igpu.id = "0000:00:02.0";
+        igpu.model = "Intel Iris Xe";
+        igpu.utilizationStatus = MetricStatus::okStatus();
+        igpu.utilizationPercent = 5.0;
+        igpu.temperatureStatus = MetricStatus::unavailable("integrated GPU: no sensor of its own");
+        aqtruncat::metrics::GpuDevice dgpu;
+        dgpu.id = "0000:03:00.0";
+        dgpu.model = "AMD Radeon";
+        dgpu.selected = true;
+        dgpu.utilizationStatus = MetricStatus::okStatus();
+        dgpu.utilizationPercent = 87.6;
+        dgpu.temperatureStatus = MetricStatus::okStatus();
+        dgpu.temperatureCelsius = 71.4;
+        s.gpu.devices = {igpu, dgpu};
+        s.fps.status = MetricStatus::unavailable("no game is logging with MangoHud now");
+        model.updateSystem(s);
+        QTRY_VERIFY(find(model.items(), QStringLiteral("gpu.utilization")) && find(model.items(), QStringLiteral("gpu.utilization"))->status == Status::Available);
+        QCOMPARE(find(model.items(), QStringLiteral("gpu.utilization"))->shortValue, QStringLiteral("88%"));
+        QCOMPARE(find(model.items(), QStringLiteral("gpu.utilization"))->label, QStringLiteral("GPU utilization — AMD Radeon"));
+        QCOMPARE(find(model.items(), QStringLiteral("gpu.temperature"))->shortValue, QStringLiteral("71°"));
+        const Item *fps = find(model.items(), QStringLiteral("fps"));
+        QCOMPARE(fps->status, Status::Unavailable);
+        QVERIFY(fps->shortValue.isEmpty());
+
+        // The integrated GPU selected: its missing temperature is "—", not 0.
+        s.gpu.devices[0].selected = true;
+        s.gpu.devices[1].selected = false;
+        s.fps.status = MetricStatus::okStatus();
+        s.fps.fps = 59.6;
+        model.updateSystem(s);
+        QTRY_VERIFY(find(model.items(), QStringLiteral("gpu.utilization")) && find(model.items(), QStringLiteral("gpu.utilization"))->shortValue == QStringLiteral("5%"));
+        const Item *temperature = find(model.items(), QStringLiteral("gpu.temperature"));
+        QCOMPARE(temperature->status, Status::Unavailable);
+        QVERIFY(temperature->shortValue.isEmpty());
+        QCOMPARE(find(model.items(), QStringLiteral("fps"))->shortValue, QStringLiteral("60"));
+
+        // No GPU at all.
+        s.gpu.devices.clear();
+        s.gpu.status = MetricStatus::unavailable("no GPU found");
+        model.updateSystem(s);
+        QTRY_VERIFY(find(model.items(), QStringLiteral("gpu.utilization")) && find(model.items(), QStringLiteral("gpu.utilization"))->status == Status::Unavailable);
+        QCOMPARE(find(model.items(), QStringLiteral("gpu.utilization"))->statusMessage, QStringLiteral("no GPU found"));
+    }
+
+    void fpsSourceOffHidesTheItemButKeepsTheSelection()
+    {
+        using aqtruncat::metrics::FpsCondition;
+        MetricsBarModel model("/home/test");
+        model.setConfiguration(true, {QStringLiteral("cpu"), QStringLiteral("fps"), QStringLiteral("memory")});
+        SystemMetricsSnapshot s = snapshot();
+        s.fps.condition = FpsCondition::Disabled;
+        s.fps.status = MetricStatus::unavailable("the FPS source is turned off");
+        model.updateSystem(s);
+        // OFF: no FPS item, no placeholder, no slot taken; the others stay.
+        QTRY_COMPARE(ids(model.items()), (QStringList{QStringLiteral("cpu"), QStringLiteral("memory")}));
+        QCOMPARE(find(model.items(), QStringLiteral("cpu"))->shortValue, QStringLiteral("23%"));
+        QCOMPARE(find(model.items(), QStringLiteral("memory"))->shortValue, QStringLiteral("25%"));
+
+        // A source again (same selection): FPS comes back in its place, with
+        // its status when there is no value.
+        const struct {
+            FpsCondition condition;
+            MetricStatus status;
+            Status expected;
+        } visible[] = {
+            {FpsCondition::Missing, MetricStatus::unavailable("MangoHud is not installed"), Status::Unavailable},
+            {FpsCondition::NotConfigured, MetricStatus::unavailable("MangoHud has no output_folder"), Status::Unavailable},
+            {FpsCondition::Inactive, MetricStatus::unavailable("no game is logging with MangoHud now"), Status::Unavailable},
+            {FpsCondition::Stale, MetricStatus::unavailable("the MangoHud log has not been written for 12 s"), Status::Unavailable},
+            {FpsCondition::Unsupported, MetricStatus::error("the MangoHud log has no frame-metrics header"), Status::Error},
+        };
+        for (const auto &c : visible) {
+            s.fps.condition = c.condition;
+            s.fps.status = c.status;
+            model.updateSystem(s);
+            QTRY_VERIFY(find(model.items(), QStringLiteral("fps"))
+                        && find(model.items(), QStringLiteral("fps"))->statusMessage == QString::fromStdString(c.status.message));
+            QCOMPARE(ids(model.items()), (QStringList{QStringLiteral("cpu"), QStringLiteral("fps"), QStringLiteral("memory")}));
+            QCOMPARE(find(model.items(), QStringLiteral("fps"))->status, c.expected);
+            QVERIFY(find(model.items(), QStringLiteral("fps"))->shortValue.isEmpty());
+        }
+        s.fps.condition = FpsCondition::Measured;
+        s.fps.status = MetricStatus::okStatus();
+        s.fps.fps = 143.6;
+        model.updateSystem(s);
+        QTRY_COMPARE(find(model.items(), QStringLiteral("fps"))->shortValue, QStringLiteral("144"));
+
+        // MangoHud → OFF: gone with the next update.
+        s.fps = {};
+        s.fps.condition = FpsCondition::Disabled;
+        model.updateSystem(s);
+        QTRY_COMPARE(ids(model.items()), (QStringList{QStringLiteral("cpu"), QStringLiteral("memory")}));
+    }
+
+    void updateCountsAndUptime()
+    {
+        MetricsBarModel model("/home/test");
+        model.setConfiguration(true, {QStringLiteral("updates.packages"), QStringLiteral("updates.flatpak"),
+                                      QStringLiteral("uptime")});
+        SystemMetricsSnapshot s = snapshot();
+        s.packageUpdates.status = MetricStatus::okStatus();
+        s.packageUpdates.count = 0;
+        s.flatpakUpdates.status = MetricStatus::unavailable("Flatpak is not installed");
+        s.uptime.status = MetricStatus::okStatus();
+        s.uptime.seconds = 3 * 86400 + 5 * 3600;
+        model.updateSystem(s);
+        QTRY_VERIFY(find(model.items(), QStringLiteral("updates.packages")) && find(model.items(), QStringLiteral("updates.packages"))->status == Status::Available);
+        QCOMPARE(find(model.items(), QStringLiteral("updates.packages"))->shortValue, QStringLiteral("0")); // a real 0
+        QCOMPARE(find(model.items(), QStringLiteral("updates.packages"))->detail, QStringLiteral("Up to date"));
+        QCOMPARE(find(model.items(), QStringLiteral("updates.flatpak"))->status, Status::Unavailable);
+        QVERIFY(find(model.items(), QStringLiteral("updates.flatpak"))->shortValue.isEmpty());
+        QCOMPARE(find(model.items(), QStringLiteral("uptime"))->shortValue, QStringLiteral("3d"));
+        QCOMPARE(find(model.items(), QStringLiteral("uptime"))->detail, QStringLiteral("3d 5h 0m"));
     }
 
     void neverMoreThanThreeItems()

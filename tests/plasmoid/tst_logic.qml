@@ -55,6 +55,60 @@ TestCase {
         compare(Logic.metricRows([], {}).length, 0);
     }
 
+    function test_fpsSourceOffHidesFps() {
+        function fps(condition, state, message, extra) {
+            return metric(Object.assign({ id: "fps", title: "FPS", state: state, message: message, value: null,
+                                          unit: "fps", formattedValue: "", compactValue: null, normalized: null,
+                                          data: { source: condition === "disabled" ? "" : "mangohud",
+                                                  condition: condition } }, extra || {}));
+        }
+        const others = [metric({ id: "cpu" }), metric({ id: "uptime", title: "Uptime", formattedValue: "1h 0m" })];
+        // OFF: no row at all, the other built-in metrics stay as they are.
+        const off = Logic.metricRows(others.concat([fps("disabled", "unavailable", "the FPS source is turned off")]));
+        compare(off.map(r => r.metricId), ["cpu", "uptime"]);
+        compare(off[1].value, "1h 0m");
+        verify(Logic.hiddenMetric(fps("disabled", "unavailable", "the FPS source is turned off")));
+        // With a source, every condition is a visible row with its status.
+        const visible = [["missing", "unavailable", "MangoHud is not installed"],
+                         ["not-configured", "unavailable", "MangoHud has no output_folder"],
+                         ["inactive", "unavailable", "no game is logging with MangoHud now"],
+                         ["stale", "unavailable", "the MangoHud log has not been written for 12 s"],
+                         ["unsupported", "error", "the MangoHud log has no frame-metrics header"]];
+        for (let i = 0; i < visible.length; ++i) {
+            const rows = Logic.metricRows(others.concat([fps(visible[i][0], visible[i][1], visible[i][2])]));
+            compare(rows.map(r => r.metricId), ["cpu", "uptime", "fps"], visible[i][0]);
+            compare(rows[2].value, "—");
+            compare(rows[2].detail, visible[i][2]);
+            verify(!Logic.hiddenMetric(fps(visible[i][0], visible[i][1], visible[i][2])));
+        }
+        const measured = Logic.metricRows([fps("measured", "ok", "", { value: 144, formattedValue: "144 FPS" })]);
+        compare(measured[0].value, "144 FPS");
+        // Only FPS follows this rule: another metric's data never hides it.
+        verify(!Logic.hiddenMetric(metric({ id: "cpu", data: { condition: "disabled" } })));
+        verify(!Logic.hiddenMetric(null));
+    }
+
+    function test_fpsSourceSwitchUpdatesTheModel() {
+        // OFF ↔ MangoHud through MetricsChanged deltas reaches the ListModel.
+        const on = metric({ id: "fps", title: "FPS", state: "unavailable", message: "MangoHud is not installed",
+                            formattedValue: "", data: { source: "mangohud", condition: "missing" } });
+        const off = metric({ id: "fps", title: "FPS", state: "unavailable", message: "the FPS source is turned off",
+                             formattedValue: "", data: { source: "", condition: "disabled" } });
+        let metrics = [metric({ id: "cpu" }), off];
+        model.clear();
+        Logic.syncModel(model, Logic.metricRows(metrics));
+        compare(model.count, 1);
+        metrics = Logic.applyDelta(metrics, { metrics: [on], removed: [], order: ["cpu", "fps"] });
+        Logic.syncModel(model, Logic.metricRows(metrics));
+        compare(model.count, 2);
+        compare(model.get(1).metricId, "fps");
+        compare(model.get(1).detail, "MangoHud is not installed");
+        metrics = Logic.applyDelta(metrics, { metrics: [off], removed: [], order: ["cpu", "fps"] });
+        Logic.syncModel(model, Logic.metricRows(metrics));
+        compare(model.count, 1);
+        compare(model.get(0).metricId, "cpu");
+    }
+
     function test_missingValuesNeverBecomeZero() {
         const pending = Logic.metricRow(metric({ state: "pending", value: null, normalized: null, formattedValue: "",
                                                  message: "waiting for the first sample" }));
@@ -206,5 +260,55 @@ TestCase {
         verify(!Logic.hasCapability({ capabilities: ["metrics"] }, "runners"));
         verify(!Logic.hasCapability({}, "runners"));
         verify(!Logic.hasCapability(null, "runners"));
+    }
+
+    // F5 (schema 2)
+    function test_gpuChoices() {
+        const metrics = [metric(),
+                         metric({ id: "gpu:0000:00:02.0", title: "Intel Iris Xe" }),
+                         metric({ id: "gpu:0000:03:00.0", title: "AMD Radeon" }),
+                         metric({ id: "gpu:custom", category: "custom" })];
+        let choices = Logic.gpuChoices(metrics, "auto");
+        compare(choices.length, 3);
+        compare(choices[0].value, "auto");
+        compare(choices[1].value, "0000:00:02.0");
+        compare(choices[1].text, "Intel Iris Xe (0000:00:02.0)");
+        compare(Logic.indexOfValue(choices, "0000:03:00.0"), 2);
+        // A chosen GPU that is gone stays visible and selected.
+        choices = Logic.gpuChoices([metric()], "0000:09:00.0");
+        compare(choices.length, 2);
+        compare(choices[1].text, "0000:09:00.0 (not present)");
+        compare(Logic.gpuChoices(null, undefined).length, 1);
+    }
+
+    function test_updatesIntervalChoices() {
+        const choices = Logic.updatesIntervalChoices();
+        compare(choices.map(c => c.value), [0, 15, 30, 60, 180, 360, 720, 1440]);
+        compare(choices[0].text, "Off");
+        compare(choices[3].text, "Every hour");
+        compare(choices[4].text, "Every 3 hours");
+        compare(choices[7].text, "Once a day");
+        compare(Logic.indexOfValue(choices, 60), 3);
+        compare(Logic.indexOfValue(choices, 7), -1);
+    }
+
+    function test_f5MetricRows() {
+        // Built-in F5 metrics need no special code: a GPU lists its fields,
+        // an informational text has no bar, a count no fraction.
+        const gpu = metric({ id: "gpu:0000:00:02.0", title: "Intel Iris Xe", formattedValue: "37.5 %", normalized: 0.375,
+                             items: [{ id: "utilization", title: "Activity", formattedValue: "37.5 %", detail: "", normalized: 0.375 },
+                                     { id: "memory", title: "Memory", formattedValue: "N/A", detail: "shared system memory", normalized: null },
+                                     { id: "temperature", title: "Temperature", formattedValue: "N/A", detail: "no sensor", normalized: null }] });
+        const row = Logic.metricRow(gpu);
+        compare(JSON.parse(row.itemsJson).length, 3);
+        compare(JSON.parse(row.itemsJson)[1].fraction, null);
+        const kernel = Logic.metricRow(metric({ id: "kernel", title: "Kernel", value: null, unit: null,
+                                                formattedValue: "Linux 7.2.10", normalized: null, compactValue: null }));
+        compare(kernel.value, "Linux 7.2.10");
+        verify(!kernel.hasFraction);
+        const updates = Logic.metricRow(metric({ id: "updates.flatpak", state: "unavailable", value: null,
+                                                 message: "Flatpak is not installed", normalized: null }));
+        compare(updates.value, "—");
+        compare(updates.detail, "Flatpak is not installed");
     }
 }
