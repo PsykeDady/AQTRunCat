@@ -1,7 +1,8 @@
 // Offscreen preview of the AQTRunCat Plasmoid's own components (F4.2), for
 // tools/plasmoid-preview.sh: the real BackendClient, RunnerView and
 // FullRepresentation against a real backend, outside plasmashell. Saves one
-// PNG with the popup and the runner at panel sizes, then quits.
+// PNG with the popup, the runner at panel sizes and the text of the panel
+// tooltip (F6), then quits.
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
@@ -63,6 +64,32 @@ Window {
             Kirigami.Heading {
                 level: 4
                 text: backend.status + (window.runner ? " · " + window.runner.displayName + " · " + backend.runner.fps + " fps" : "")
+            }
+            // F6: the panel tooltip's text (main.qml toolTipMainText /
+            // toolTipSubText), laid out like Plasma's default tooltip.
+            Rectangle {
+                Layout.preferredWidth: tip.implicitWidth + Kirigami.Units.largeSpacing * 2
+                Layout.preferredHeight: tip.implicitHeight + Kirigami.Units.largeSpacing * 2
+                color: Kirigami.Theme.backgroundColor
+                border.color: Kirigami.Theme.disabledTextColor
+                radius: Kirigami.Units.cornerRadius
+                ColumnLayout {
+                    id: tip
+                    anchors.centerIn: parent
+                    spacing: Kirigami.Units.smallSpacing
+                    Kirigami.Heading {
+                        level: 3
+                        text: "AQTRunCat"
+                        textFormat: Text.PlainText
+                    }
+                    Text {
+                        text: Logic.hoverText(backend.status, window.runner ? window.runner.displayName : "",
+                                              backend.metrics, backend.metricsCurrent)
+                        textFormat: Text.PlainText
+                        color: Kirigami.Theme.textColor
+                        opacity: 0.75
+                    }
+                }
             }
         }
     }

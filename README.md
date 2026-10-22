@@ -33,6 +33,8 @@ the primary target is KDE Plasma 6 on Wayland.
 - **Integrations**: Claude Code plan usage (current 5-hour session and
   current week, as on Claude Code's `/usage` screen) and Codex usage limits
   (as on Codex's `/status`), each switched on in Settings.
+- **Hover information**: rest the pointer on the runner (tray or Plasma
+  widget) to see CPU, RAM and swap without opening the Dashboard.
 - **Metrics Bar** (off by default): up to 3 compact values, built-in or
   custom, as extra tray icons next to the runner.
 - **Settings** window, start at login, and a command line (`aqtruncat --help`).
@@ -176,6 +178,20 @@ one) and, for native Wayland windows, the Qt Wayland plugin (`qt6-wayland` /
 
 Start it from the application menu or with `aqtruncat`. Left-click the
 runner to show or hide the Dashboard; right-click for Settings and Quit.
+Rest the pointer on the runner for a short summary:
+
+```text
+AQTRunCat — Cat
+CPU: 18.4 %
+RAM: 46.5 % · 7.2 GiB / 15.5 GiB used
+Swap: 2.4 % · 300.0 MiB / 12.0 GiB
+```
+
+The values are the ones the backend already measures (nothing extra is
+sampled for the tooltip); a value that is not there yet says "waiting for
+data" (or "unavailable", "error") instead of a number, there is no Swap line
+without swap, and "Backend not running" replaces the values when the backend
+is gone.
 
 ```bash
 aqtruncat                       # start the tray runner
@@ -229,12 +245,15 @@ Removing and re-adding the widget is not enough: the running Plasma keeps
 the code it loaded first.
 
 In a panel the widget shows the runner, sized to the panel (horizontal or
-vertical) and coloured like the theme's text; a click opens a Plasma popup
-with the System metrics, the Claude Code and Codex integrations and your
+vertical) and coloured like the theme's text. Hovering it shows Plasma's
+tooltip with the runner and the same CPU/RAM/swap summary as the tray (the
+widget follows the metrics only while the tooltip or the popup can show
+them); a click opens a Plasma popup with the System metrics, the Claude Code and Codex integrations and your
 Custom Metrics. Its configuration has two pages: **AQTRunCat** changes the
 shared settings (runner, speed, network, integrations, Custom Metrics files;
 the same ones as the tray's Settings and `aqtruncatctl`), **Appearance** has
-the widget's own options. The widget is a client of the same backend: it
+the widget's own options. With **Detail lines** off (Appearance), hovering a metric
+in the popup shows its details. The widget is a client of the same backend: it
 works without the tray, next to it, or in several copies, and nothing is
 sampled twice. Details:
 [docs/F4.2-plasma-plasmoid.md](docs/F4.2-plasma-plasmoid.md).
@@ -422,7 +441,10 @@ network down/up, Root/Home storage, disk read/write, uptime, GPU
 utilization/memory/temperature, FPS, package or Flatpak updates, a Custom Metric with
 a `metricsBarValue`, or a single value of a multi-value metric such as the
 Claude Code 5-hour or weekly usage, shown as `5h`/`7d` over the percentage).
-Each one is a small tray icon next to the runner; hover it for the full value.
+Each one is a small tray icon next to the runner; hover it for the full value
+and its details (for example the logical CPUs, the available memory, the
+counted network interfaces, the GPU's driver, the package manager and the
+last successful update check).
 The runner itself is always there and is not counted.
 
 ## Known limitations
@@ -465,5 +487,5 @@ AQTRunCat icon is original artwork.
   metrics, Dashboard, Settings, Custom Metrics, Metrics Bar, desktop
   compatibility, packaging, executable Custom Metrics, Claude Code and Codex
   integrations, backend/D-Bus API/`aqtruncatctl`, KDE Plasma widget,
-  additional built-in metrics)
+  additional built-in metrics, hover information)
 - [`tools/`](tools/): diagnostic scripts for developers (not needed by users)

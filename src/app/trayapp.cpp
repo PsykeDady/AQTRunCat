@@ -5,6 +5,7 @@
 #include "appsettings.h"
 #include "cli/runnercommands.h"
 #include "dashboardwindow.h"
+#include "hoversummary.h"
 #include "logging.h"
 #include "metricsbarmodel.h"
 #include "metricsbarpresenter.h"
@@ -28,6 +29,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <memory>
+#include <optional>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -114,6 +116,25 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
     QObject::connect(&dashboard, &DashboardWindow::visibilityChanged, &tray, &TrayPresenter::setDashboardVisible);
     tray.setRunner(activeRunner);
     animator.setSequence(activeRunner.sequence);
+
+    // F6: hover summary (CPU, RAM, swap) from the snapshots the backend
+    // already sends; nothing is sampled for it. A lost backend says so
+    // instead of showing values that are no longer current.
+    std::optional<aqtruncat::metrics::SystemMetricsSnapshot> hoverSnapshot;
+    auto hoverConnection = aqtruncat::hover::Connection::Connecting;
+    auto updateHoverSummary = [&] {
+        tray.setSummary(aqtruncat::hover::summaryLines(hoverConnection, hoverSnapshot ? &*hoverSnapshot : nullptr));
+    };
+    updateHoverSummary();
+    QObject::connect(&backend, &BackendClient::connectionChanged, &tray, [&](bool connected) {
+        hoverConnection = connected ? aqtruncat::hover::Connection::Connected : aqtruncat::hover::Connection::Unavailable;
+        updateHoverSummary();
+    });
+    QObject::connect(&backend, &BackendClient::systemSnapshot, &tray,
+                     [&](const aqtruncat::metrics::SystemMetricsSnapshot &snapshot) {
+                         hoverSnapshot = snapshot;
+                         updateHoverSummary();
+                     });
 
     // Metrics Bar: separate tray items fed by the same snapshots. The runner
     // item above is registered first, so hosts list the bar after it.

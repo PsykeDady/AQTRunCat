@@ -1,7 +1,7 @@
 # Build: packaging/make-source-tarball.sh ~/rpmbuild/SOURCES
 #        rpmbuild -ba packaging/rpm/aqtruncat.spec
 Name:           aqtruncat
-Version:        1.5.6
+Version:        1.6.3
 Release:        1%{?dist}
 Summary:        A Cute Run Cat for Linux
 
@@ -66,6 +66,10 @@ export QT_QPA_PLATFORM=offscreen
 %{_docdir}/%{name}/
 
 %changelog
+* Thu Oct 22 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 1.6.3-1
+- F6: hover information: CPU, RAM and swap summary in the tray tooltip and
+  in the Plasma widget's tooltip; more details in the Metrics Bar tooltips.
+
 * Thu Oct 22 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 1.5.6-1
 - F5: built-in uptime, GPU, FPS (MangoHud log), package and Flatpak update
   counts (read-only, local metadata by default), kernel and distribution.

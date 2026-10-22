@@ -29,10 +29,46 @@
 > (2026-10-22, uncommitted on `feature/f5`; the user owns every Git write):
 > uptime, GPU, FPS (MangoHud log), package and Flatpak updates, kernel and
 > distribution as Built-in Metrics (§13 F5, §5 F5 block,
-> `docs/F5-additional-built-in-metrics.md`).** F6 and F7 are NOT STARTED;
-> do not start them without an explicit user instruction. F7 (Walking
-> Goose, Crazy Dancing Parrot) is blocked until the user provides the final
-> assets. Version **1.5.6** (F5.1–F5.6; versioning rule in §1).
+> `docs/F5-additional-built-in-metrics.md`).** The user committed F5
+> (a48206c, "F5, versione 1.5.6 …") and moved to branch `feature/f6`.
+> **F6 (Hover Information) is COMPLETE (2026-10-22, uncommitted on
+> `feature/f6`; the user owns every Git write): CPU/RAM/swap summary in the
+> tray tooltip and in the Plasmoid's native tooltip, metric details in the
+> Metrics Bar tooltips and in the popup rows (§13 F6, §5 F6 block,
+> `docs/F6-hover-information.md`).** F7 is NOT STARTED and blocked until
+> the user provides the final assets (Walking Goose, Crazy Dancing Parrot);
+> do not start it without an explicit user instruction (its full
+> requirements, sub-features F7.1–F7.4 (Engine added by the user as
+> F7.3), acceptance criteria and asset
+> blocker were restored in requirements.md on 2026-10-22, documentation
+> only; §13 F7). Version **1.6.3** (F6.1–F6.3; versioning rule in §1).
+>
+> Handoff state at the end of F6 (2026-10-22):
+> - Last verified: clean build (fresh dir) 0 warnings, ctest **52/52**
+>   (new `hoversummary`), `packaging-versions` 1.6.3, `loadsInPlasma` 3/3
+>   not skipped, shellcheck clean, `git diff --check` clean.
+> - Runtime (isolated): build tray + build backend on a private bus with a
+>   fake SNI watcher/host (Python dbus, scratch only, not in the repo),
+>   real Wayland platform + KDE platform theme but no window mapped (the
+>   offscreen QPA has no SNI tray; the xdgdesktopportal theme under
+>   offscreen falls back to XEmbed): ToolTip property read every second,
+>   disconnection → "Backend not running" after 3 s, recovery. Plasmoid:
+>   `tools/plasmoid-preview.sh` now also draws the tooltip text.
+>   WAYLAND_DISPLAY must be an absolute path when XDG_RUNTIME_DIR is
+>   isolated (else "socket path exceeds 108 bytes"/relative lookup fails
+>   and Qt aborts with no platform plugin: one SIGABRT core of build
+>   aqtruncat, PID 517267, is in systemd-coredump from that attempt).
+> - Measured: the KDE platform theme already emits NewToolTip with every
+>   frame (158 NewIcon / 171 NewToolTip in 16 s); F6 adds ≈ 1/s, sent
+>   together with a frame.
+> - Version choice 1.6.3 = the three functional sub-features F6.1–F6.3
+>   (F6.4 formatting, F6.5 architecture, F6.6 tests are cross-cutting
+>   requirements of the prompt, not sub-features). Tell the user; easy to
+>   change if they count six.
+> - Manual checks left to the user: real Plasma tray tooltip (multi-line
+>   title rendering, live update while open), Plasmoid tooltip after a
+>   plasmashell restart (horizontal/vertical panel, desktop), popup row
+>   tooltips with "Detail lines" off, Metrics Bar details, non-KDE trays.
 >
 > Handoff state at the end of F5 (2026-10-22):
 > - Last verified: clean build (fresh dir) 0 warnings, ctest **51/51**,
@@ -102,7 +138,7 @@
   config changes.
 - Work **only on the requested milestone**; stop at its end and report. Do not
   implement later milestones because they "look easy".
-- `requirements.md` is the user's **Post-Project Features** document (F1–F6):
+- `requirements.md` is the user's **Post-Project Features** document (F1–F7):
   do not modify it unless asked. M0–M9 normative decisions now live in §5 of
   this file and in `docs/M*.md` (historical reports: do not rewrite their
   observed results; add pointers/notes instead).
@@ -148,8 +184,9 @@
 ## 1. Project identity
 
 - Name **AQTRunCat**, tagline **"A Cute Run Cat for Linux"**, executable
-  **`aqtruncat`**, version **1.5.6** (CMake `PROJECT_VERSION`; was 0.0.1 until
-  F4.1; 1.4.2 = F4.2; 1.5.6 = F5 with its six sub-features F5.1–F5.6). Versioning rule (user, 2026-10-21; requirements.md "Versioning"):
+  **`aqtruncat`**, version **1.6.3** (CMake `PROJECT_VERSION`; was 0.0.1 until
+  F4.1; 1.4.2 = F4.2; 1.5.6 = F5 with its six sub-features F5.1–F5.6;
+  1.6.3 = F6 with F6.1–F6.3). Versioning rule (user, 2026-10-21; requirements.md "Versioning"):
   1.0.0 = M0–M9; each completed feature F<n> raises the minor (F4 → 1.4.x),
   each completed sub-feature the patch (F4.1 → 1.4.1, F4.2 → 1.4.2); after
   the 7th feature → 2.0.0. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
@@ -199,11 +236,15 @@ F3 COMPLETE   Codex integration: usage limits per window (local sessions + opt-i
 F4.1 COMPLETE Headless backend aqtruncatd (QtCore+QtDBus), D-Bus API io.github.psykedady.AQTRunCat1 (api 1, schema 1), CLI aqtruncatctl; tray = client
 F4.2 COMPLETE Native KDE Plasma 6 Plasmoid io.github.psykedady.aqtruncat (QML package, client of the API), GetRunners/"runners", install.sh --plasmoid/--no-plasmoid
 F5 COMPLETE   Additional Built-in Metrics: uptime, GPU (per device), FPS (MangoHud log), package/Flatpak updates (read-only, local metadata by default), kernel, distribution; API schema 2
-POST-PROJECT  F6, F7 (requirements.md), NOT STARTED, need an explicit instruction (F7 blocked on the user's assets)
+F6 COMPLETE   Hover Information: CPU/RAM/swap summary in the tray tooltip and the Plasmoid's native tooltip; Metrics Bar/popup details (1.6.3)
+POST-PROJECT  F7 (requirements.md), NOT STARTED, needs an explicit instruction (blocked on the user's assets)
 ```
 
 - Build: `cmake -S . -B build && cmake --build build && ctest --test-dir build`.
   Clean build: **0 warnings** (`-Wall -Wextra -Wpedantic` on all targets).
+- Tests (2026-10-22, after F6): **52 ctest suites, all passing** (new
+  `hoversummary` 8; extended metricsbarpresenter 14, metricsbarmodel 21,
+  plasmoidlogic 25, plasmoidclient 12).
 - Tests (2026-10-22, after F5): **51 ctest suites, all passing** (new
   `uptime` 16, `systeminfo` 14, `gpu` 14, `fps` 12, `packageupdates` 10,
   `updatesservice` 16; extended apischema 12, appsettings 16,
@@ -388,7 +429,9 @@ Key components:
 - **TrayPresenter** (`src/app/traypresenter.*`): builds one `QIcon` per frame
   once per runner (and on `QEvent::ApplicationPaletteChange`); monochrome
   runners tinted with `QPalette::WindowText` (`CompositionMode_SourceIn`),
-  colour runners untouched; tooltip "AQTRunCat — <name>"; context menu
+  colour runners untouched; tooltip "AQTRunCat — <name>" + the F6 hover
+  summary (`setSummary`, from `src/app/hoversummary.*`; sent only on a text
+  change, together with the next frame, 250 ms fallback); context menu
   Dashboard show/hide, `Settings…` and "Quit AQTRunCat". Primary tray
   activation toggles the Dashboard. No path/CPU knowledge. Images keep native
   size/aspect.
@@ -653,7 +696,7 @@ Key components:
 | Formatting | binary units, 1 decimal, `std::to_chars` (locale-independent) | QCoreApplication sets the system locale (Italian comma) |
 | Runner precedence | user > bundled; same-root dup id → first in natural order wins + note | |
 | Explicit `--runner` missing/invalid | error, never fallback | default runner may fall back with a warning |
-| Bundled runners | `cat` (default) + `coffee` only | don't add more without being asked |
+| Bundled runners | `cat` (default) + `coffee` only | don't add more without being asked (F7 is that request: `goose`/`parrot`, blocked until the user supplies the final frames, and `engine` from the existing RunCat Neo frames) |
 | XDG | runners: `$XDG_DATA_HOME/AQTRunCat/runners/`; settings: `$XDG_CONFIG_HOME/AQTRunCat/AQTRunCat.ini`; autostart: `$XDG_CONFIG_HOME/autostart/aqtruncat.desktop` | Qt/XDG standard locations, data and config separate |
 | Custom Metrics snapshot contract (M6, preserved by F1) | external RunCat Neo JSON snapshots; `formattedValue` stays opaque; snapshot sources run no commands/providers/scheduler | compatibility with existing producers; F1 deliberately adds a separate command-backed source while retaining this snapshot contract |
 | Custom Metrics command contract (F1) | explicit `source.type=command`; required `id`, `title`, `executable`; direct executable + ≤256 args, no shell/elevation; scalar UTF-8 stdout; prefix/suffix and optional normalized range | invalid/malformed config is never executed or treated as snapshot |
@@ -716,6 +759,10 @@ Key components:
 | F5 updates commands | `pacman -Qu` (remote opt-in: `checkupdates`), `apt-get -s -q -o Debug::NoLocking=true dist-upgrade` (no remote: needs root), `dnf -q -C check-update` (remote: `--refresh`), `flatpak remote-ls --user/--system/--installation=N --updates --cached --app/--runtime --columns=ref`; manager by installed capability, os-release only for ties | read-only, no root, local metadata by default, verified no network |
 | F5 updates scheduling | `UpdatesService` in the backend: two jobs, ≤1 command each, first check 30 s after start, next `updatesIntervalMinutes` (60; 0 off; 15–1440) after completion, remote ≥ 60 min; debounced (30 s) re-check on package-db/Flatpak `.changed` changes; 120 s timeout, 4 MiB/stream, process-group SIGKILL; LC_ALL=C, stdin /dev/null | infrequent, cached, non-overlapping, bounded |
 | F5 update semantics | count only when ok; error keeps `lastSuccess` but no count; metadata > 7 days = stale warning; Flatpak count = distinct refs per installation summed (apps + runtimes, no .Locale/.Debug); any failing installation → error (no partial sum); no Flatpak → unavailable | honest counts |
+| F6 hover summary | tray and Plasmoid show the same lines: `CPU: <formatPercent>`, `RAM: <percent> · <formatMemoryDetail>`, `Swap: <percent> · <formatSwapDetail>`; no Swap line when swap is not configured; missing = `waiting for data`/`unavailable`/`error` (never 0, never the backend's message); `Connecting to the backend…` / `Backend not running` replace values (after the client's 3 s grace); Plasmoid title "AQTRunCat", first line the runner | one formatter for API `detail` and tray (`metrics::formatMemoryDetail/formatSwapDetail`); Plasmoid formats nothing itself |
+| F6 tray tooltip transport | `TrayPresenter::setSummary`: no send if the text is unchanged; a changed text is set right before the next frame's `setIcon` (250 ms single-shot fallback); runner switch sets it at once; one QString tooltip (Qt/KDE put it in the SNI title, no subtitle via the Qt API) | the KDE theme already sends NewToolTip per frame; F6 adds ≈ 1/s |
+| F6 Plasmoid tooltip | the shell's own `ToolTipArea` via `toolTipMainText`/`toolTipSubText` (`Text.PlainText`), no custom window; `root.hovered` = compact `containsMouse || activeFocus` → `wantMetrics`; values only while `BackendClient.metricsCurrent` (connected, wanted, not stale) | no JSON parsing in plasmashell outside hover/popup (F4.2 rule); `GetMetrics` returns the last sample, never triggers one |
+| F6 metric details | Metrics Bar `Item::context` = slowly changing lines (part of the tooltip change check); value-tied lines go in `detail` (sent with the icon, M7 rule); only data already in the snapshot; Plasmoid popup row tooltip only when "Detail lines" is off (`logic.js rowToolTip`); Dashboard untouched | no invented data; no extra SNI traffic per value change |
 | F5 tests hermetic | `backendipc`, `plasmoidclient`, `plasmoid-preview.sh` write `updates/intervalMinutes=0`; `tst_systemmetrics` injects kernel/osRoot/fps off/nvml null | never depend on host package databases or GPU |
 
 ---
@@ -1131,13 +1178,13 @@ RunCat Neo custom runner names (§11).
 
 ---
 
-## 13. Post-project features F1–F6 (requirements.md)
+## 13. Post-project features F1–F7 (requirements.md)
 
 M0–M9 are complete; M9 concluded the initial roadmap. `requirements.md`
 ("AQTRunCat — Post-Project Features") is the current source for future work
 and supersedes the earlier F1–F4 post-project ordering. **F1, F2, F3, F4
-(F4.1, F4.2) and F5 are COMPLETE. F6 and F7 are NOT STARTED (F7 blocked on
-the user's assets); do not start one without an explicit user instruction.**
+(F4.1, F4.2), F5 and F6 are COMPLETE. F7 is NOT STARTED (blocked on the
+user's assets); do not start it without an explicit user instruction.**
 
 Development baseline: future post-project work starts from `feature/base`.
 Each feature branch (`feature/f1`, `feature/f2`, `feature/f3`, …) is created
@@ -1474,15 +1521,73 @@ create or switch branches, commit or push without explicit permission.
     0.150 % / 21.8 MiB; one check round ≈ 1.8 s CPU in children (pacman
     -Qu with gpg ≈ 0.7 s, 4 flatpak calls ≈ 1 s) → ≈ 0.05 % hourly.
   - Limitations: see §11 items 23–26 and the F5 doc §17.
-- **F7 — Additional Built-in Animated Runners (NOT STARTED, blocked)**:
-  Walking Goose and Crazy Dancing Parrot as official built-in runners
-  (like Cat/Coffee, separate from user runners); blocked until the user
-  provides the final animation assets (user, 2026-10-21).
-- **F6 — Hover Information**: hovering the tray/applet item shows a compact
-  summary of at least CPU and memory usage without opening the Dashboard, in
-  both the generic SNI frontend (tray tooltip) and the Plasma frontend
-  (native hover/tooltip); reuse the existing sampled metrics, no second
-  polling mechanism.
+- **F7 — Additional Built-in Animated Runners (NOT STARTED, BLOCKED on
+  assets)**: the last feature milestone before 2.0.0. Requirements recorded
+  2026-10-21, restored in full in requirements.md on 2026-10-22
+  (documentation only; nothing implemented, no asset in the repo).
+  - Proposed sub-features (documentation milestones): F7.1 Walking Goose,
+    F7.2 Crazy Dancing Parrot, F7.3 **Engine** (added by the user on
+    2026-10-22: promote RunCat Neo's `engine` — 10 frames 83×36,
+    monochrome, already in `third_party/runcatneo/runners/engine/`, so far
+    used only by the M1.0 spike — to an official built-in runner), F7.4
+    shared asset integration, packaging and validation. The shared
+    sections (assets, architecture, settings, installation) are unnumbered
+    and belong to F7.4.
+  - Engine specifics: `data/runners/engine/metadata.json` (displayName
+    "Engine", author Kyome22, type monochrome), id in
+    `AQTRUNCAT_BUNDLED_RUNNERS`, installed under share; update
+    THIRD_PARTY_NOTICES.md ("engine used only by the spike" → built-in);
+    frames stay byte-for-byte (cropping/rescaling = modifying third-party
+    files: ask first). Not blocked by assets; implement it alone only on
+    explicit instruction. Known limit to validate and report: ≈ 2.3:1, about
+    22×10 px in Plasma's square tray slot ("at the limit", M2 §11);
+    Plasmoid panels keep the aspect.
+  - Runners: official built-ins like Cat/Coffee (not Custom Metrics, not
+    user runners, not plugins); goose = cartoon walking cycle, parrot =
+    colourful energetic dance loop; transparent PNG frames, ~4–8 per runner,
+    one canvas size and alignment, limited palette, no background, smooth
+    loop, readable in tray/panel; same names in every frontend.
+  - Blocker (goose and parrot only): the user provides or approves the
+    final frames. Until then:
+    no generated/substitute graphics, no placeholders presented as final,
+    no third-party sprites without explicit approval (approved ones go in
+    THIRD_PARTY_NOTICES.md, Apache-2.0 compatible); do not mark F7 ready.
+  - Integration when unblocked: existing pipeline — frames
+    `<id>-frame-<n>.png` + `metadata.json` (`displayName`, `author`, `type`
+    monochrome|color; the parrot needs `color`), id added to
+    `AQTRUNCAT_BUNDLED_RUNNERS` (qrc in `aqtruncat` + installed under
+    `share/aqtruncat/runners/<id>/` for `GetRunners`/Plasmoid); proposed
+    ids `goose`, `parrot`; Cat stays default; no new animation engine, no
+    API change expected, no sampling change.
+  - Acceptance: final approved assets; listed/selectable/persistent in tray
+    and Plasmoid (+ `aqtruncat runner list`); correct in tray and
+    horizontal/vertical panels, light/dark; Cat/Coffee/user runners
+    unchanged; installed/packaged/uninstalled like the existing built-ins;
+    tests for discovery, assets, selection, persistence, packaging; clean
+    build.
+  - Versioning open decision (ask the user): F7.1–F7.4 → 1.7.1–1.7.4 by the
+    rule, then 2.0.0 after validation — or the completed F7 directly as
+    2.0.0. Recording F7 changed no version (still 1.6.3).
+- **F6 — Hover Information — COMPLETE (2026-10-22, 1.6.3, uncommitted on
+  `feature/f6`)**: record `docs/F6-hover-information.md`.
+  - F6.1 tray: `hover::summaryLines`/`runnerToolTip` (`src/app/
+    hoversummary.*`, engine lib, QtCore) from the snapshot `BackendClient`
+    already emits + `connectionChanged`; `TrayPresenter::setSummary`.
+  - F6.2 Plasmoid: `main.qml` `toolTipSubText: Logic.hoverText(status,
+    runner, metrics, metricsCurrent)`, `toolTipTextFormat: Text.PlainText`;
+    `CompactRepresentation` Binding → `root.hovered`; `BackendClient.
+    metricsCurrent`; `logic.js` `hoverLines`/`hoverStateText`/`hoverText`.
+  - F6.3: Metrics Bar `Item::context` + multi-line `detail` (memory
+    available, storage used/total); popup `MetricDelegate` HoverHandler +
+    PlasmaComponents.ToolTip with `Logic.rowToolTip` when details are off.
+  - Shared: `metrics::formatMemoryDetail/formatSwapDetail` (also used by
+    `apischema` → API texts unchanged), `hover::whenText` (moved from
+    `apischema.cpp`). No API/schema change.
+  - Tests: `hoversummary` (new), metricsbarpresenter, metricsbarmodel,
+    plasmoidlogic, plasmoidclient (`hoverFollowsMetricsOnlyWhileShown`,
+    `hoverSummaryMatchesTheQtTray`: the JS and C++ lines compared on one
+    real `GetMetrics` payload, passed to JS as JSON text — a QVariantList
+    does not arrive as a JS Array).
 - **General principles** (requirements.md): the generic Qt/Linux
   implementation stays the cross-desktop baseline; Plasma functionality is an
   additional layer, never KDE-only; reuse core/models/metrics; reuse the
@@ -1493,7 +1598,7 @@ create or switch branches, commit or push without explicit permission.
   external commands when practical (F1 command sources are the deliberate
   extension); keep system-wide and `--local` install; keep user data separate
   and safe on uninstall/upgrade; never sacrifice the generic app for a
-  desktop-specific frontend; F4.2–F6 remain future work, not implemented.
+  desktop-specific frontend.
 
 ## (historical) M9 brief
 Install target, `.desktop`, own icon, Arch PKGBUILD, Flatpak/AppImage
@@ -1572,6 +1677,8 @@ tests/tst_plasmoidclient.cpp, tests/tst_plasmoidpackage.cpp, tests/plasmoid/tst_
 tools/plasmoid-preview.{sh,qml}   offscreen popup/runner previews with demo data (light/dark PNG), private bus, isolated XDG (F5: update checks off)
 src/metrics/{uptime,systeminfo,gpu,fps,packageupdates}.*   F5 Qt-free sources: /proc/uptime, uname + os-release, DRM/sysfs/NVML GPUs, MangoHud log reader, update-check parsers/commands
 src/app/updatesservice.*, boundedprocess.*, processgroup.h   F5 backend update checks (two non-overlapping jobs), bounded subprocess (shared process-group rules with F1)
+src/app/hoversummary.*   F6 hover summary (CPU/RAM/swap lines, backend states, whenText), QtCore only
+docs/F6-hover-information.md   F6 existing tooltips, shared format, tray/Plasmoid/details, API unchanged, performance, tests, isolated runtime validation, manual checks
 docs/F5-additional-built-in-metrics.md   F5 investigation, ids/sources/units, GPU/FPS/updates semantics, API/CLI/UI, settings, performance, security, tests, runtime validation, limits (+ images dir)
 data/runners/<id>/metadata.json   AQTRunCat-authored metadata for bundled runners
 third_party/runcatneo/         upstream LICENSE + frames (cat, coffee bundled; engine spike-only)

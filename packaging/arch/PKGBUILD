@@ -6,7 +6,7 @@
 # the release tarball and replace SKIP with its checksum.
 
 pkgname=aqtruncat
-pkgver=1.5.6
+pkgver=1.6.3
 pkgrel=1
 pkgdesc='A Cute Run Cat for Linux: CPU-driven tray runner with system metrics'
 arch=('x86_64' 'aarch64')

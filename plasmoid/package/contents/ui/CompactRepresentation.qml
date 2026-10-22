@@ -3,7 +3,8 @@
  * horizontal panel it takes the panel's thickness as height and its own
  * aspect ratio for the width, in a vertical panel the other way round, on
  * the desktop it fits the widget. A click opens the popup (Plasma's own
- * expanded representation).
+ * expanded representation); hovering shows Plasma's applet tooltip with
+ * the CPU/memory summary (F6, main.qml).
  */
 import QtQuick
 import QtQuick.Layouts
@@ -30,6 +31,12 @@ MouseArea {
 
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton
+    // F6: the tooltip summary needs current metrics while it can be seen.
+    Binding {
+        target: compact.plasmoidItem
+        property: "hovered"
+        value: compact.containsMouse || compact.activeFocus
+    }
     property bool wasExpanded: false
     onPressed: wasExpanded = compact.plasmoidItem.expanded
     onClicked: compact.plasmoidItem.expanded = !wasExpanded

@@ -1,6 +1,7 @@
 #include "metricsbarmodel.h"
 
 #include "customsymbol.h"
+#include "hoversummary.h"
 #include "metrics/compactformat.h"
 #include "metrics/metricsformat.h"
 #include "metrics/uptime.h"
@@ -156,13 +157,17 @@ std::optional<Item> MetricsBarModel::builtIn(const BuiltInMetric &metric) const
         applyStatus(item, s.cpu.status);
         if (s.cpu.status.ok() && s.cpu.usagePercent)
             setPercent(item, *s.cpu.usagePercent);
+        if (s.cpu.logicalCpus > 0)
+            item.context = QStringLiteral("%1 logical CPUs").arg(s.cpu.logicalCpus);
     } else if (metric.id == QLatin1String("memory") || metric.id == QLatin1String("swap")) {
         applyStatus(item, s.memory.status);
         if (s.memory.status.ok() && s.memory.info) {
             const auto &m = *s.memory.info;
             if (metric.id == QLatin1String("memory")) {
-                setPercent(item, m.usagePercent, QStringLiteral(" (%1 / %2)").arg(
-                    q(aqtruncat::metrics::formatBytes(m.usedBytes)), q(aqtruncat::metrics::formatBytes(m.totalBytes))));
+                setPercent(item, m.usagePercent, QStringLiteral(" (%1 / %2)\n%3 available%4").arg(
+                    q(aqtruncat::metrics::formatBytes(m.usedBytes)), q(aqtruncat::metrics::formatBytes(m.totalBytes)),
+                    q(aqtruncat::metrics::formatBytes(m.availableBytes)),
+                    m.availableIsEstimate ? QStringLiteral(" (estimated)") : QString()));
             } else if (m.swapPresent) {
                 setPercent(item, m.swapUsagePercent, QStringLiteral(" (%1 / %2)").arg(
                     q(aqtruncat::metrics::formatBytes(m.swapUsedBytes)), q(aqtruncat::metrics::formatBytes(m.swapTotalBytes))));
@@ -173,11 +178,21 @@ std::optional<Item> MetricsBarModel::builtIn(const BuiltInMetric &metric) const
         }
     } else if (metric.id.startsWith(QLatin1String("network."))) {
         applyStatus(item, s.network.status);
+        QStringList counted;
+        for (const auto &interface : s.network.interfaces) {
+            if (interface.counted)
+                counted.append(q(interface.name));
+        }
+        if (!counted.isEmpty())
+            item.context = QStringLiteral("Interfaces: %1").arg(counted.join(QStringLiteral(", ")));
         if (s.network.status.ok())
             setRate(item, metric.id == QLatin1String("network.download") ? s.network.downloadBytesPerSecond
                                                                           : s.network.uploadBytesPerSecond);
     } else if (metric.id.startsWith(QLatin1String("disk."))) {
         applyStatus(item, s.diskIo.status);
+        if (s.diskIo.countedDevices > 0)
+            item.context = s.diskIo.countedDevices == 1 ? QStringLiteral("1 disk counted")
+                                                        : QStringLiteral("%1 disks counted").arg(s.diskIo.countedDevices);
         if (s.diskIo.status.ok())
             setRate(item, metric.id == QLatin1String("disk.read") ? s.diskIo.readBytesPerSecond
                                                                    : s.diskIo.writeBytesPerSecond);
@@ -198,8 +213,10 @@ std::optional<Item> MetricsBarModel::builtIn(const BuiltInMetric &metric) const
         } else {
             applyStatus(item, storage->status);
             if (storage->status.ok() && storage->info) {
-                setPercent(item, storage->info->usagePercent, QStringLiteral(" (%1 available)").arg(
-                    q(aqtruncat::metrics::formatBytes(storage->info->availableBytes))));
+                setPercent(item, storage->info->usagePercent, QStringLiteral(" (%1 available)\n%2 / %3 used").arg(
+                    q(aqtruncat::metrics::formatBytes(storage->info->availableBytes)),
+                    q(aqtruncat::metrics::formatBytes(storage->info->usedBytes)),
+                    q(aqtruncat::metrics::formatBytes(storage->info->totalBytes))));
             }
         }
     } else if (metric.id == QLatin1String("uptime")) {
@@ -215,6 +232,16 @@ std::optional<Item> MetricsBarModel::builtIn(const BuiltInMetric &metric) const
             applyStatus(item, s.gpu.status.ok() ? MetricStatus::unavailable("no GPU selected") : s.gpu.status);
         } else {
             item.label = metric.label + QStringLiteral(" — ") + q(gpu->model);
+            QStringList context;
+            if (!gpu->driver.empty())
+                context.append(q(gpu->driver));
+            if (gpu->integrated)
+                context.append(*gpu->integrated ? QStringLiteral("integrated") : QStringLiteral("discrete"));
+            if (gpu->suspended)
+                context.append(QStringLiteral("suspended"));
+            item.context = context.join(QStringLiteral(" · "));
+            if (metric.id == QLatin1String("gpu.utilization") && gpu->utilizationMethod == "rc6-residency")
+                item.context += QStringLiteral("\nActivity: time out of the RC6 power-saving state");
             std::optional<std::string> compact;
             QString detail;
             if (metric.id == QLatin1String("gpu.utilization")) {
@@ -249,6 +276,8 @@ std::optional<Item> MetricsBarModel::builtIn(const BuiltInMetric &metric) const
         if (aqtruncat::metrics::fpsHidden(s.fps))
             return std::nullopt;
         applyStatus(item, s.fps.status);
+        if (s.fps.source == "mangohud")
+            item.context = QStringLiteral("Source: MangoHud");
         if (s.fps.status.ok() && s.fps.fps) {
             item.shortValue = q(aqtruncat::metrics::compactWhole(*s.fps.fps).value_or(std::string()));
             item.detail = q(aqtruncat::metrics::formatFps(*s.fps.fps))
@@ -257,6 +286,16 @@ std::optional<Item> MetricsBarModel::builtIn(const BuiltInMetric &metric) const
     } else if (metric.id.startsWith(QLatin1String("updates."))) {
         const auto &updates = metric.id == QLatin1String("updates.packages") ? s.packageUpdates : s.flatpakUpdates;
         applyStatus(item, updates.status);
+        QStringList context;
+        if (metric.id == QLatin1String("updates.packages") && !updates.manager.empty())
+            context.append(QStringLiteral("Package manager: %1").arg(q(updates.manager)));
+        if (updates.lastSuccess)
+            context.append(QStringLiteral("Last successful check: %1").arg(aqtruncat::hover::whenText(*updates.lastSuccess)));
+        if (updates.checking)
+            context.append(QStringLiteral("Checking now…"));
+        if (updates.metadataStale)
+            context.append(QStringLiteral("Package metadata is more than 7 days old"));
+        item.context = context.join(u'\n');
         if (updates.status.ok() && updates.count) {
             item.shortValue = q(aqtruncat::metrics::compactCount(*updates.count).value_or(std::string()));
             item.detail = q(aqtruncat::metrics::formatUpdateCount(*updates.count));

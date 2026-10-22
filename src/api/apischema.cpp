@@ -1,6 +1,7 @@
 #include "apischema.h"
 
 #include "app/appsettings.h"
+#include "app/hoversummary.h"
 #include "app/metricsbarids.h"
 #include "metrics/compactformat.h"
 #include "metrics/metricsformat.h"
@@ -170,14 +171,6 @@ std::optional<std::int64_t> epochOf(const QJsonValue &value)
 }
 
 // "10:32" today, "Oct 16, 10:32" otherwise (local time, English month).
-QString whenText(std::int64_t seconds)
-{
-    const QDateTime time = QDateTime::fromSecsSinceEpoch(seconds).toLocalTime();
-    const QLocale c = QLocale::c();
-    return time.date() == QDate::currentDate() ? c.toString(time, QStringLiteral("HH:mm"))
-                                               : c.toString(time, QStringLiteral("MMM d, HH:mm"));
-}
-
 QString hexId(std::uint32_t id)
 {
     return QStringLiteral("%1").arg(id, 4, 16, QLatin1Char('0'));
@@ -389,9 +382,9 @@ void fillUpdates(QJsonObject &metric, QJsonObject &data, const metrics::UpdatesM
     if (updates.ignored > 0)
         detail << QStringLiteral("%1 ignored").arg(updates.ignored);
     if (updates.lastSuccess)
-        detail << QStringLiteral("checked %1").arg(whenText(*updates.lastSuccess));
+        detail << QStringLiteral("checked %1").arg(aqtruncat::hover::whenText(*updates.lastSuccess));
     if (updates.metadataTime && !updates.remote)
-        detail << QStringLiteral("metadata from %1%2").arg(whenText(*updates.metadataTime),
+        detail << QStringLiteral("metadata from %1%2").arg(aqtruncat::hover::whenText(*updates.metadataTime),
                                                          updates.metadataStale ? QStringLiteral(" (out of date)") : QString());
     if (updates.checking)
         detail << QStringLiteral("checking…");
@@ -571,17 +564,14 @@ QJsonArray builtInMetrics(const std::optional<metrics::SystemMetricsSnapshot> &s
                     data.insert(QStringLiteral("availableBytes"), double(m.availableBytes));
                     data.insert(QStringLiteral("availableIsEstimate"), m.availableIsEstimate);
                     setPercent(metric, m.usagePercent);
-                    metric.insert(QStringLiteral("detail"), q(metrics::formatBytes(m.usedBytes)) + QStringLiteral(" / ")
-                                                                + q(metrics::formatBytes(m.totalBytes)) + QStringLiteral(" used")
-                                                                + (m.availableIsEstimate ? QStringLiteral(" (estimated)") : QString()));
+                    metric.insert(QStringLiteral("detail"), q(metrics::formatMemoryDetail(m)));
                 } else {
                     data.insert(QStringLiteral("present"), m.swapPresent);
                     data.insert(QStringLiteral("usedBytes"), double(m.swapUsedBytes));
                     data.insert(QStringLiteral("totalBytes"), double(m.swapTotalBytes));
                     if (m.swapPresent) {
                         setPercent(metric, m.swapUsagePercent);
-                        metric.insert(QStringLiteral("detail"), q(metrics::formatBytes(m.swapUsedBytes)) + QStringLiteral(" / ")
-                                                                    + q(metrics::formatBytes(m.swapTotalBytes)));
+                        metric.insert(QStringLiteral("detail"), q(metrics::formatSwapDetail(m)));
                     } else {
                         setStatus(metric, MetricStatus::unavailable("no swap is configured"));
                     }

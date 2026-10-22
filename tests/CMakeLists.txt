@@ -44,6 +44,12 @@ target_link_libraries(tst_updatesservice PRIVATE aqtruncat_engine Qt6::Test)
 target_compile_options(tst_updatesservice PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME updatesservice COMMAND tst_updatesservice)
 
+# F6 hover summary of the Qt tray (CPU, RAM, swap, backend states).
+qt_add_executable(tst_hoversummary tst_hoversummary.cpp)
+target_link_libraries(tst_hoversummary PRIVATE aqtruncat_engine Qt6::Test)
+target_compile_options(tst_hoversummary PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME hoversummary COMMAND tst_hoversummary)
+
 qt_add_executable(tst_systemmetrics tst_systemmetrics.cpp)
 target_link_libraries(tst_systemmetrics PRIVATE aqtruncat_cli aqtruncat_metrics Qt6::Test)
 target_compile_options(tst_systemmetrics PRIVATE -Wall -Wextra -Wpedantic)

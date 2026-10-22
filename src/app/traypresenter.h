@@ -6,7 +6,9 @@
 #include <QList>
 #include <QMenu>
 #include <QObject>
+#include <QStringList>
 #include <QSystemTrayIcon>
+#include <QTimer>
 
 // Shows runner frames in the system tray. Knows neither the CPU nor where
 // runners come from: it gets a Runner and the index of the frame to show.
@@ -24,7 +26,13 @@ public:
     void showFrame(int frameIndex);
     void setDashboardVisible(bool visible);
 
+    // F6: the hover summary under the title (hoversummary.h). Sent to the
+    // tray only when the text changes, together with the next frame.
+    void setSummary(const QStringList &lines);
+
     const QMenu &menu() const { return m_menu; }
+    QString toolTip() const { return m_tray.toolTip(); }
+    int toolTipUpdates() const { return m_toolTipUpdates; }
 
 signals:
     void dashboardToggleRequested();
@@ -36,6 +44,8 @@ protected:
 private:
     void rebuildIcons();
     void trayActivated(QSystemTrayIcon::ActivationReason reason);
+    void updateToolTip(bool now);
+    void applyToolTip();
 
     QList<QImage> m_frames; // implicitly shared with the Runner
     bool m_monochrome = true;
@@ -44,4 +54,10 @@ private:
     QSystemTrayIcon m_tray;
     QMenu m_menu;
     QAction *m_dashboardAction = nullptr;
+    QString m_runnerName;
+    QStringList m_summary;
+    QString m_toolTip;
+    bool m_toolTipPending = false;
+    QTimer m_toolTipFallback; // no frame shown soon: send it anyway
+    int m_toolTipUpdates = 0;
 };

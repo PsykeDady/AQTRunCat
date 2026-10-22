@@ -108,6 +108,8 @@ add_library(aqtruncat_engine STATIC
     app/custommetricsmodel.h
     app/custommetricsservice.cpp
     app/custommetricsservice.h
+    app/hoversummary.cpp
+    app/hoversummary.h
     app/metricsampler.cpp
     app/metricsampler.h
     app/metricsbarids.cpp

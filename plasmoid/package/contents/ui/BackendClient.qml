@@ -40,6 +40,9 @@ Item {
     // false: metric deltas are not parsed (popup closed); set back to true,
     // the metrics are taken again with GetMetrics.
     property bool wantMetrics: true
+    // F6: metrics holds current values (not the ones from before they were
+    // last skipped); the hover summary shows values only then.
+    readonly property bool metricsCurrent: connected && wantMetrics && !_metricsStale
     // Retry delays after a failed connection, ms (tests shorten them).
     property int graceMs: 3000
     property int retryMinMs: 3000

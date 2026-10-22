@@ -239,6 +239,75 @@ private slots:
         QVERIFY(text.contains(QStringLiteral("Last updated:")));
         QVERIFY(text.endsWith(QStringLiteral("AQTRunCat Metrics Bar")));
     }
+
+    // F6: slowly changing hover details sit under the value and refresh the
+    // tooltip when they change; a value change alone still sends nothing.
+    void toolTipShowsContextLines()
+    {
+        Fixture f;
+        Item cpu = item("cpu", "23%");
+        cpu.detail = QStringLiteral("23.1 %");
+        cpu.context = QStringLiteral("8 logical CPUs");
+        f.presenter.setItems({cpu});
+        QCOMPARE(f.trays[0]->toolTip, QStringLiteral("CPU: 23.1 %\n8 logical CPUs\nAQTRunCat Metrics Bar"));
+        const int updates = f.presenter.toolTipUpdates();
+
+        cpu.detail = QStringLiteral("23.4 %");
+        f.presenter.setItems({cpu});
+        QCOMPARE(f.presenter.toolTipUpdates(), updates);
+
+        Item packages = item("updates.packages", "3");
+        packages.detail = QStringLiteral("3 updates");
+        packages.context = QStringLiteral("Package manager: pacman\nLast successful check: 14:05");
+        f.presenter.setItems({cpu, packages});
+        QVERIFY(f.trays[1]->toolTip.contains(QStringLiteral("Package manager: pacman\nLast successful check: 14:05")));
+        const int afterPackages = f.presenter.toolTipUpdates();
+        packages.context = QStringLiteral("Package manager: pacman\nLast successful check: 15:05");
+        f.presenter.setItems({cpu, packages});
+        QCOMPARE(f.presenter.toolTipUpdates(), afterPackages + 1);
+        QVERIFY(f.trays[1]->toolTip.contains(QStringLiteral("15:05")));
+    }
+
+    // F6.1: the runner item's tooltip carries the hover summary.
+    void runnerToolTipCarriesTheSummary()
+    {
+        aqtruncat::Runner runner;
+        runner.id = QStringLiteral("cat");
+        runner.displayName = QStringLiteral("Running Cat");
+        QImage frame(18, 18, QImage::Format_ARGB32_Premultiplied);
+        frame.fill(Qt::black);
+        runner.frames = {frame, frame};
+        runner.sequence = {0, 1};
+
+        TrayPresenter tray;
+        tray.setRunner(runner);
+        QCOMPARE(tray.toolTip(), QStringLiteral("AQTRunCat — Running Cat")); // at once
+        const int start = tray.toolTipUpdates();
+
+        const QStringList lines{QStringLiteral("CPU: 18.4 %"), QStringLiteral("RAM: 46.5 % · 7.2 GiB / 15.5 GiB used")};
+        tray.setSummary(lines);
+        // Sent with the next frame, not on its own.
+        QCOMPARE(tray.toolTipUpdates(), start);
+        tray.showFrame(1);
+        QCOMPARE(tray.toolTipUpdates(), start + 1);
+        QCOMPARE(tray.toolTip(), QStringLiteral("AQTRunCat — Running Cat\nCPU: 18.4 %\nRAM: 46.5 % · 7.2 GiB / 15.5 GiB used"));
+
+        // The same summary again (every snapshot) sends nothing.
+        tray.setSummary(lines);
+        tray.showFrame(0);
+        QCOMPARE(tray.toolTipUpdates(), start + 1);
+
+        // Without frames (animation stopped) it still arrives, a bit later.
+        tray.setSummary({QStringLiteral("Backend not running")});
+        QTRY_COMPARE(tray.toolTip(), QStringLiteral("AQTRunCat — Running Cat\nBackend not running"));
+        QCOMPARE(tray.toolTipUpdates(), start + 2);
+
+        // Menu and activation are unchanged.
+        QSignalSpy toggled(&tray, &TrayPresenter::dashboardToggleRequested);
+        QCOMPARE(tray.menu().actions().size(), 5);
+        tray.menu().actions().first()->trigger();
+        QCOMPARE(toggled.count(), 1);
+    }
 };
 
 QTEST_MAIN(TestMetricsBarPresenter)

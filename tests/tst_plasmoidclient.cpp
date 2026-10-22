@@ -6,11 +6,13 @@
 // activated backend inherits them); no Plasma shell is involved.
 
 #include "api/apischema.h"
+#include "app/hoversummary.h"
 
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QGuiApplication>
 #include <QJSValue>
@@ -24,6 +26,7 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include <cmath>
 #include <csignal>
 #include <memory>
 #include <utility>
@@ -293,6 +296,64 @@ private slots:
         QCOMPARE(jsonProperty(client.get(), "metrics").toArray(), before); // nothing parsed
         client->setProperty("wantMetrics", true);
         QTRY_VERIFY_WITH_TIMEOUT(matchesBackend(client.get()), 10000);
+    }
+
+    // F6: the hover summary shows values only while they are followed
+    // (pointer on the runner); following them asks the backend for its
+    // last sample, it never makes the backend sample more often.
+    void hoverFollowsMetricsOnlyWhileShown()
+    {
+        auto client = createClient();
+        QTRY_COMPARE_WITH_TIMEOUT(status(client.get()), QStringLiteral("connected"), 15000);
+        QVERIFY(client->property("metricsCurrent").toBool());
+        client->setProperty("wantMetrics", false);
+        QVERIFY(!client->property("metricsCurrent").toBool());
+
+        QElapsedTimer elapsed;
+        elapsed.start();
+        const double before = backendCall(QStringLiteral("GetMetrics")).value(QStringLiteral("generation")).toDouble();
+        for (int i = 0; i < 20; ++i) { // the pointer going in and out
+            client->setProperty("wantMetrics", i % 2 == 0);
+            QTest::qWait(50);
+        }
+        client->setProperty("wantMetrics", true);
+        QTRY_VERIFY_WITH_TIMEOUT(client->property("metricsCurrent").toBool() && matchesBackend(client.get()), 10000);
+        const double after = backendCall(QStringLiteral("GetMetrics")).value(QStringLiteral("generation")).toDouble();
+        // The backend's own 1 Hz sampling only (one generation per sample).
+        QVERIFY2(after - before <= std::ceil(elapsed.elapsed() / 1000.0) + 1,
+                 qPrintable(QStringLiteral("%1 generations in %2 ms").arg(after - before).arg(elapsed.elapsed())));
+    }
+
+    // F6: the Plasmoid (logic.js) and the Qt tray (hoversummary.cpp) say
+    // the same thing about the same backend payload.
+    void hoverSummaryMatchesTheQtTray()
+    {
+        QQmlComponent component(&m_engine);
+        component.setData("import QtQuick\nimport \"../code/logic.js\" as Logic\n"
+                          "QtObject { function lines(text) { return Logic.hoverLines(JSON.parse(text)) } }",
+                          QUrl::fromLocalFile(packageDir() + QStringLiteral("/contents/ui/HoverCheck.qml")));
+        std::unique_ptr<QObject> logic(component.create());
+        QVERIFY2(logic, qPrintable(component.errorString()));
+
+        auto client = createClient(); // activates the backend
+        QTRY_COMPARE_WITH_TIMEOUT(status(client.get()), QStringLiteral("connected"), 15000);
+        // A payload with values (the first sample may still be pending),
+        // given to logic.js as text, as the client parses it.
+        QJsonArray metrics;
+        QTRY_VERIFY_WITH_TIMEOUT((metrics = backendCall(QStringLiteral("GetMetrics")).value(QStringLiteral("metrics")).toArray(),
+                                  aqtruncat::api::systemSnapshotFromMetrics(metrics).cpu.usagePercent.has_value()),
+                                 10000);
+        const aqtruncat::metrics::SystemMetricsSnapshot snapshot = aqtruncat::api::systemSnapshotFromMetrics(metrics);
+        const QStringList expected = aqtruncat::hover::summaryLines(aqtruncat::hover::Connection::Connected, &snapshot);
+
+        QVariant result;
+        QVERIFY(QMetaObject::invokeMethod(logic.get(), "lines", Q_RETURN_ARG(QVariant, result),
+                                          Q_ARG(QVariant, QString::fromUtf8(QJsonDocument(metrics).toJson(QJsonDocument::Compact)))));
+        if (result.canConvert<QJSValue>())
+            result = result.value<QJSValue>().toVariant();
+        QCOMPARE(result.toStringList(), expected);
+        QVERIFY(expected.value(0).startsWith(QStringLiteral("CPU: ")) && expected.value(0).endsWith(QStringLiteral(" %")));
+        QVERIFY(expected.value(1).startsWith(QStringLiteral("RAM: ")) && expected.value(1).contains(QStringLiteral(" used")));
     }
 
     void settingsStayInSync()

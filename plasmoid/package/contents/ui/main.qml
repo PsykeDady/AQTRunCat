@@ -19,19 +19,24 @@ PlasmoidItem {
     id: root
 
     readonly property var runner: Logic.runnerToShow(backend.runnerCatalog)
+    // F6: the pointer (or the keyboard focus) is on the panel runner: the
+    // tooltip shows the summary, so the metrics are followed meanwhile.
+    property bool hovered: false
 
     BackendClient {
         id: backend
-        // Metric deltas are parsed only while the metrics are on screen.
-        wantMetrics: root.expanded || !root.compactRepresentationItem || !root.compactRepresentationItem.visible
+        // Metric deltas are parsed only while the metrics are on screen,
+        // in the popup or in the tooltip.
+        wantMetrics: root.expanded || root.hovered || !root.compactRepresentationItem
+                     || !root.compactRepresentationItem.visible
     }
 
     Plasmoid.icon: "aqtruncat"
+    // Plasma's own applet tooltip (placed by the panel for any edge).
     toolTipMainText: "AQTRunCat"
-    toolTipSubText: backend.connected ? (root.runner ? root.runner.displayName : "Connected")
-                  : backend.status === "connecting" ? "Connecting to the backend…"
-                  : backend.status === "incompatible" ? "Incompatible backend"
-                  : "Backend not running"
+    toolTipSubText: Logic.hoverText(backend.status, root.runner ? root.runner.displayName : "",
+                                    backend.metrics, backend.metricsCurrent)
+    toolTipTextFormat: Text.PlainText
 
     // Large on the desktop: the metrics in place; small, or in a panel: the
     // runner, and the metrics in the popup.

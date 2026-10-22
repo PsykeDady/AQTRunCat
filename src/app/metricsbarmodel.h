@@ -37,7 +37,10 @@ struct Item {
     QString shortLabel;  // short identity ("NET↓"); custom: symbol glyph or empty
     std::optional<aqtruncat::custommetrics::IconReference> icon; // v2 custom symbol
     QString shortValue;  // compact value ("1.2M"); custom: metricsBarValue as given
-    QString detail;      // full value ("1.2 MiB/s"); empty when there is none
+    QString detail;      // full value ("1.2 MiB/s"); empty when there is none. May hold
+                         // more lines that change with the value ("8.3 GiB available")
+    QString context;     // F6: slowly changing hover details, one per line
+                         // ("8 logical CPUs", "checked 14:05"); empty when none
     Status status = Status::Pending;
     QString statusMessage;
     QDateTime lastUpdated; // custom sources only

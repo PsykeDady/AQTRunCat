@@ -4,9 +4,9 @@ This document defines the AQTRunCat feature roadmap after completion of the
 M0–M9 project roadmap. M0–M9 are complete and remain the historical and
 architectural foundation for this work.
 
-F1, F2, F3 and F4 (F4.1 and F4.2) are complete. F5, F6 and F7 are not
-started; recording them here does not imply that they are currently
-available or supported.
+F1, F2, F3, F4 (F4.1 and F4.2), F5 and F6 are complete. F7 is not
+started; recording it here does not imply that it is currently available or
+supported.
 
 The post-project roadmap is:
 
@@ -53,7 +53,8 @@ Rule (user decision, 2026-10-21):
 
 - `1.0.0` is the completed M0–M9 project roadmap.
 - Each completed post-project feature raises the **minor** version:
-  F1 → 1.1.0, F2 → 1.2.0, F3 → 1.3.0, F4 → 1.4.x, F5 → 1.5.x, …
+  F1 → 1.1.0, F2 → 1.2.0, F3 → 1.3.0, F4 → 1.4.x, F5 → 1.5.x,
+  F6 → 1.6.x (F6.1–F6.3 → 1.6.3), …
 - Each completed sub-feature raises the **patch** version within its feature:
   F4.1 → 1.4.1, F4.2 → 1.4.2; F5.1 → 1.5.1, and so on.
 - After the seventh feature (F7) the version moves to **2.0.0** (confirmed
@@ -895,7 +896,10 @@ causing a metric or application failure.
 
 ## F6 — Hover Information
 
-Status: NOT STARTED.
+Status: COMPLETE (2026-10-22, version 1.6.3: F6.1 tray, F6.2 Plasmoid,
+F6.3 metric-specific details). Record and validation:
+`docs/F6-hover-information.md`; normative summary in "Implemented
+Behaviour (F6 complete)" below.
 
 Provide compact information when the pointer hovers over an AQTRunCat
 tray/applet item. At minimum, expose:
@@ -915,21 +919,240 @@ presentation conventions:
 Reuse the already sampled CPU and memory information. Do not create another
 polling mechanism solely for hover information.
 
+### Implemented Behaviour (F6 complete)
+
+- **Summary** (both frontends, same text, the backend's formatting):
+  `CPU: 18.4 %`, `RAM: 46.5 % · 7.2 GiB / 15.5 GiB used`,
+  `Swap: 2.4 % · 300.0 MiB / 12.0 GiB`; no Swap line without swap; a
+  missing value is `waiting for data`, `unavailable` or `error`, never 0 and
+  never the backend's technical message; `Connecting to the backend…` /
+  `Backend not running` instead of values when the backend is not there
+  (after the client's 3 s grace period).
+- **F6.1 Qt/SNI tray**: the runner item's tooltip is `AQTRunCat — <runner>`
+  followed by the summary, built from the snapshot the tray already
+  receives (`src/app/hoversummary.*`); sent only when the text changes,
+  together with the next animation frame (250 ms fallback); menu,
+  activation, animation and Settings unchanged; no extra tray item.
+- **F6.2 Plasmoid**: Plasma's own applet tooltip (`toolTipSubText`, plain
+  text) shows the runner and the summary (`logic.js hoverLines/hoverText`,
+  from the API's `formattedValue`/`detail`); the widget follows the metrics
+  only while the pointer or keyboard focus is on the runner (or the popup
+  is open) and shows values only while they are current.
+- **F6.3 details**: Metrics Bar tooltips add slowly changing details from
+  the snapshot (logical CPUs, available memory, used/total storage, counted
+  interfaces/disks, GPU driver/type, FPS source, package manager, last
+  successful update check, stale metadata); Plasmoid popup rows show their
+  details on hover when the widget's detail lines are off. The Dashboard is
+  unchanged.
+- **Constraints kept**: no new sampler, collector, command or timer for
+  hover; API 1 / schema 2 unchanged; backend sampling frequency unchanged.
+
+Completion criteria (met): equivalent summary in the tray and the
+Plasmoid, unavailable/disconnected states without stale or zero values,
+automated tests for formatting, missing values, disconnection, rounding,
+optional details, the Plasmoid's hover lifecycle without extra sampling and
+the identical output of the two implementations on one backend payload;
+clean build without warnings and the whole test suite passing.
+
 
 ## F7 — Additional Built-in Animated Runners
 
-Add two official built-in runners, shipped with AQTRunCat like Cat and
-Coffee Cup:
+Status: NOT STARTED — BLOCKED on the final animation assets of the goose
+and the parrot. F7 is the last
+planned feature milestone before 2.0.0. Requirements recorded on
+2026-10-21 and restored in full on 2026-10-22 (documentation only: nothing
+is implemented, no asset exists in the repository).
 
-- Walking Goose;
-- Crazy Dancing Parrot.
+Add three official built-in runners, shipped with AQTRunCat like Cat and
+Coffee:
+
+- Walking Goose (new artwork);
+- Crazy Dancing Parrot (new artwork);
+- Engine (RunCat Neo's `engine` runner, already in the repository; added
+  to F7 by the user on 2026-10-22).
 
 They are built-in runners, separate from user (custom) runners, and follow
 the existing runner format, selection and presentation in every frontend
 (tray, Plasmoid, `GetRunners`).
 
-Status: NOT STARTED. Implementation is blocked until the user provides the
-final animation assets.
+### Proposed Sub-features
+
+These are documentation milestones, not completed implementations:
+
+    F7.1  Walking Goose
+    F7.2  Crazy Dancing Parrot
+    F7.3  Engine (promote the existing RunCat Neo frames to a built-in runner)
+    F7.4  Shared asset integration, packaging and validation
+
+The sections after F7.3 (asset preparation, architecture, settings,
+installation) are requirements shared by all three runners and belong to
+F7.4.
+
+### F7.1 — Walking Goose
+
+- A cartoon goose walking, as a frame-based animation in the existing
+  runner format, with a recognizable walking cycle.
+- Transparent-background PNG frames; a simple, readable style suitable for
+  a small tray icon or Plasma panel.
+- Supports the existing runner animation controls where applicable (speed
+  following CPU load, Normal/Slow-down, the widget's "Animate the runner"
+  option, fixed `--fps`).
+- Integrated in the existing built-in runner selection; works in the Qt
+  system tray and in the KDE Plasma 6 Plasmoid.
+
+### F7.2 — Crazy Dancing Parrot
+
+- A colourful cartoon parrot dancing energetically, as a frame-based
+  animation with transparent-background PNG frames and a lively, looping
+  dance cycle.
+- Readable at small icon sizes; consistent style and proportions across
+  frames.
+- Integrated in the existing built-in runner selection; works in the Qt
+  system tray and in the Plasmoid; existing animation behaviour and
+  controls preserved.
+
+### F7.3 — Engine
+
+- RunCat Neo's `engine` runner (a piston and crank: 10 frames, 83×36 px,
+  monochrome/template), one of RunCat Neo's eight built-in runners.
+- Its frames are already in the repository, unmodified:
+  `third_party/runcatneo/runners/engine/engine-frame-{0..9}.png` (Apache-2.0,
+  recorded in `THIRD_PARTY_NOTICES.md`, which today says they are used only
+  by the M1.0 tray spike). It is **not blocked** by the asset dependency
+  below and needs no new artwork.
+- Becomes an official built-in runner like Cat and Coffee: an AQTRunCat
+  `data/runners/engine/metadata.json` (`displayName` "Engine", `author`
+  Kyome22, `type` `monochrome`, as for Cat and Coffee), the id `engine`
+  added to `AQTRUNCAT_BUNDLED_RUNNERS`, installed under
+  `share/aqtruncat/runners/engine/`; `THIRD_PARTY_NOTICES.md` updated to
+  the new use; the files stay byte-for-byte copies.
+- Known limit to validate, not to work around silently: the frame is wide
+  (aspect ≈ 2.3:1). Plasma's square tray slot shrinks it to about 22×10 px
+  (`docs/M0-upstream-analysis.md`, `docs/M1-tray-spike.md`,
+  `docs/M2-runner-system.md` §11: "at the limit" of readability); horizontal and
+  vertical Plasmoid panels keep its aspect ratio. Any change to the frames
+  (cropping the empty left margin, rescaling) is a modification of
+  third-party files and needs the user's approval and a note in
+  `THIRD_PARTY_NOTICES.md`.
+- An existing user runner with the id `engine` keeps precedence (user >
+  bundled), as for every built-in runner.
+
+### Asset Preparation and Integration (F7.1, F7.2; part of F7.4)
+
+The final graphical assets of the goose and the parrot are **not available
+yet** (Engine's frames exist, see F7.3). The user provides or
+approves the definitive animation frames before implementation.
+
+Expected asset characteristics:
+
+- PNG, transparent background;
+- about 4–8 frames per runner as an initial target, adjustable for the
+  quality of the animation;
+- one canvas size and a consistent alignment within each runner;
+- a limited, readable palette; no background or decorative elements;
+- a smooth loop.
+
+Rules until then:
+
+- no substitute or generated graphics;
+- no temporary placeholder sprites presented as final assets;
+- no third-party sprites downloaded without the user's explicit approval
+  (any approved third-party asset is recorded in `THIRD_PARTY_NOTICES.md`
+  with repository, commit, original path and licence, and must be
+  compatible with Apache-2.0);
+- F7.1 and F7.2 are not ready for implementation until the assets are
+  available.
+
+When the assets are supplied, inspect the existing runner asset pipeline
+and adapt them to its conventions (the ones Engine already follows): frame
+files `<id>-frame-<n>.png`, a
+`metadata.json` with `displayName`, `author` and `type` (`monochrome`
+frames are tinted with the panel's text colour, `color` frames are shown
+unchanged — a colourful parrot needs `color`), the runner id added to
+`AQTRUNCAT_BUNDLED_RUNNERS` (compiled into `aqtruncat` and installed as
+files under `share/aqtruncat/runners/<id>/` for the backend's `GetRunners`
+and the Plasmoid). Proposed ids `goose` and `parrot` (to be confirmed with
+the assets).
+
+### Architecture and Compatibility (F7.4)
+
+- Official built-in runners: not Custom Metrics, not user (custom) runners,
+  not external plugins.
+- Reuse the existing runner model, loader, animator, settings and selection
+  (`RunnerService`, `RunnerAnimator`, the shared `runnerId` setting, the
+  start-up runner fallback); no new animation engine unless demonstrably
+  necessary.
+- Cat stays the default runner; Cat, Coffee, user runners and the user >
+  bundled precedence keep their behaviour.
+- The backend lists them through the existing runner catalogue
+  (`GetRunners`, capability `runners`); the Qt frontend and the Plasmoid
+  discover and render them the same way. D-Bus API compatibility preserved
+  (no new method is expected).
+- No change to the metric sampling frequency; no extra CPU, memory or
+  wake-up cost beyond that of an equivalent runner (frames prepared once,
+  animation timer as today).
+
+### Settings and User Experience (F7.4)
+
+- Walking Goose, Crazy Dancing Parrot and Engine appear in the existing runner
+  selectors (tray Settings, Plasmoid configuration) and in `aqtruncat
+  runner list`, with the same recognizable names everywhere;
+  `aqtruncatctl status` shows the selected id as for any runner.
+- Selecting one changes the animation through the existing behaviour; the
+  choice persists in the existing settings and across restarts.
+- Correct rendering in horizontal and vertical Plasma panels and in the
+  tray (aspect ratio, light/dark themes), with the existing scaling and
+  animation settings.
+
+### Installation, Packaging and Tests (F7.4)
+
+When F7 is implemented:
+
+- the assets are part of every supported installation (system-wide and
+  `--local` `install.sh`, native packages) and available to the Plasmoid
+  through the backend's runner catalogue, as for Cat and Coffee;
+- installer, uninstall, dry run, cached build and `--no-build` behaviour
+  unchanged;
+- missing or invalid assets fail gracefully (the existing runner
+  validation and fallback: a saved runner that is missing falls back to the
+  default), never a crash;
+- automated tests for discovery, asset availability, selection,
+  persistence and packaging; Qt tray and Plasma rendering validated; clean
+  build and the relevant suites passing.
+
+### Dependencies
+
+- The final frames of the goose and the parrot, provided or approved by
+  the user (blocking for F7.1, F7.2 and therefore for completing F7).
+  Engine (F7.3) has its frames and could be implemented on its own, but
+  only on the user's explicit instruction.
+- The licence and attribution of the assets (the user's own work, or
+  third-party assets approved by the user and recorded in
+  `THIRD_PARTY_NOTICES.md`).
+
+### Acceptance Criteria
+
+F7 is complete only when:
+
+1. the goose and the parrot ship with the final, user-approved assets, and
+   Engine with the unmodified RunCat Neo frames (or user-approved changes);
+2. they are listed, selectable and persistent in the tray and the
+   Plasmoid (and listed by `aqtruncat runner list`), with the same names;
+3. they render correctly in the tray and in horizontal/vertical Plasma
+   panels, in light and dark themes, at the existing speeds (for Engine:
+   tray readability at its wide aspect checked and reported);
+4. Cat (default), Coffee and user runners behave as before;
+5. installation, packaging and uninstallation include and remove them like
+   the existing built-in runners;
+6. the automated tests above pass with a clean build without warnings.
+
+### Versioning
+
+By the rule above the sub-features would raise the patch within 1.7
+(F7.1 → 1.7.1 … F7.4 → 1.7.4), and 2.0.0 follows once F7 is
+implemented and validated. Whether the completed F7 is first released as
+1.7.x or directly as 2.0.0 is left to the user. The current version is not
+changed by recording F7.
 
 
 ## General Principles for Post-Project Features

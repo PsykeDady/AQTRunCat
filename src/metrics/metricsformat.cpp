@@ -1,5 +1,7 @@
 #include "metricsformat.h"
 
+#include "memory.h"
+
 #include <charconv>
 #include <cmath>
 
@@ -68,6 +70,17 @@ std::string formatUpdateCount(long long count)
     if (count == 0)
         return "Up to date";
     return std::to_string(count) + (count == 1 ? " update" : " updates");
+}
+
+std::string formatMemoryDetail(const MemoryInfo &memory)
+{
+    return formatBytes(memory.usedBytes) + " / " + formatBytes(memory.totalBytes) + " used"
+        + (memory.availableIsEstimate ? " (estimated)" : "");
+}
+
+std::string formatSwapDetail(const MemoryInfo &memory)
+{
+    return formatBytes(memory.swapUsedBytes) + " / " + formatBytes(memory.swapTotalBytes);
 }
 
 } // namespace aqtruncat::metrics

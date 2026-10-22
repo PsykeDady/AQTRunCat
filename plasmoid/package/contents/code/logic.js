@@ -178,6 +178,85 @@ function metricRows(metrics, shown) {
     return rows;
 }
 
+// F6: tooltip of a popup row when its detail lines are hidden (widget
+// option showDetails off): the detail and each item's detail, the
+// backend's own text. Empty when the details are on screen already. The
+// caller passes "" for a detail that is shown anyway (state messages,
+// warnings).
+function rowToolTip(detail, items, showDetails) {
+    if (showDetails)
+        return "";
+    var lines = [];
+    if (typeof detail === "string" && detail.length > 0)
+        lines.push(detail);
+    var list = Array.isArray(items) ? items : [];
+    for (var i = 0; i < list.length; ++i) {
+        var item = list[i] || {};
+        // A warning's detail is always on screen.
+        if (item.warning !== true && typeof item.detail === "string" && item.detail.length > 0)
+            lines.push((item.title ? item.title + ": " : "") + item.detail);
+    }
+    return lines.join("\n");
+}
+
+// F6: the words for a missing value in the hover summary (the same as
+// src/app/hoversummary.cpp): never a 0, never the backend's raw message.
+function hoverStateText(state) {
+    if (state === "unavailable")
+        return "unavailable";
+    if (state === "error")
+        return "error";
+    return "waiting for data";
+}
+
+// F6: the hover summary lines, from the backend's own texts:
+//   CPU: 18.4 %
+//   RAM: 46.0 % · 7.2 GiB / 15.5 GiB used
+//   Swap: 2.5 % · 0.3 GiB / 12.0 GiB   (no line without swap)
+// The Qt tray builds the same lines (src/app/hoversummary.cpp).
+function hoverLines(metrics) {
+    var byId = {};
+    var list = Array.isArray(metrics) ? metrics : [];
+    for (var i = 0; i < list.length; ++i) {
+        if (list[i] && list[i].category === "builtin")
+            byId[list[i].id] = list[i];
+    }
+    function withDetail(metric) {
+        var detail = typeof metric.detail === "string" ? metric.detail : "";
+        return metric.formattedValue + (detail.length > 0 ? " · " + detail : "");
+    }
+    function current(metric) {
+        return !!metric && stateOf(metric) === "ok" && typeof metric.formattedValue === "string"
+            && metric.formattedValue.length > 0;
+    }
+    var lines = [];
+    var cpu = byId["cpu"];
+    lines.push("CPU: " + (current(cpu) ? cpu.formattedValue : hoverStateText(cpu ? stateOf(cpu) : "pending")));
+    var memory = byId["memory"];
+    lines.push("RAM: " + (current(memory) ? withDetail(memory) : hoverStateText(memory ? stateOf(memory) : "pending")));
+    var swap = byId["swap"];
+    var noSwap = !!swap && stateOf(swap) === "unavailable" && !!swap.data && swap.data.present === false;
+    if (!noSwap)
+        lines.push("Swap: " + (current(swap) ? withDetail(swap) : hoverStateText(swap ? stateOf(swap) : "pending")));
+    return lines;
+}
+
+// F6: the widget's tooltip below "AQTRunCat": the backend's state, or the
+// runner and the summary. Values only while they are current (the client
+// parses metrics only while something shows them, see metricsCurrent).
+function hoverText(status, runnerName, metrics, current) {
+    if (status === "connecting")
+        return "Connecting to the backend…";
+    if (status === "incompatible")
+        return "Incompatible backend";
+    if (status !== "connected")
+        return "Backend not running";
+    var lines = [typeof runnerName === "string" && runnerName.length > 0 ? runnerName : "Connected"];
+    if (current)
+        lines = lines.concat(hoverLines(metrics));
+    return lines.join("\n");
+}
+
 // Brings a ListModel to rows with the least changes: same ids in the same
 // order only update the roles that differ (delegates stay), anything else
 // rebuilds it.

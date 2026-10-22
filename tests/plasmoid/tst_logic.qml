@@ -311,4 +311,69 @@ TestCase {
         compare(updates.value, "—");
         compare(updates.detail, "Flatpak is not installed");
     }
+
+    // F6: the hover summary, from the backend's texts (the same lines as
+    // the Qt tray, src/app/hoversummary.cpp).
+    function hoverMetrics() {
+        return [
+            metric({ id: "cpu", formattedValue: "18.4 %" }),
+            metric({ id: "memory", title: "Memory", formattedValue: "46.5 %", detail: "7.2 GiB / 15.5 GiB used",
+                     data: { usedBytes: 7730941132, totalBytes: 16642998272 } }),
+            metric({ id: "swap", title: "Swap", formattedValue: "2.4 %", detail: "300.0 MiB / 12.0 GiB",
+                     data: { present: true } }),
+            metric({ id: "network.download", title: "Network download", formattedValue: "1.2 MiB/s" }),
+            metric({ id: "custom:/x", category: "custom", title: "CPU", formattedValue: "99 %" })
+        ];
+    }
+
+    function test_hoverLines() {
+        compare(Logic.hoverLines(hoverMetrics()),
+                ["CPU: 18.4 %", "RAM: 46.5 % · 7.2 GiB / 15.5 GiB used", "Swap: 2.4 % · 300.0 MiB / 12.0 GiB"]);
+    }
+
+    function test_hoverLinesWithoutSwap() {
+        const metrics = hoverMetrics();
+        metrics[2] = metric({ id: "swap", state: "unavailable", message: "no swap is configured",
+                              formattedValue: "", value: null, data: { present: false } });
+        compare(Logic.hoverLines(metrics), ["CPU: 18.4 %", "RAM: 46.5 % · 7.2 GiB / 15.5 GiB used"]);
+    }
+
+    function test_hoverLinesMissingValuesAreWords() {
+        const metrics = [
+            metric({ id: "cpu", state: "pending", message: "waiting for the next sample", formattedValue: "", value: null }),
+            metric({ id: "memory", state: "error", message: "cannot read /proc/meminfo", formattedValue: "", value: null }),
+            metric({ id: "swap", state: "error", message: "cannot read /proc/meminfo", formattedValue: "", value: null })
+        ];
+        const lines = Logic.hoverLines(metrics);
+        compare(lines, ["CPU: waiting for data", "RAM: error", "Swap: error"]);
+        verify(lines.join("\n").indexOf("/proc") < 0); // no technical messages
+        // Unknown state = error; ok without text is still waiting; never 0.
+        compare(Logic.hoverLines([metric({ id: "cpu", state: "weird" })])[0], "CPU: error");
+        compare(Logic.hoverLines([metric({ id: "cpu", formattedValue: "" })])[0], "CPU: waiting for data");
+        compare(Logic.hoverLines([]), ["CPU: waiting for data", "RAM: waiting for data", "Swap: waiting for data"]);
+        compare(Logic.hoverLines(null).length, 3);
+    }
+
+    function test_hoverText() {
+        compare(Logic.hoverText("connecting", "Running Cat", hoverMetrics(), false), "Connecting to the backend…");
+        compare(Logic.hoverText("incompatible", "Running Cat", hoverMetrics(), true), "Incompatible backend");
+        // Backend gone: no values, whatever is still in the client.
+        compare(Logic.hoverText("unavailable", "Running Cat", hoverMetrics(), true), "Backend not running");
+        compare(Logic.hoverText("connected", "Running Cat", hoverMetrics(), true),
+                "Running Cat\nCPU: 18.4 %\nRAM: 46.5 % · 7.2 GiB / 15.5 GiB used\nSwap: 2.4 % · 300.0 MiB / 12.0 GiB");
+        // Metrics not current (skipped while nothing showed them): no values.
+        compare(Logic.hoverText("connected", "Running Cat", hoverMetrics(), false), "Running Cat");
+        compare(Logic.hoverText("connected", "", [], false), "Connected");
+    }
+
+    function test_rowToolTip() {
+        const items = [{ title: "Current session", value: "12%", detail: "resets 18:00", warning: false },
+                       { title: "Current week", value: "—", detail: "Out of date", warning: true }];
+        // Details on screen: no tooltip.
+        compare(Logic.rowToolTip("7.2 GiB / 15.5 GiB used", items, true), "");
+        compare(Logic.rowToolTip("7.2 GiB / 15.5 GiB used", items, false),
+                "7.2 GiB / 15.5 GiB used\nCurrent session: resets 18:00");
+        compare(Logic.rowToolTip("", [], false), "");
+        compare(Logic.rowToolTip(undefined, null, false), "");
+    }
 }

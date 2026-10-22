@@ -95,6 +95,8 @@ QString MetricsBarPresenter::toolTipFor(const Item &item)
     QStringList lines;
     const QString value = item.detail.isEmpty() ? statusName(item.status) : item.detail;
     lines.append(QStringLiteral("%1: %2").arg(item.label, value));
+    if (!item.context.isEmpty())
+        lines.append(item.context);
     if (item.status != Status::Available) {
         lines.append(item.statusMessage.isEmpty() ? statusName(item.status)
                                                   : QStringLiteral("%1: %2").arg(statusName(item.status), item.statusMessage));

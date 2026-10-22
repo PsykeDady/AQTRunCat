@@ -12,6 +12,8 @@ import QtQuick.Layouts
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 
+import "../code/logic.js" as Logic
+
 ColumnLayout {
     id: metric
 
@@ -35,8 +37,19 @@ ColumnLayout {
         }
     }
     readonly property bool ok: state === "ok"
+    // F6: with the detail lines hidden, hovering the row shows them.
+    readonly property string toolTipText: Logic.rowToolTip(ok && !warning ? detail : "", ok ? items : [], showDetails)
 
     spacing: Kirigami.Units.smallSpacing
+
+    HoverHandler {
+        id: hover
+    }
+
+    PlasmaComponents.ToolTip {
+        text: metric.toolTipText
+        visible: hover.hovered && text.length > 0
+    }
 
     Accessible.role: Accessible.StaticText
     Accessible.name: title + ": " + (ok ? value : detail)

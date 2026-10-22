@@ -1,5 +1,6 @@
 #include "app/metricsbarmodel.h"
 
+#include <QDateTime>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -258,6 +259,43 @@ private slots:
         QVERIFY(find(model.items(), QStringLiteral("updates.flatpak"))->shortValue.isEmpty());
         QCOMPARE(find(model.items(), QStringLiteral("uptime"))->shortValue, QStringLiteral("3d"));
         QCOMPARE(find(model.items(), QStringLiteral("uptime"))->detail, QStringLiteral("3d 5h 0m"));
+    }
+
+    // F6.3: hover details from data the snapshot already has; nothing for
+    // what it does not have.
+    void hoverDetailsComeFromTheSnapshot()
+    {
+        MetricsBarModel model("/home/test");
+        model.setConfiguration(true, {QStringLiteral("cpu"), QStringLiteral("memory"), QStringLiteral("updates.packages")});
+        SystemMetricsSnapshot s = snapshot();
+        s.memory.info->availableBytes = 12ull << 30;
+        s.packageUpdates.status = MetricStatus::okStatus();
+        s.packageUpdates.count = 3;
+        s.packageUpdates.manager = "pacman";
+        model.updateSystem(s);
+        QTRY_VERIFY(find(model.items(), QStringLiteral("updates.packages"))
+                    && find(model.items(), QStringLiteral("updates.packages"))->status == Status::Available);
+        QVERIFY(find(model.items(), QStringLiteral("cpu"))->context.isEmpty()); // logical CPUs not known
+        QCOMPARE(find(model.items(), QStringLiteral("memory"))->detail,
+                 QStringLiteral("25.0 % (4.0 GiB / 16.0 GiB)\n12.0 GiB available"));
+        QCOMPARE(find(model.items(), QStringLiteral("updates.packages"))->context, QStringLiteral("Package manager: pacman"));
+
+        s.cpu.logicalCpus = 8;
+        s.packageUpdates.lastSuccess = QDateTime(QDate::currentDate(), QTime(14, 5)).toSecsSinceEpoch();
+        s.packageUpdates.metadataStale = true;
+        model.updateSystem(s);
+        QTRY_COMPARE(find(model.items(), QStringLiteral("cpu"))->context, QStringLiteral("8 logical CPUs"));
+        QCOMPARE(find(model.items(), QStringLiteral("updates.packages"))->context,
+                 QStringLiteral("Package manager: pacman\nLast successful check: 14:05\n"
+                                "Package metadata is more than 7 days old"));
+
+        // An error keeps its last successful check but shows no count.
+        s.packageUpdates.status = MetricStatus::error("pacman failed");
+        s.packageUpdates.count.reset();
+        model.updateSystem(s);
+        QTRY_COMPARE(find(model.items(), QStringLiteral("updates.packages"))->status, Status::Error);
+        QVERIFY(find(model.items(), QStringLiteral("updates.packages"))->shortValue.isEmpty());
+        QVERIFY(find(model.items(), QStringLiteral("updates.packages"))->context.contains(QStringLiteral("14:05")));
     }
 
     void neverMoreThanThreeItems()
