@@ -6,7 +6,8 @@ nothing below the 2.0.0 baseline is implemented until its section says so.
 - **2.0.0** is the consolidation baseline: the complete 1.x application
   (M0–M9, then F1–F7) released as one version, without new runtime
   functionality.
-- **v2F1 – v2F3** are planned features.
+- **v2F1 – v2F4** are planned features. Each one begins with a new official
+  built-in animated runner ([v2 Runner Convention](#v2-runner-convention)).
 
 The behaviour shipped in 2.0.0 is documented in [README.md](README.md) and in
 the topic documents indexed by [docs/README.md](docs/README.md); the
@@ -14,9 +15,10 @@ normative summaries of the 1.x features are in
 [docs/feature-reference.md](docs/feature-reference.md).
 
     2.0.0  Consolidation baseline (1.x complete)            COMPLETE
-    v2F1   Custom Metrics v3                    2.1.x       PLANNED
-    v2F2   Independent Autostart                2.2.0       PLANNED
-    v2F3   Standalone Settings                  2.3.0       PLANNED
+    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       PLANNED
+    v2F2   Independent Autostart + new runner   2.2.x       PLANNED
+    v2F3   Standalone Settings + new runner     2.3.x       PLANNED
+    v2F4   Dependency Advisor + new runner      2.4.x       PLANNED
 
 
 ## Versioning
@@ -31,7 +33,11 @@ Plasmoid's `metadata.json` carry the same value (checked by the
   sub-features the patch (last 1.x: 1.7.4).
 - 2.0.0 consolidates 1.7.4.
 - Each v2 feature raises the **minor** version (v2F1 → 2.1.x, v2F2 → 2.2.x,
-  v2F3 → 2.3.x); each completed sub-feature raises the **patch** within it.
+  v2F3 → 2.3.x, v2F4 → 2.4.x); each completed sub-feature raises the
+  **patch** within it.
+- `2.x.0` is always the feature baseline (requirements, documentation and
+  version metadata only); `2.x.1` is always the feature's new official
+  built-in runner; the functional sub-features follow from `2.x.2`.
 - The application version is independent of the D-Bus API version
   (`io.github.psykedady.AQTRunCat1`, api 1), of the API payload `schema`
   and of configuration formats: those change only when their contract
@@ -64,21 +70,81 @@ Settings, user runners and Custom Metrics configured with 1.x keep working
 unchanged.
 
 
-## v2F1 — Custom Metrics v3
+## v2 Runner Convention
+
+Every major v2 feature (v2F1, v2F2, v2F3, v2F4) begins with the addition of
+a new official built-in animated runner, delivered as the first
+implementation milestone after the feature baseline (`2.x.1`).
+
+| Feature | Version | Runner | Proposed id |
+|---------|---------|--------|-------------|
+| v2F1 | 2.1.1 | Rickroll | `rickroll` |
+| v2F2 | 2.2.1 | TBD | TBD |
+| v2F3 | 2.3.1 | TBD | TBD |
+| v2F4 | 2.4.1 | TBD | TBD |
+
+Names and artwork of the TBD runners are decided by the user; they are not
+to be invented.
+
+Requirements for every v2 runner:
+
+- It is a **built-in** runner (bundled like the F7 runners, see
+  [docs/built-in-runners.md](docs/built-in-runners.md)), not a Custom
+  Runner.
+- It uses the existing animation architecture (runner model, loader,
+  animator, CPU-driven speed); no runner-specific animation code.
+- It works in both the Qt system tray and the native KDE Plasma 6 Plasmoid.
+- It is selectable through the existing runner selection mechanism
+  (Settings, `aqtruncat` CLI, Plasmoid configuration) and exposed through
+  the existing backend and D-Bus runner discovery (`GetRunners`).
+- The selection persists through the existing settings.
+- Asset installation (bundled runner list, `data/runners/<id>/`,
+  `third_party/<id>/` where applicable), packaging, automated tests,
+  documentation and attribution (`THIRD_PARTY_NOTICES.md`, provenance and
+  licence, or the user's explicit decision when the licence cannot be
+  verified) are all covered.
+- Existing runners, their ids and the default runner remain unaffected.
+- The artwork is supplied or approved by the user **before**
+  implementation. Replacement artwork is never downloaded or generated
+  without explicit approval.
+- The runner id follows the existing naming convention (lowercase, no
+  separators, e.g. `walkinggoose`, `partyparrot`).
+
+
+## v2F1 — Custom Metrics v3 + Rickroll
 
 Status: PLANNED. Version family **2.1.x**.
 
 Extends Custom Metrics v2 (command and snapshot sources,
 [docs/custom-metrics-commands.md](docs/custom-metrics-commands.md)) without
 breaking existing configurations: every new field is optional and its
-absence keeps the 2.0.0 behaviour.
+absence keeps the 2.0.0 behaviour. Opens with the Rickroll runner.
+
+    2.1.0  Feature baseline (requirements, version metadata)
+    2.1.1  Rickroll built-in runner
+    2.1.2  Optional `enabled` flag
+    2.1.3  Execution warnings
+    2.1.4  Optional progress bar (`display.showBar`)
+    2.1.5  Optional metric groups and JSON inheritance
+    2.1.6  Reload / rescan Custom Metrics
+    2.1.7  Manual refresh by clicking metric icons
 
 ### 2.1.0 — v2F1 Baseline
 
 Documentation and roadmap baseline for v2F1. No new functionality compared
 with 2.0.0 apart from version metadata and documentation.
 
-### 2.1.1 — Optional `enabled` Flag
+### 2.1.1 — Rickroll Runner
+
+- The official built-in runner **Rickroll**, proposed id `rickroll`,
+  following every requirement of the
+  [v2 Runner Convention](#v2-runner-convention).
+- Frames are supplied or approved by the user before implementation; their
+  provenance and licence (or the user's explicit decision, as for Walking
+  Goose and Party Parrot) are recorded in `THIRD_PARTY_NOTICES.md`.
+- No change to Custom Metrics in this step.
+
+### 2.1.2 — Optional `enabled` Flag
 
 - An optional boolean `enabled` in a Custom Metric's JSON. Missing means
   `true` (backward compatible).
@@ -89,7 +155,7 @@ with 2.0.0 apart from version metadata and documentation.
   unrelated field and writes atomically.
 - Changes apply without restarting the application.
 
-### 2.1.2 — Execution Warnings
+### 2.1.3 — Execution Warnings
 
 - An explicit warning when a Custom Metric's command fails.
 - The existing distinctions stay visible: execution failure, timeout,
@@ -97,7 +163,7 @@ with 2.0.0 apart from version metadata and documentation.
   values.
 - Reuses the existing command process and status infrastructure.
 
-### 2.1.3 — Optional Progress Bar
+### 2.1.4 — Optional Progress Bar
 
 - An optional display setting, e.g. `display.showBar` (boolean).
 - Text-only or numeric metrics can be shown without a bar.
@@ -105,7 +171,7 @@ with 2.0.0 apart from version metadata and documentation.
 - Applied consistently on every surface that draws bars (Qt Dashboard,
   Plasmoid popup).
 
-### 2.1.4 — Optional Metric Groups and JSON Inheritance
+### 2.1.5 — Optional Metric Groups and JSON Inheritance
 
 Groups of Custom Metrics using the existing `metric.json` format. A parent
 `metric.json` declares `source.type: "group"`; its children live in
@@ -194,7 +260,7 @@ Open point for the implementation: 2.0.0 accepts only strings in
 `source.arguments` (the child example above uses the number `20`); either
 accept numbers (converted to their decimal text) or document strings.
 
-### 2.1.5 — Reload Custom Metrics
+### 2.1.6 — Reload Custom Metrics
 
 - Reload the Custom Metric configurations without restarting.
 - Rescan the Custom Metrics directory recursively: new metrics and groups
@@ -203,7 +269,7 @@ accept numbers (converted to their decimal text) or document strings.
   entries, no duplicate execution.
 - Reloading the configuration is distinct from refreshing values.
 
-### 2.1.6 — Manual Refresh by Clicking Metric Icons
+### 2.1.7 — Manual Refresh by Clicking Metric Icons
 
 - Clicking a metric's icon requests a fresh sample immediately.
 - A child's icon refreshes only that child; a group's icon refreshes all
@@ -214,9 +280,20 @@ accept numbers (converted to their decimal text) or document strings.
 - The periodic schedule continues as before.
 
 
-## v2F2 — Independent Autostart
+## v2F2 — Independent Autostart + New Runner
 
-Status: PLANNED. Target version **2.2.0**.
+Status: PLANNED. Version family **2.2.x**.
+
+    2.2.0  Feature baseline (requirements, version metadata)
+    2.2.1  New official built-in runner (TBD)
+    2.2.2  Independent backend and Qt tray autostart settings
+
+### 2.2.1 — New Runner (TBD)
+
+Name, id and artwork to be decided by the user; follows the
+[v2 Runner Convention](#v2-runner-convention).
+
+### 2.2.2 — Independent Autostart
 
 The current single "Start AQTRunCat at login" setting is ambiguous since
 the backend and the tray became separate programs (it starts the tray, which
@@ -237,9 +314,20 @@ Requirements:
   integration are respected.
 
 
-## v2F3 — Standalone Settings
+## v2F3 — Standalone Settings + New Runner
 
-Status: PLANNED. Target version **2.3.0**.
+Status: PLANNED. Version family **2.3.x**.
+
+    2.3.0  Feature baseline (requirements, version metadata)
+    2.3.1  New official built-in runner (TBD)
+    2.3.2  Standalone Settings entry point
+
+### 2.3.1 — New Runner (TBD)
+
+Name, id and artwork to be decided by the user; follows the
+[v2 Runner Convention](#v2-runner-convention).
+
+### 2.3.2 — Standalone Settings
 
 The Settings window can be opened without the tray frontend or the Plasma
 widget.
@@ -256,6 +344,114 @@ Requirements:
 - Changes reach the running components as they do now.
 - The entry point is integrated with installation and packaging where
   appropriate (e.g. a desktop entry).
+
+
+## v2F4 — Dependency Advisor + New Runner
+
+Status: PLANNED. Version family **2.4.x**.
+
+    2.4.0  Feature baseline (requirements, version metadata)
+    2.4.1  New official built-in runner (TBD)
+    2.4.2  Dependency detection model
+    2.4.3  Distribution-aware recommendations in the installer
+    2.4.4  `checkupdates` as the preferred Arch Linux update provider
+    2.4.5  `aqtruncatctl --missing-deps`
+
+The advisor reports the external tools AQTRunCat's **actual** functionality
+uses, which of them are present, and how to install the missing ones. It
+never installs anything.
+
+### 2.4.1 — New Runner (TBD)
+
+Name, id and artwork to be decided by the user; follows the
+[v2 Runner Convention](#v2-runner-convention).
+
+### 2.4.2 — Dependency Detection Model
+
+Detect required, optional, missing, available and unsupported
+dependencies.
+
+Initial candidates (each to be verified against the code at implementation
+time):
+
+| Dependency | Enables | Notes |
+|------------|---------|-------|
+| Claude Code CLI | Claude Code integration (F2) | optional |
+| Codex CLI | Codex integration (F3) | optional |
+| MangoHud | FPS metric (F5) | optional |
+| `pacman-contrib` (`checkupdates`) | Arch package updates metric (F5, 2.4.4) | optional, Arch only |
+| Flatpak | Flatpak updates metric (F5) | optional |
+| `lm_sensors` | hardware sensors | only if actually used; not used by 2.0.0 |
+| other distribution-specific utilities | — | only when verified against existing code |
+
+The package recipes already list optional dependencies (PKGBUILD
+`optdepends`, Debian/RPM `Suggests`/`Recommends`: e.g. `qt6-wayland`,
+`plasma-workspace`, `hwdata`, `flatpak`, `pacman-contrib`, `mangohud`); the
+advisor's list and these recipes must stay consistent.
+
+Requirements:
+
+- A dependency is **required** only if the core application cannot work
+  without it; being useful for an optional feature makes it optional.
+- One shared detection model is used by the installer and the CLI: no
+  separate, inconsistent lists or duplicated detection rules.
+- Checks are read-only, work offline, need no root privileges and never
+  install anything.
+- Missing (the tool could be installed) is distinguished from unsupported
+  (the functionality does not apply to this system, e.g. `checkupdates` on
+  a non-Arch distribution).
+- Installation suggestions are distribution-specific when known; packages
+  unrelated to supported features are never recommended.
+
+### 2.4.3 — Installer Recommendations
+
+- During installation, `install.sh` shows the relevant optional
+  dependencies and distribution-aware recommendations, using the shared
+  detection model.
+- It never runs package installation commands automatically.
+- Preserved: system-wide and `--local` installation, the supported
+  distributions, dry-run behaviour, the existing installer options and the
+  cached-build installation (`--no-build`).
+
+### 2.4.4 — Arch Linux Updates via `checkupdates`
+
+`checkupdates` (from `pacman-contrib`) is the preferred Arch Linux package
+update provider.
+
+- The existing remote-refresh setting is respected: no network access is
+  introduced silently when remote refresh is disabled.
+- Never run `pacman -Sy` on the live package database; never require
+  `sudo` or `pkexec` for update checks.
+- Zero available updates is distinguished from a missing dependency, a
+  network error, a timeout and an execution failure.
+- The existing package update metric semantics stay compatible.
+- Execution is bounded, and checks never overlap.
+
+Note for the implementation: 2.0.0 already runs `checkupdates` when remote
+refresh is enabled and it is installed, and `pacman -Qu` on the local
+databases otherwise (`src/metrics/packageupdates.cpp`). Because
+`checkupdates` normally syncs a temporary database copy (network access),
+2.4.4 must decide, without breaking the rule above, what "preferred" means
+with remote refresh disabled (keep `pacman -Qu`, or `checkupdates
+--nosync` if it reads only already-synced data).
+
+### 2.4.5 — `aqtruncatctl --missing-deps`
+
+```bash
+aqtruncatctl --missing-deps
+```
+
+- Prints a human-readable report of the missing optional dependencies, the
+  AQTRunCat functionality each one enables, and installation commands for
+  the detected distribution.
+- Never installs packages.
+- Works without an active backend or Plasma session, offline and without
+  elevated privileges.
+- Uses the same dependency detection model as the installer.
+- Exit code `0` when detection succeeds, even if optional dependencies are
+  missing; nonzero only for genuine command failures.
+- CLI documentation (help, man page, docs) and automated tests are part of
+  the implementation.
 
 
 ## General Principles

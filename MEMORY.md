@@ -9,9 +9,10 @@
 > `feature/main`; no functional change from 1.7.4. All 1.x features are
 > complete (summary §2, history §4 and §13, normative summaries in
 > `docs/feature-reference.md`, topic documents indexed by `docs/README.md`).
-> `requirements.md` is the **v2 roadmap**: v2F1 Custom Metrics v3 (2.1.x),
-> v2F2 Independent Autostart (2.2.0), v2F3 Standalone Settings (2.3.0) — all
-> PLANNED; start one only on the user's explicit instruction, one
+> `requirements.md` is the **v2 roadmap**: v2F1 Custom Metrics v3 + Rickroll
+> (2.1.x), v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings
+> (2.3.x), v2F4 Dependency Advisor (2.4.x) — all PLANNED (summary at the end
+> of §2); start one only on the user's explicit instruction, one
 > sub-feature at a time.
 >
 > The user owns every Git write (branches, commits, merges, tags); read-only
@@ -154,8 +155,40 @@ F5 COMPLETE   Additional Built-in Metrics: uptime, GPU (per device), FPS (MangoH
 F6 COMPLETE   Hover Information: CPU/RAM/swap summary in the tray tooltip and the Plasmoid's native tooltip; Metrics Bar/popup details (1.6.3)
 F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (partyparrot), Engine (engine) (1.7.4)
 2.0.0         Consolidation release: version 2.0.0, docs by topic (docs/README.md), v2 roadmap in requirements.md; no functional change
-NEXT          v2F1 Custom Metrics v3 (2.1.x), v2F2 Independent Autostart (2.2.0), v2F3 Standalone Settings (2.3.0): PLANNED, only on instruction
+NEXT          v2F1 Custom Metrics v3 + Rickroll (2.1.x), v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
 ```
+
+v2 roadmap summary (requirements.md is authoritative; added 2026-10-23):
+
+- **Runner-per-feature convention**: every v2F<n> starts with a new
+  official *built-in* animated runner at `2.x.1`, right after the `2.x.0`
+  baseline (requirements + version metadata only); functional sub-features
+  follow from `2.x.2`. The runner reuses the animation architecture, works
+  in tray and Plasmoid, is selectable/persisted through the existing
+  selection, settings and `GetRunners`, and covers assets, packaging,
+  tests, docs and `THIRD_PARTY_NOTICES.md`; existing runners untouched.
+  Artwork is supplied/approved by the user *before* implementation — never
+  download or generate it. v2F1 runner = **Rickroll** (proposed id
+  `rickroll`); v2F2–v2F4 runners are TBD: do not invent names or art.
+- **v2F1** 2.1.0 baseline, 2.1.1 Rickroll, 2.1.2 `enabled`, 2.1.3 execution
+  warnings, 2.1.4 `display.showBar`, 2.1.5 groups/inheritance, 2.1.6
+  reload/rescan, 2.1.7 click-to-refresh (each shifted +1 patch from the
+  2.0.0 draft).
+- **v2F2** 2.2.1 runner, 2.2.2 independent backend/tray autostart (login
+  autostart ≠ D-Bus activation). **v2F3** 2.3.1 runner, 2.3.2 standalone
+  Settings.
+- **v2F4 Dependency Advisor**: 2.4.1 runner, 2.4.2 shared detection model
+  (required/optional/missing/available/unsupported; read-only, offline,
+  no root, never installs; one model for installer and CLI, consistent
+  with the package recipes' optdepends), 2.4.3 distro-aware installer
+  recommendations (no automatic installs; keep `--local`, `--dry-run`,
+  `--no-build`), 2.4.4 `checkupdates` preferred on Arch (respect remote
+  refresh, never `pacman -Sy`/sudo/pkexec, zero ≠ missing/network/timeout/
+  failure; open point: 2.0.0 already uses it when remote is on — decide
+  `pacman -Qu` vs `checkupdates --nosync` when remote is off), 2.4.5
+  `aqtruncatctl --missing-deps` (exit 0 even with missing optionals,
+  works without backend/Plasma). `lm_sensors` is not used by 2.0.0: list
+  it only if a feature starts using it.
 
 - Build: `cmake -S . -B build && cmake --build build && ctest --test-dir build`.
   Clean build: **0 warnings** (`-Wall -Wextra -Wpedantic` on all targets).
@@ -1540,7 +1573,7 @@ time" refers to the state when the feature was finished.
 ## 14. Important files map
 
 ```text
-requirements.md                v2 roadmap (2.0.0 baseline, v2F1 Custom Metrics v3 2.1.x, v2F2 Independent Autostart 2.2.0, v2F3 Standalone Settings 2.3.0), versioning, general principles. Older "requirements §n" references in docs point to the former M0–M9 spec (decisions kept in §5 here)
+requirements.md                v2 roadmap (2.0.0 baseline, v2 runner convention, v2F1 Custom Metrics v3 + Rickroll 2.1.x, v2F2 Independent Autostart 2.2.x, v2F3 Standalone Settings 2.3.x, v2F4 Dependency Advisor 2.4.x), versioning, general principles. Older "requirements §n" references in docs point to the former M0–M9 spec (decisions kept in §5 here)
 docs/README.md                 documentation index: architecture overview, topic documents, milestone → document map
 docs/feature-reference.md      normative summaries of F1–F7 (formerly the body of requirements.md)
 THIRD_PARTY_NOTICES.md         runner frame provenance: RunCat Neo (Apache-2.0); Walking Goose / Party Parrot (Tenor GIFs, licence unknown, user's decision)
