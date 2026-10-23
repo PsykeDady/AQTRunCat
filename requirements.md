@@ -15,7 +15,7 @@ normative summaries of the 1.x features are in
 [docs/feature-reference.md](docs/feature-reference.md).
 
     2.0.0  Consolidation baseline (1.x complete)            COMPLETE
-    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       IN PROGRESS (2.1.2 done)
+    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       IN PROGRESS (2.1.3 done)
     v2F2   Independent Autostart + new runner   2.2.x       PLANNED
     v2F3   Standalone Settings + new runner     2.3.x       PLANNED
     v2F4   Dependency Advisor + new runner      2.4.x       PLANNED
@@ -113,8 +113,8 @@ Requirements for every v2 runner:
 
 ## v2F1 — Custom Metrics v3 + Rickroll
 
-Status: IN PROGRESS. Version family **2.1.x**; current version **2.1.2**
-(2.1.0, 2.1.1 and 2.1.2 COMPLETE, 2.1.3–2.1.7 PLANNED).
+Status: IN PROGRESS. Version family **2.1.x**; current version **2.1.3**
+(2.1.0–2.1.3 COMPLETE, 2.1.4–2.1.7 PLANNED).
 
 Extends Custom Metrics v2 (command and snapshot sources,
 [docs/custom-metrics-commands.md](docs/custom-metrics-commands.md)) without
@@ -187,11 +187,27 @@ snapshot file without the flag re-enables it.
 
 ### 2.1.3 — Execution Warnings
 
+Status: COMPLETE (2026-10-23). Record:
+[docs/custom-metrics-commands.md](docs/custom-metrics-commands.md) §9.
+
 - An explicit warning when a Custom Metric's command fails.
 - The existing distinctions stay visible: execution failure, timeout,
   intentionally unavailable data (exit 69 / unavailable output) and valid
   values.
 - Reuses the existing command process and status infrastructure.
+
+As implemented: the existing states (Pending, Available, Unavailable,
+Error + message) carry everything; no new state or API field. Exit 69 stays
+Unavailable; any other non-zero exit, a missing or non-executable program
+(previously Unavailable: deliberate change), a launch failure, a timeout or
+invalid output is Error with a concise reason (exit status, first stderr
+line bounded to 200 characters, timeout, validator error). A success clears
+the warning; errors never stop the schedule. Dashboard: error icon, "—"
+instead of the last values (layout kept), "Error: <reason>"; Metrics Bar:
+"!" and the reason in the tooltip, no stale value; Plasmoid: dialog-error
+icon and the reason (unchanged, now tested); Settings: error icon on the
+status. The backend logs one line per new failure and one per recovery
+(`aqtruncat.custommetrics`).
 
 ### 2.1.4 — Optional Progress Bar
 

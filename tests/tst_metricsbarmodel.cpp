@@ -1,4 +1,6 @@
 #include "app/metricsbarmodel.h"
+#include "app/metricsbarpresenter.h"
+#include "app/metricsbarrenderer.h"
 
 #include <QDateTime>
 #include <QSignalSpy>
@@ -413,10 +415,26 @@ private slots:
         MetricsBarModel model("/home/test");
         const QString path = QStringLiteral("/data/claude.json");
         model.setConfiguration(true, {customId(path)});
-        model.updateCustom({source(path, QStringLiteral("5.4%"), cm::State::Error)});
+        // Unavailable (exit 69) keeps the last value, as before.
+        model.updateCustom({source(path, QStringLiteral("5.4%"), cm::State::Unavailable)});
         QTRY_COMPARE(model.items().size(), 1);
-        QCOMPARE(model.items().first().status, Status::Error);
-        QCOMPARE(model.items().first().shortValue, QStringLiteral("5.4%"));
+        QCOMPARE(model.items().first().status, Status::Unavailable);
+        // v2F1.3: an execution error shows no value at all ("!" and the
+        // reason in the tooltip), never the last one as if current.
+        cm::Source failed = source(path, QStringLiteral("5.4%"), cm::State::Error);
+        failed.message = QStringLiteral("Command exited with status 1.");
+        model.updateCustom({failed});
+        QTRY_COMPARE(model.items().first().status, Status::Error);
+        QVERIFY(model.items().first().shortValue.isEmpty());
+        QVERIFY(model.items().first().detail.isEmpty());
+        QCOMPARE(iconContentFor(model.items().first()).text, ErrorText);
+        const QString tip = MetricsBarPresenter::toolTipFor(model.items().first());
+        QVERIFY2(tip.startsWith(QStringLiteral("Claude Code: Error\nError: Command exited with status 1.")), qPrintable(tip));
+        QVERIFY(!tip.contains(QLatin1String("5.4%")));
+        // Back to a value: the warning is gone.
+        model.updateCustom({source(path, QStringLiteral("6.0%"))});
+        QTRY_COMPARE(model.items().first().status, Status::Available);
+        QCOMPARE(model.items().first().shortValue, QStringLiteral("6.0%"));
 
         // An explicit file that never loaded is still shown, as Unavailable.
         cm::Source missing;

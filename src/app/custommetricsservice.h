@@ -53,6 +53,8 @@ private:
     void failCommand(const QString &id, aqtruncat::custommetrics::State state,
                      const QString &message);
     aqtruncat::custommetrics::Source *sourceFor(const QString &id);
+    void setOutcome(aqtruncat::custommetrics::Source &source, aqtruncat::custommetrics::State state,
+                    const QString &message);
     void disable(aqtruncat::custommetrics::Source &source, const QString &title,
                  const std::optional<QString> &symbol,
                  const std::optional<aqtruncat::custommetrics::IconReference> &icon);

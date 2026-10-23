@@ -323,6 +323,53 @@ private slots:
         QFile::remove(file);
     }
 
+    // v2F1.3: the backend's classification reaches every client as is:
+    // exit 1 → "error" with the code and reason, exit 69 → "unavailable",
+    // a success clears the message; no value is sent while it fails.
+    void commandFailuresThroughTheApi()
+    {
+        const QString package = m_metricsDir + QStringLiteral("/failing");
+        const QString control = package + QStringLiteral("/control");
+        writeFile(control, "1\n\nsensor offline\n");
+        const QString helper = QCoreApplication::applicationDirPath() + QStringLiteral("/custommetric_test_helper");
+        writeFile(package + QStringLiteral("/metric.json"),
+                  QJsonDocument(QJsonObject{{QStringLiteral("id"), QStringLiteral("failing")},
+                                            {QStringLiteral("title"), QStringLiteral("Failing")},
+                                            {QStringLiteral("source"), QJsonObject{
+                                                 {QStringLiteral("type"), QStringLiteral("command")},
+                                                 {QStringLiteral("executable"), helper},
+                                                 {QStringLiteral("arguments"), QJsonArray{QStringLiteral("control"), control}}}}})
+                      .toJson());
+        startBackend();
+        const QString id = aqtruncat::metricsbar::customId(QFileInfo(package + QStringLiteral("/metric.json")).canonicalFilePath());
+        auto metric = [&] { return metricById(callObject(QStringLiteral("GetMetrics")).value(QStringLiteral("metrics")).toArray(), id); };
+        QTRY_COMPARE_WITH_TIMEOUT(metric().value(QStringLiteral("state")).toString(), QStringLiteral("error"), 10000);
+        QCOMPARE(metric().value(QStringLiteral("message")).toString(), QStringLiteral("Command exited with status 1. sensor offline"));
+        QVERIFY(metric().value(QStringLiteral("items")).toArray().isEmpty());
+
+        writeFile(control, "69\n\nnot running\n");
+        QTRY_COMPARE_WITH_TIMEOUT(metric().value(QStringLiteral("state")).toString(), QStringLiteral("unavailable"), 10000);
+        QCOMPARE(metric().value(QStringLiteral("message")).toString(), QStringLiteral("not running"));
+
+        writeFile(control, "0\n7\n");
+        QTRY_COMPARE_WITH_TIMEOUT(metric().value(QStringLiteral("state")).toString(), QStringLiteral("ok"), 10000);
+        QVERIFY(metric().value(QStringLiteral("message")).toString().isEmpty());
+        QCOMPARE(metric().value(QStringLiteral("formattedValue")).toString(), QStringLiteral("7"));
+
+        // Failing again after a value: the payload keeps the last snapshot
+        // (state decides), the CLI prints only the error, never "7".
+        writeFile(control, "2\n\nsensor offline again\n");
+        QTRY_COMPARE_WITH_TIMEOUT(metric().value(QStringLiteral("state")).toString(), QStringLiteral("error"), 10000);
+        QString line;
+        for (const QString &text : QString::fromUtf8(ctl({QStringLiteral("metrics")}).out).split(u'\n')) {
+            if (text.contains(QLatin1String("Failing")))
+                line = text;
+        }
+        QVERIFY2(line.contains(QLatin1String("(error: Command exited with status 2. sensor offline again)")), qPrintable(line));
+        QVERIFY2(!line.contains(QLatin1String(" 7")), qPrintable(line));
+        QDir(package).removeRecursively();
+    }
+
     void customMetricsAndIntegrationsAreClassified()
     {
         writeFile(m_metricsDir + QStringLiteral("/sensors.json"),

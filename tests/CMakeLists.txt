@@ -118,7 +118,7 @@ endforeach()
 
 # M7 Metrics Bar: semantic model, square SNI rendering and tray item lifecycle.
 qt_add_executable(tst_metricsbarmodel tst_metricsbarmodel.cpp)
-target_link_libraries(tst_metricsbarmodel PRIVATE aqtruncat_desktop Qt6::Test)
+target_link_libraries(tst_metricsbarmodel PRIVATE aqtruncat_desktop Qt6::Test Qt6::Widgets)
 target_compile_options(tst_metricsbarmodel PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME metricsbarmodel COMMAND tst_metricsbarmodel)
 

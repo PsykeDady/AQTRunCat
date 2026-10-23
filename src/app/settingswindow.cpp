@@ -20,11 +20,13 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QLocale>
+#include <QIcon>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
+#include <QStyle>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -868,6 +870,9 @@ void SettingsWindow::rebuildCustomMetrics()
         }
         if (!source.enabled)
             item->setText(3, tr("Disabled"));
+        else if (source.state == aqtruncat::custommetrics::State::Error)
+            item->setIcon(3, QIcon::fromTheme(QStringLiteral("dialog-error"),
+                                              style()->standardIcon(QStyle::SP_MessageBoxCritical)));
         item->setToolTip(3, source.message);
     }
     for (int column = 0; column < 4; ++column)

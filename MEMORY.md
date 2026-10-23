@@ -1,12 +1,12 @@
-# MEMORY.md — AQTRunCat maintainer notes (2.1.2)
+# MEMORY.md — AQTRunCat maintainer notes (2.1.3)
 
 > Audience: an AI agent or developer maintaining AQTRunCat without access to
 > earlier conversations. Precedence when sources disagree: **actual
 > code/tests > this file (frozen decisions §5) > docs/ > commit messages**.
 >
-> **State (2026-10-23): AQTRunCat 2.1.2** on branch `feature/v2/f2`
-> (v2F1: 2.1.0 baseline + 2.1.1 Rickroll committed as 385ceb1; 2.1.2
-> Custom Metrics `enabled` uncommitted — the user commits). 2.0.0 (commit 61f3a8e) was the consolidation release
+> **State (2026-10-23): AQTRunCat 2.1.3** on branch `feature/v2/f3`
+> (v2F1: 2.1.1 Rickroll = 385ceb1, 2.1.2 `enabled` = 0a72597; 2.1.3
+> execution warnings uncommitted — the user commits). 2.0.0 (commit 61f3a8e) was the consolidation release
 > of the complete 1.x application (M0–M9 → 1.0.0, then F1–F7 → 1.7.4),
 > without functional change from 1.7.4. All 1.x features are
 > complete (summary §2, history §4 and §13, normative summaries in
@@ -14,8 +14,8 @@
 > `requirements.md` is the **v2 roadmap**: v2F1 Custom Metrics v3 + Rickroll
 > (2.1.x), v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings
 > (2.3.x), v2F4 Dependency Advisor (2.4.x) (summary at the end of §2).
-> Done: 2.1.0, 2.1.1, 2.1.2. Next: 2.1.3 (execution warnings) — only on
-> the user's explicit instruction, one sub-feature at a time.
+> Done: 2.1.0–2.1.3. Next: 2.1.4 (optional progress bar) — only on the
+> user's explicit instruction, one sub-feature at a time.
 >
 > The user owns every Git write (branches, commits, merges, tags); read-only
 > Git only. Reports to the user in Italian; code, comments and
@@ -161,8 +161,9 @@ F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (party
 2.0.0         Consolidation release: version 2.0.0, docs by topic (docs/README.md), v2 roadmap in requirements.md; no functional change
 2.1.0 DONE    v2F1 baseline (roadmap only; version went 2.0.0 → 2.1.1 directly, no separate 2.1.0 build)
 2.1.1 DONE    v2F1.1 Rickroll built-in runner (rickroll, 31 frames 33×36): six built-in runners (docs/built-in-runners.md §10)
+2.1.3 DONE    v2F1.3 Custom Metric execution warnings (docs/custom-metrics-commands.md §9)
 2.1.2 DONE    v2F1.2 optional Custom Metrics "enabled" (+ Settings/Plasmoid checkbox, SetCustomMetricEnabled, API schema 3) (docs/custom-metrics-commands.md §8)
-NEXT          v2F1 2.1.3–2.1.7 Custom Metrics v3, v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
+NEXT          v2F1 2.1.4–2.1.7 Custom Metrics v3, v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
 ```
 
 v2 roadmap summary (requirements.md is authoritative; added 2026-10-23):
@@ -663,7 +664,7 @@ Key components:
 | Custom Metrics command contract (F1) | explicit `source.type=command`; required `id`, `title`, `executable`; direct executable + ≤256 args, no shell/elevation; scalar UTF-8 stdout; prefix/suffix and optional normalized range | invalid/malformed config is never executed or treated as snapshot |
 | Command scheduling/lifecycle (F1) | one shared monotonic timer; immediate first run; next interval (1–86400 s) starts after completion; timeout default 10 s/range 1–300 s; no overlap/catch-up; each command is its own process-group leader (`setpgid` child modifier); timeout/overflow SIGKILL the group, then re-check every 1 s (no spin); stop = SIGTERM all groups, ≤250 ms total wait, SIGKILL, final group SIGKILL; helpers left in background after a *successful* run are not killed | independent schedules without CPU-sampler coupling or idle polling; scripts' children never leak |
 | Command publish cost (F1) | service publishes at start and end of every run; hidden Dashboard stores the list and rebuilds cards only on show; Settings keeps the selected custom row across rebuilds | 5 commands cost 2.2 % → 0.87 % of a core after deferral |
-| Command output/state (F1) | stdout/stderr each ≤16 KiB; one trimmed nonempty scalar line; missing/non-executable = Unavailable; startup/exit/timeout/parse = Error; refresh = Pending retaining last value; Dashboard presents the last settled state during a refresh (no "Waiting…" flicker) | bounded failure, diagnostic stderr, never silent zero |
+| Command output/state (F1, 2.1.3) | stdout/stderr each ≤16 KiB; one trimmed nonempty scalar line; exit 69 = Unavailable; missing/non-executable (Unavailable until 2.1.2) and startup/exit/timeout/parse = Error with a concise reason (status + first stderr line ≤200 chars; "Invalid output: …"); Error shows no value anywhere; refresh = Pending retaining last value; Dashboard presents the last settled state during a refresh (no "Waiting…" flicker) | bounded failure, diagnostic stderr, never silent zero |
 | Claude Code integration (F2, revised 2026-10-20) | adapter outside the core, run as F1 `output:"snapshot"` command every 10 s; **primary = plan quotas** five_hour / seven_day from `~/.claude.json` `cachedUsageUtilization` (what `/usage` fetched; same account only) and, opt-in, status-line `rate_limits` captured to `$XDG_RUNTIME_DIR/aqtruncat/claude-rate-limits.json`; newest report per window wins; >5 min → "as of", past reset or >24 h → not shown; context window only with `--context`; opt-in, never auto-added to the bar | exactly the `/usage` concepts; no credentials/network/tokens; never derived from context tokens; never 0 for missing |
 | Live updates (F2) | only the `statusLine` member of Claude Code's user settings.json, textual edit verified by parse-compare, refuse otherwise; backup (value + exact text) in `$XDG_DATA_HOME/AQTRunCat/integrations/claude-code/statusline-backup.json`; helper chains the previous command via memfd + `execl("/bin/sh","-c",…)`; off/disable restore byte-exactly; user-changed statusLine left alone; explicit confirmation in Settings | user decision 2026-10-20 (hybrid source); never silently modify Claude config |
 | Integration configuration ownership (F2) | the adapter owns package + backup; Settings runs the adapter CLI (`status --json` etc.), so GUI = CLI | one configuration, no second metric engine |
@@ -906,6 +907,15 @@ sample on purpose (hot-plug) — caching not needed.
 ---
 
 ## 9. Tests and validation
+
+2.1.3 (2026-10-23, execution warnings): clean build in a fresh directory
+0 warnings; ctest **53/53**; `packaging-versions` 2.1.3; `git diff --check`
+clean (no shell script in the repo changed). Isolated runtime: real backend,
+command switching fail/69/ok/fail → error/unavailable/ok/error with the
+expected messages; log lines failed/recovered/failed only (journald by
+default, stderr with QT_FORCE_STDERR_LOGGING=1); stderr beyond the first
+line never shown or logged. `aqtruncatctl metrics` text hides the retained
+value of a failing source (payload still carries it; state decides).
 
 2.1.2 (2026-10-23, Custom Metrics `enabled`): clean build in a fresh
 directory 0 warnings; ctest **53/53**; `packaging-versions` 2.1.2;
@@ -1598,6 +1608,29 @@ time" refers to the state when the feature was finished.
 ---
 
 ## 13b. v2 history (2.1.0 onwards)
+
+### v2F1.3 — Execution warnings (2.1.3, 2026-10-23)
+
+- No new state or API field: Pending/Available/Unavailable/Error + message
+  already reach every frontend; schema stays 3.
+- Backend (`CustomMetricsService`): missing executable → Error "Executable
+  not found: …", non-executable → Error "Permission denied: … is not
+  executable." (deliberate change from F1's Unavailable); non-zero ≠ 69 →
+  "Command exited with status N." + `diagnosticLine()` (first non-empty
+  stderr line, ≤200 chars); output validator errors prefixed "Invalid
+  output: "; exit 69 unchanged (stderr ≤512 or "Source is not available.").
+  `setOutcome()` sets state/message and logs on category
+  `aqtruncat.custommetrics` (Q_STATIC_LOGGING_CATEGORY in the engine lib):
+  warning on a new/different failure, info on recovery, using
+  `CommandJob::lastOutcome/lastMessage`.
+- Dashboard `customCard`: Error → `customError_<i>` icon (dialog-error,
+  tooltip = reason), values "—", bars hidden with retainSizeWhenHidden,
+  footer "Error: <reason>" (word-wrapped). Unavailable unchanged.
+- Metrics Bar model: Error clears shortValue/detail ("!" + reason only).
+  Settings status column: dialog-error icon on Error. Plasmoid unchanged
+  (already dialog-error vs dialog-warning, "—", reason).
+- Test helper mode `control <file>` ("status\nstdout\nstderr…") drives
+  transitions without changing the configuration.
 
 ### v2F1.2 — Custom Metrics `enabled` (2.1.2, 2026-10-23)
 

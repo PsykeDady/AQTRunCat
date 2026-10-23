@@ -169,7 +169,9 @@ private slots:
         QVERIFY(!QFileInfo::exists(violation));
     }
 
-    void reportsMissingAndNonExecutableProgramsAsUnavailable()
+    // v2F1.3: a program that cannot be run is an execution error (with the
+    // reason), never the intentional Unavailable of exit status 69.
+    void reportsMissingAndNonExecutableProgramsAsErrors()
     {
         QTemporaryDir temporary;
         const QString config = temporary.filePath(QStringLiteral("metric.json"));
@@ -178,8 +180,8 @@ private slots:
         settings.setCustomMetricFiles({config});
         CustomMetricsService service(&settings, temporary.filePath(QStringLiteral("discovery")));
         service.start();
-        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Unavailable, 1000);
-        QVERIFY(onlySource(service).message.contains(QStringLiteral("not available")));
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Error, 1000);
+        QCOMPARE(onlySource(service).message, QStringLiteral("Executable not found: ") + temporary.filePath(QStringLiteral("missing")));
 
         service.stop();
         const QString nonExecutable = temporary.filePath(QStringLiteral("not-executable"));
@@ -187,8 +189,8 @@ private slots:
         QVERIFY(QFile::setPermissions(nonExecutable, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
         writeConfiguration(config, nonExecutable, {QStringLiteral("value"), QStringLiteral("x")});
         service.start();
-        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Unavailable, 1000);
-        QVERIFY(onlySource(service).message.contains(QStringLiteral("not executable")));
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Error, 1000);
+        QVERIFY(onlySource(service).message.startsWith(QStringLiteral("Permission denied: ")));
     }
 
     void reportsExitMalformedExcessiveAndTimeoutFailures()
@@ -208,6 +210,7 @@ private slots:
         writeConfiguration(config, helperPath(), {QStringLiteral("multiline")});
         service.start();
         QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Error, 1500);
+        QVERIFY(onlySource(service).message.startsWith(QStringLiteral("Invalid output: ")));
         QVERIFY(onlySource(service).message.contains(QStringLiteral("scalar line")));
         service.stop();
 
@@ -239,7 +242,8 @@ private slots:
                                                    QStringLiteral("late")}, 1, 1);
         service.start();
         QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Error, 2500);
-        QVERIFY(onlySource(service).message.contains(QStringLiteral("timed out")));
+        QCOMPARE(onlySource(service).message, QStringLiteral("Command timed out after 1 seconds."));
+        QVERIFY(!onlySource(service).snapshot || onlySource(service).snapshot->metrics.isEmpty()); // "late" never arrives
     }
 
     void stopTerminatesAnActiveOwnedProcess()
@@ -495,6 +499,116 @@ private slots:
         error.clear();
         QVERIFY(!service.setEnabled(config, false, &error));
         QVERIFY(error.contains(QLatin1String("Integrations")));
+    }
+
+    // v2F1.3: exit codes other than 0 and 69 are errors with the code and a
+    // bounded first line of stderr; malformed scalar and snapshot output are
+    // "Invalid output" errors; nothing becomes a value.
+    void classifiesExitCodesAndOutputErrors()
+    {
+        QTemporaryDir temporary;
+        const QString control = temporary.filePath(QStringLiteral("control"));
+        const QString config = temporary.filePath(QStringLiteral("metric.json"));
+        writeConfiguration(config, helperPath(), {QStringLiteral("control"), control});
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
+        settings.setCustomMetricFiles({config});
+        CustomMetricsService service(&settings, temporary.filePath(QStringLiteral("discovery")));
+
+        const QByteArray longLine(5000, 'e');
+        writeFile(control, "1\n\n\n  " + longLine + "\nsecret second line\n");
+        service.start();
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Error, 2000);
+        const QString message = onlySource(service).message;
+        QVERIFY(message.startsWith(QStringLiteral("Command exited with status 1. eee")));
+        QVERIFY2(message.size() <= 240, qPrintable(QString::number(message.size()))); // bounded
+        QVERIFY(!message.contains(QLatin1String("secret")));                         // first line only
+        QVERIFY(!onlySource(service).snapshot || onlySource(service).snapshot->metrics.isEmpty());
+        service.stop();
+
+        for (const int status : {2, 70, 127, 255}) {
+            writeFile(control, QByteArray::number(status) + "\n42\n");
+            service.start();
+            QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Error, 2000);
+            QCOMPARE(onlySource(service).message, QStringLiteral("Command exited with status %1.").arg(status));
+            service.stop();
+        }
+
+        // Exit 0 but not a number where normalizedRange needs one.
+        QJsonObject object{
+            {QStringLiteral("id"), QStringLiteral("ranged")}, {QStringLiteral("title"), QStringLiteral("Ranged")},
+            {QStringLiteral("source"), QJsonObject{{QStringLiteral("type"), QStringLiteral("command")},
+                                                   {QStringLiteral("executable"), helperPath()},
+                                                   {QStringLiteral("arguments"), QJsonArray{QStringLiteral("control"), control}}}},
+            {QStringLiteral("display"), QJsonObject{{QStringLiteral("normalizedRange"),
+                                                     QJsonObject{{QStringLiteral("minimum"), 0}, {QStringLiteral("maximum"), 10}}}}}};
+        writeFile(config, QJsonDocument(object).toJson());
+        writeFile(control, "0\nnot a number\n");
+        service.start();
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Error, 2000);
+        QCOMPARE(onlySource(service).message,
+                 QStringLiteral("Invalid output: standard output must be numeric when normalizedRange is configured"));
+        service.stop();
+
+        // Exit 0, snapshot output that is not a snapshot.
+        object.remove(QStringLiteral("display"));
+        QJsonObject source = object.value(QStringLiteral("source")).toObject();
+        source.insert(QStringLiteral("output"), QStringLiteral("snapshot"));
+        object.insert(QStringLiteral("source"), source);
+        writeFile(config, QJsonDocument(object).toJson());
+        writeFile(control, "0\n{\"title\": \"T\"}\n");
+        service.start();
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Error, 2000);
+        QVERIFY(onlySource(service).message.startsWith(QStringLiteral("Invalid output: standard output is not a valid snapshot")));
+    }
+
+    // Error → Available → Unavailable (69) → Available → Error: each result
+    // replaces the previous status and message; a success clears the warning;
+    // the log has one line per change of failure and one per recovery.
+    void statusTransitionsAndRecovery()
+    {
+        QTemporaryDir temporary;
+        const QString control = temporary.filePath(QStringLiteral("control"));
+        const QString config = temporary.filePath(QStringLiteral("metric.json"));
+        writeConfiguration(config, helperPath(), {QStringLiteral("control"), control});
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
+        settings.setCustomMetricFiles({config});
+        CustomMetricsService service(&settings, temporary.filePath(QStringLiteral("discovery")));
+
+        static QStringList logged;
+        logged.clear();
+        const QtMessageHandler previous = qInstallMessageHandler([](QtMsgType, const QMessageLogContext &context, const QString &text) {
+            if (QLatin1String(context.category) == QLatin1String("aqtruncat.custommetrics"))
+                logged.append(text);
+        });
+
+        writeFile(control, "3\n\nbroken sensor\n");
+        service.start();
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Error, 2000);
+        QCOMPARE(onlySource(service).message, QStringLiteral("Command exited with status 3. broken sensor"));
+        QTest::qWait(1300); // the same failure again: no second log line
+        QCOMPARE(onlySource(service).state, State::Error);
+
+        writeFile(control, "0\n5\n");
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Available, 3000);
+        QVERIFY(onlySource(service).message.isEmpty());
+        QCOMPARE(onlySource(service).snapshot->metrics.first().formattedValue, QStringLiteral("5 units"));
+
+        writeFile(control, QByteArray::number(UnavailableExitStatus) + "\n\nservice is not running\n");
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Unavailable, 3000);
+        QCOMPARE(onlySource(service).message, QStringLiteral("service is not running"));
+        QCOMPARE(onlySource(service).snapshot->metrics.first().formattedValue, QStringLiteral("5 units")); // kept, as before
+
+        writeFile(control, "0\n6\n");
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Available, 3000);
+        QVERIFY(onlySource(service).message.isEmpty());
+
+        writeFile(control, "4\n\n");
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Error, 3000);
+        service.stop();
+        qInstallMessageHandler(previous);
+        QCOMPARE(logged, (QStringList{QStringLiteral("custom metric \"fixture\" failed: Command exited with status 3. broken sensor"),
+                                      QStringLiteral("custom metric \"fixture\" recovered"),
+                                      QStringLiteral("custom metric \"fixture\" failed: Command exited with status 4.")}));
     }
 };
 

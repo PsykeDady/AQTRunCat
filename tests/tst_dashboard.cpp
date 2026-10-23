@@ -318,7 +318,7 @@ private slots:
         QCOMPARE(child<QLabel>(window, "customValue_0_0")->text(), QStringLiteral("48.5 °C"));
         QCOMPARE(child<QLabel>(window, "customValue_0_1")->text(), QStringLiteral("0 rpm"));
         QCOMPARE(child<QProgressBar>(window, "customProgress_0_0")->value(), 485);
-        QCOMPARE(child<QLabel>(window, "customStatus_1")->text(), QStringLiteral("Error"));
+        QCOMPARE(child<QLabel>(window, "customStatus_1")->text(), QStringLiteral("Error: invalid JSON"));
         QVERIFY(window.findChild<QScrollArea *>(QStringLiteral("dashboardScroll")));
 
         // A refresh with a valid value keeps the settled presentation.
@@ -569,24 +569,29 @@ private slots:
         QCOMPARE(child<QLabel>(window, "customValue_0_0")->text(), QStringLiteral("24.1"));
         QVERIFY(child<QLabel>(window, "customStatus_0")->text() != firstFooter);
 
-        // Failed refresh exposes Error with the last valid value retained,
-        // and the next refresh keeps showing Error until it settles.
+        // v2F1.3: a failed refresh is a warning with its reason, and the
+        // retained value is not presented as current ("—"); the next
+        // refresh keeps showing the error until it settles.
         source.state = cm::State::Error;
         source.message = QStringLiteral("Command exited with status 1.");
         window.updateCustomMetrics({source});
-        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Error"));
-        QCOMPARE(child<QLabel>(window, "customValue_0_0")->text(), QStringLiteral("24.1"));
+        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Error: Command exited with status 1."));
+        QCOMPARE(child<QLabel>(window, "customValue_0_0")->text(), QStringLiteral("—"));
+        QCOMPARE(child<QLabel>(window, "customError_0")->toolTip(), QStringLiteral("Command exited with status 1."));
         source.state = cm::State::Pending;
         source.message = QStringLiteral("Command is running.");
         window.updateCustomMetrics({source});
-        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Error"));
+        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Error: Command exited with status 1."));
         QCOMPARE(child<QLabel>(window, "customStatus_0")->toolTip(),
                  QStringLiteral("Command exited with status 1."));
 
+        // Exit 69: intentionally Unavailable, no error indicator, value kept.
         source.state = cm::State::Unavailable;
-        source.message = QStringLiteral("Executable is not available: ./missing");
+        source.message = QStringLiteral("tool is not installed");
         window.updateCustomMetrics({source});
         QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Unavailable"));
+        QVERIFY(!window.findChild<QLabel *>(QStringLiteral("customError_0")));
+        QCOMPARE(child<QLabel>(window, "customValue_0_0")->text(), QStringLiteral("24.1"));
 
         // A redefinition resets to a skeleton: first execution again.
         source.state = cm::State::Pending;
@@ -615,7 +620,7 @@ private slots:
         source.message = QStringLiteral("Command is running.");
         window.updateCustomMetrics({source});
         window.show();
-        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Error"));
+        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Error: timeout"));
     }
 
     void hiddenDashboardDefersCustomRebuildUntilShown()

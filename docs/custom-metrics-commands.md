@@ -362,3 +362,95 @@ errore di scrittura), `dashboard`, `metricsbarmodel`, `apischema` (schema
 3, andata e ritorno, payload senza campo), `backendipc` (metodo D-Bus,
 `GetMetrics` e `MetricsChanged`, errori), `plasmoidlogic`, `plasmoidpackage`
 (metodo ammesso).
+
+## 9. v2F1.3 — Avvisi di esecuzione (2.1.3)
+
+Stato: **completata** il 2026-10-23, versione **2.1.3**. Branch
+`feature/v2/f3`.
+
+### Modello di stato
+
+Il modello esistente bastava: quattro stati (Pending, Available,
+Unavailable, Error) più un messaggio, già trasportati dal payload D-Bus
+(`state`, `message`) e già distinti dai frontend. Nessun nuovo stato, nessun
+campo nuovo, schema API invariato (3). La 2.1.3 rende coerente la
+classificazione e la presentazione.
+
+| Esito | Stato | Messaggio |
+|---|---|---|
+| exit 0 e output valido | Available | vuoto (un successo cancella l'avviso precedente) |
+| exit 69 | **Unavailable** (intenzionale, invariato) | stderr fino a 512 caratteri, altrimenti "Source is not available." |
+| altro exit ≠ 0 | Error | "Command exited with status N." + la prima riga non vuota di stderr, al massimo 200 caratteri |
+| eseguibile mancante | Error (prima Unavailable) | "Executable not found: <percorso>" |
+| file non eseguibile | Error (prima Unavailable) | "Permission denied: <percorso> is not executable." |
+| avvio fallito (interprete inesistente…) | Error | "Could not start executable: …" |
+| timeout | Error | "Command timed out after N seconds."; il gruppo di processi viene ucciso, un output tardivo non sostituisce l'esito |
+| terminato da un segnale / output oltre 16 KiB | Error | "Command crashed." / "Command output exceeds the … limit." |
+| exit 0 ma output non valido | Error | "Invalid output: " + l'errore del validatore (scalare, numero con `normalizedRange`, snapshot) |
+
+Una metrica disabilitata non viene eseguita e non genera avvisi. Gli errori
+non disattivano nulla: il comando riparte alla cadenza configurata, e ogni
+esito sostituisce il precedente (Error → Available, Error ↔ Unavailable,
+Unavailable → Available). Durante un refresh Dashboard e Plasmoid mostrano
+l'ultimo stato stabile, quindi un errore resta visibile finché il risultato
+successivo non lo sostituisce.
+
+Modifica deliberata di una regola di F1 (`docs/feature-reference.md`):
+programma mancante o non eseguibile era Unavailable; ora è un errore di
+esecuzione, perché Unavailable resta riservato alla scelta esplicita del
+comando (exit 69). Per un'integrazione reinstallata in un altro prefisso
+la card mostra quindi l'errore "Executable not found" invece di
+"Unavailable" (basta ripetere `enable`).
+
+### Diagnostica e log
+
+- Nei frontend arriva solo il messaggio breve: codice di uscita, timeout,
+  motivo dell'avvio fallito, errore di validazione, prima riga di stderr
+  (limitata). Mai l'intero output, mai l'ambiente o la riga di comando
+  completa; stdout e stderr restano limitati a 16 KiB come prima.
+- Log del backend, categoria `aqtruncat.custommetrics`: una riga di avviso
+  quando una sorgente inizia a fallire o fallisce in modo diverso
+  (`custom metric "<id>" failed: <messaggio>`) e una informativa quando si
+  esce dall'errore (`… recovered`, anche verso Unavailable); mai a ogni
+  esecuzione con lo stesso errore. Senza terminale il backend scrive nel
+  journal (comportamento di Qt); con `QT_FORCE_STDERR_LOGGING=1` su stderr.
+- Payload D-Bus: in Error resta l'ultimo snapshot valido (come prima, è lo
+  stato a dire che non è attuale): tutti i client AQTRunCat lo nascondono.
+  `aqtruncatctl metrics` (testo) stampa solo `(error: <motivo>)`, senza il
+  valore né le voci; `--json` resta il payload completo.
+
+### Presentazione
+
+- Dashboard Qt: in Error un'icona di errore accanto al nome (tooltip con il
+  motivo), "—" al posto dei valori, le barre nascoste ma con il loro spazio
+  (il layout non cambia), riga di stato "Error: <motivo>". Unavailable resta
+  come prima: valori conservati, "Unavailable", nessuna icona.
+- Metrics Bar: "!" per Error (già così), "—" per Unavailable, "…" per
+  Pending; in Error il tooltip non riporta più l'ultimo valore ma
+  "<nome>: Error" e "Error: <motivo>".
+- Plasmoid: già distinto (icona `dialog-error` per Error, `dialog-warning`
+  per Unavailable, "—" e il motivo nella riga di dettaglio, nessuna voce né
+  barra); verificato da un test, nessuna logica di stato in QML.
+- Settings: colonna Stato "Error" con un'icona di errore e il motivo nel
+  tooltip; "Unavailable" senza icona.
+
+### Test
+
+`commandmetricsservice`: programma mancante e non eseguibile → Error;
+exit 1 con stderr lungo e su più righe (prima riga, limitata), exit 2, 70,
+127, 255; output scalare non numerico con `normalizedRange` e snapshot non
+valido → "Invalid output"; timeout senza output tardivo; transizioni
+Error → Available → Unavailable (69, valore conservato) → Available →
+Error con i messaggi cancellati e le righe di log attese (una per cambio).
+`dashboard` (icona, "—", motivo; Unavailable senza icona e con il valore),
+`metricsbarmodel` ("!", tooltip senza valore vecchio, ritorno al valore),
+`backendipc` (error → unavailable → ok via `GetMetrics`, di nuovo error:
+`aqtruncatctl metrics` senza il valore vecchio), `plasmoidlogic` (riga di
+errore senza valore).
+
+Runtime isolato (backend reale, bus privato, script che legge la modalità
+da un file): fail → `error | Command exited with status 3. sensor offline`;
+69 → `unavailable | service not running`; ok → `ok | 42`; fail di nuovo →
+error. Log (`QT_FORCE_STDERR_LOGGING=1`): `failed`, `recovered`, `failed`;
+la seconda riga di stderr (`token=SECRET…`) non compare né nel messaggio né
+nel log.

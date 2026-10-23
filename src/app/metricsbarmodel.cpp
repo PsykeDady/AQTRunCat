@@ -345,6 +345,12 @@ std::optional<Item> MetricsBarModel::custom(const QString &id) const
     }
     item.status = statusFor(source->state);
     item.statusMessage = source->message;
+    if (item.status == Status::Error) {
+        // v2F1.3: the icon shows "!", and the tooltip the reason, never the
+        // last value as if it were current.
+        item.shortValue.clear();
+        item.detail.clear();
+    }
     return item;
 }
 
@@ -400,6 +406,10 @@ std::optional<Item> MetricsBarModel::customItem(const QString &id) const
         // reported): never show an empty or invented value.
         item.status = Status::Unavailable;
         item.statusMessage = metric->formattedValue;
+    }
+    if (item.status == Status::Error) {
+        item.shortValue.clear();
+        item.detail.clear();
     }
     return item;
 }

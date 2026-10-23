@@ -118,6 +118,20 @@ int main(int argc, char **argv)
         std::cout << "done\n";
         return 0;
     }
+    // v2F1.3: what to do comes from a file the test rewrites between runs:
+    // "<exit status>\n<standard output>\n<standard error...>".
+    if (mode == "control" && argc == 3) {
+        std::ifstream input(argv[2]);
+        std::string status, out, line, err;
+        std::getline(input, status);
+        std::getline(input, out);
+        while (std::getline(input, line))
+            err += line + '\n';
+        if (!out.empty())
+            std::cout << out << '\n';
+        std::cerr << err;
+        return number(status.c_str());
+    }
     if (mode == "touch" && argc == 3) {
         std::ofstream output(argv[2]);
         output << "executed";

@@ -312,6 +312,23 @@ TestCase {
         compare(rick.frames[30], "file:///usr/share/aqtruncat/runners/rickroll/rickroll-frame-30.png");
     }
 
+    // v2F1.3: an execution error never shows the last values, only its
+    // reason (the delegate's icon is dialog-error, Unavailable's
+    // dialog-warning); a settled error stays during the next run.
+    function test_errorRowShowsTheReasonNotAValue() {
+        const failing = metric({ id: "custom:/f", category: "custom", kind: "command", title: "Failing", state: "error",
+                                 message: "Command exited with status 1. sensor offline", formattedValue: "42",
+                                 items: [{ title: "Failing", formattedValue: "42", normalized: 0.4 }] });
+        const row = Logic.metricRows([failing])[0];
+        compare(row.state, "error");
+        compare(row.value, "—");
+        compare(row.detail, "Command exited with status 1. sensor offline");
+        compare(row.hasFraction, false);
+        const unavailable = Logic.metricRows([Object.assign({}, failing, { state: "unavailable", message: "not running" })])[0];
+        compare(unavailable.state, "unavailable");
+        compare(unavailable.detail, "not running");
+    }
+
     // A command running again (pending, last values still there) keeps
     // presenting its settled state: the row neither collapses nor flickers.
     function test_settleRefreshes() {

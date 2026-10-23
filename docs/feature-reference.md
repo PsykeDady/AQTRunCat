@@ -124,7 +124,8 @@ displayed number unnecessarily.
 One shared monotonic scheduler drives all command sources. A source runs once
 immediately, then its next run is scheduled from completion; it never overlaps
 with itself and missed intervals are not replayed. Missing/non-executable
-programs are Unavailable. Startup failure, crash, non-zero exit, timeout and
+programs are Unavailable (changed in 2.1.3: they are Error, see
+docs/custom-metrics-commands.md §9). Startup failure, crash, non-zero exit, timeout and
 invalid output are Error. Pending with no result shows the configuration
 skeleton; Pending during refresh retains the last valid value. Each command
 runs as the leader of its own process group: timeout and output overflow kill

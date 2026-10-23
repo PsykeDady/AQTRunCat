@@ -1,7 +1,7 @@
 # Build: packaging/make-source-tarball.sh ~/rpmbuild/SOURCES
 #        rpmbuild -ba packaging/rpm/aqtruncat.spec
 Name:           aqtruncat
-Version:        2.1.2
+Version:        2.1.3
 Release:        1%{?dist}
 Summary:        A Cute Run Cat for Linux
 
@@ -66,6 +66,12 @@ export QT_QPA_PLATFORM=offscreen
 %{_docdir}/%{name}/
 
 %changelog
+* Fri Oct 23 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.1.3-1
+- 2.1.3 (v2F1): Custom Metric execution warnings: a failing command
+  (non-zero exit other than 69, missing or non-executable program, launch
+  failure, timeout, invalid output) is an error with its reason in the
+  Dashboard, Metrics Bar, Plasma widget and Settings, never a stale value.
+
 * Fri Oct 23 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.1.2-1
 - 2.1.2 (v2F1): optional "enabled" flag for Custom Metrics, with a
   checkbox in Settings and in the Plasma widget's configuration; the Plasma

@@ -335,7 +335,12 @@ the AQTRunCat user, without privilege escalation. See
 schema, limits, states and security model. A command may also print a whole
 snapshot object (`"output": "snapshot"`) to show several values in one card,
 and exit with status 69 to report that its data source is absent
-(Unavailable rather than Error).
+(Unavailable rather than Error). Anything else that goes wrong — another
+non-zero exit status, a missing or non-executable program, a timeout, output
+that is not valid — is an error: since 2.1.3 the Dashboard, the Metrics Bar
+(`!`), the Plasma widget and Settings show it as a warning with its reason
+(the exit status and the first line the command wrote on standard error)
+instead of a value, and the next successful run clears it.
 
 Any Custom Metric file may carry `"enabled": false` (since 2.1.2; missing
 means enabled). A disabled metric is never run and is not shown in the

@@ -674,6 +674,12 @@ void DashboardWindow::rebuildCustomMetrics()
 
 QWidget *DashboardWindow::customCard(const aqtruncat::custommetrics::Source &source, int index)
 {
+    QString shownMessage;
+    const aqtruncat::custommetrics::State shownState = presentedState(source, &shownMessage);
+    // v2F1.3: an execution error is a warning on the card, never a value:
+    // the last values give way to "—" (bars hidden, their room kept), the
+    // reason is on the status line. Unavailable (exit 69) keeps its values.
+    const bool failed = shownState == aqtruncat::custommetrics::State::Error;
     auto *card = new QWidget(this);
     card->setObjectName(QStringLiteral("customSource_%1").arg(index));
     auto *cardLayout = new QVBoxLayout(card);
@@ -705,6 +711,15 @@ QWidget *DashboardWindow::customCard(const aqtruncat::custommetrics::Source &sou
     title->setFont(font);
     headingLayout->addWidget(title);
     headingLayout->addStretch();
+    if (failed) {
+        auto *error = new QLabel(headingRow);
+        error->setObjectName(QStringLiteral("customError_%1").arg(index));
+        error->setPixmap(QIcon::fromTheme(QStringLiteral("dialog-error"), style()->standardIcon(QStyle::SP_MessageBoxCritical))
+                             .pixmap(16, 16));
+        error->setToolTip(shownMessage);
+        error->setAccessibleName(tr("Error"));
+        headingLayout->addWidget(error);
+    }
     cardLayout->addWidget(headingRow);
 
     if (source.snapshot) {
@@ -726,7 +741,7 @@ QWidget *DashboardWindow::customCard(const aqtruncat::custommetrics::Source &sou
             }
             rowLayout->addWidget(label(metric.title, row));
             rowLayout->addStretch();
-            auto *value = label(metric.formattedValue, row);
+            auto *value = label(failed ? QStringLiteral("—") : metric.formattedValue, row);
             value->setObjectName(QStringLiteral("customValue_%1_%2").arg(index).arg(itemIndex));
             rowLayout->addWidget(value);
             cardLayout->addWidget(row);
@@ -736,6 +751,12 @@ QWidget *DashboardWindow::customCard(const aqtruncat::custommetrics::Source &sou
                 bar->setObjectName(QStringLiteral("customProgress_%1_%2").arg(index).arg(itemIndex));
                 bar->setAccessibleName(metric.title);
                 setProgress(bar, std::clamp(*metric.normalizedValue, 0.0, 1.0) * 100.0);
+                if (failed) {
+                    QSizePolicy policy = bar->sizePolicy();
+                    policy.setRetainSizeWhenHidden(true);
+                    bar->setSizePolicy(policy);
+                    bar->hide();
+                }
                 cardLayout->addWidget(bar);
             }
             if (!metric.detail.isEmpty()) {
@@ -752,9 +773,6 @@ QWidget *DashboardWindow::customCard(const aqtruncat::custommetrics::Source &sou
         }
     }
 
-    QString shownMessage;
-    const aqtruncat::custommetrics::State shownState = presentedState(source, &shownMessage);
-
     QString footer;
     switch (shownState) {
     case aqtruncat::custommetrics::State::Available:
@@ -769,12 +787,13 @@ QWidget *DashboardWindow::customCard(const aqtruncat::custommetrics::Source &sou
         footer = tr("Unavailable");
         break;
     case aqtruncat::custommetrics::State::Error:
-        footer = tr("Error");
+        footer = shownMessage.isEmpty() ? tr("Error") : tr("Error: %1").arg(shownMessage);
         break;
     }
     auto *status = label(footer, card);
     status->setObjectName(QStringLiteral("customStatus_%1").arg(index));
     status->setToolTip(shownMessage);
+    status->setWordWrap(failed);
     cardLayout->addWidget(status);
     return card;
 }

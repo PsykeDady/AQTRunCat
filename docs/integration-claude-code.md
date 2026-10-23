@@ -618,7 +618,8 @@ non viene mai sovrascritto né rimosso; `enable --force` lo sostituisce solo
 su richiesta esplicita. Le altre Custom Metrics e le impostazioni non vengono
 toccate. Se AQTRunCat viene reinstallato in un altro prefisso, la card
 diventa Unavailable (“Executable is not available”): basta ripetere
-`enable`.
+`enable`. (Dalla 2.1.3 è un errore, “Executable not found”: vedi
+`docs/custom-metrics-commands.md` §9.)
 
 ### B.8 Dashboard, Metrics Bar, Settings
 

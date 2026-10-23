@@ -180,8 +180,10 @@ void printMetric(const QJsonObject &metric)
 {
     QString value = metric.value(QStringLiteral("formattedValue")).toString();
     const QString state = stateText(metric);
-    const QJsonArray items = metric.value(QStringLiteral("items")).toArray();
-    if (!items.isEmpty())
+    // v2F1.3: a failing source's last values are not current: only the error.
+    const bool failed = metric.value(QStringLiteral("state")) == QLatin1String("error");
+    const QJsonArray items = failed ? QJsonArray() : metric.value(QStringLiteral("items")).toArray();
+    if (!items.isEmpty() || failed)
         value.clear(); // multi-value: the items speak
     if (!state.isEmpty())
         value = value.isEmpty() ? QStringLiteral("(%1)").arg(state) : value + QStringLiteral("  (%1)").arg(state);

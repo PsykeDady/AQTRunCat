@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
+#include <QLoggingCategory>
 #include <QProcess>
 #include <QSet>
 
@@ -20,7 +21,26 @@
 
 using namespace aqtruncat::custommetrics;
 
+// v2F1.3: one line when a source starts failing (or fails differently) and
+// one when it recovers; never per run, never the command's output.
+Q_STATIC_LOGGING_CATEGORY(lcCustomMetrics, "aqtruncat.custommetrics", QtInfoMsg)
+
 namespace {
+// The first non-empty stderr line, bounded: enough to say why, without
+// carrying a script's whole diagnostic output into every frontend.
+constexpr qsizetype MaxDiagnosticCharacters = 200;
+
+QString diagnosticLine(const QByteArray &standardError)
+{
+    for (const QString &line : QString::fromUtf8(standardError).split(u'\n')) {
+        const QString trimmed = line.trimmed();
+        if (!trimmed.isEmpty())
+            return trimmed.size() > MaxDiagnosticCharacters
+                ? trimmed.left(MaxDiagnosticCharacters - 1) + QChar(0x2026) : trimmed;
+    }
+    return {};
+}
+
 constexpr int DebounceMilliseconds = 100;
 constexpr int RetryMilliseconds = 200;
 constexpr int RetryCount = 3;
@@ -46,6 +66,9 @@ struct CustomMetricsService::CommandJob {
     qint64 nextDueMilliseconds = 0;
     qint64 deadlineMilliseconds = 0;
     QString forcedError;
+    // The last result of this job, for logging transitions only.
+    State lastOutcome = State::Pending;
+    QString lastMessage;
 };
 
 CustomMetricsService::CustomMetricsService(aqtruncat::AppSettings *settings,
@@ -492,15 +515,17 @@ void CustomMetricsService::startCommand(const QString &id)
     if (found == m_commandJobs.end() || found->second->process)
         return;
     CommandJob &job = *found->second;
+    // v2F1.3: a program that cannot be run is an execution error, not the
+    // intentional Unavailable of exit status 69.
     const QFileInfo executable(job.definition.executable);
     if (!executable.exists() || !executable.isFile()) {
-        failCommand(id, State::Unavailable,
-                    tr("Executable is not available: %1").arg(job.definition.executable));
+        failCommand(id, State::Error,
+                    tr("Executable not found: %1").arg(job.definition.executable));
         return;
     }
     if (!executable.isExecutable()) {
-        failCommand(id, State::Unavailable,
-                    tr("File is not executable: %1").arg(job.definition.executable));
+        failCommand(id, State::Error,
+                    tr("Permission denied: %1 is not executable.").arg(job.definition.executable));
         return;
     }
 
@@ -579,16 +604,17 @@ void CustomMetricsService::finishCommand(const QString &id, int exitCode, QProce
             error = diagnostic.left(512);
     } else if (error.isEmpty() && exitCode != 0) {
         error = tr("Command exited with status %1.").arg(exitCode);
-        const QString diagnostic = QString::fromUtf8(job.standardError).trimmed();
+        const QString diagnostic = diagnosticLine(job.standardError);
         if (!diagnostic.isEmpty())
-            error += QStringLiteral(" ") + diagnostic.left(512);
+            error += QStringLiteral(" ") + diagnostic;
     }
 
     std::optional<Snapshot> snapshot;
     if (error.isEmpty()) {
         const ScalarResult parsed = snapshotFromCommandOutput(job.definition, job.standardOutput);
         snapshot = parsed.snapshot;
-        error = parsed.error;
+        if (!parsed.error.isEmpty())
+            error = tr("Invalid output: %1").arg(parsed.error);
     }
     job.process->disconnect(this);
     job.process.reset();
@@ -597,11 +623,9 @@ void CustomMetricsService::finishCommand(const QString &id, int exitCode, QProce
     if (Source *source = sourceFor(id)) {
         if (snapshot) {
             source->snapshot = std::move(snapshot);
-            source->state = State::Available;
-            source->message.clear();
+            setOutcome(*source, State::Available, {}); // clears the previous warning
         } else {
-            source->state = failure;
-            source->message = error;
+            setOutcome(*source, failure, error);
         }
     }
     publish();
@@ -615,12 +639,29 @@ void CustomMetricsService::failCommand(const QString &id, State state, const QSt
         return;
     found->second->nextDueMilliseconds = m_clock.elapsed()
         + qint64(found->second->definition.intervalSeconds) * 1000;
-    if (Source *source = sourceFor(id)) {
-        source->state = state;
-        source->message = message;
-    }
+    if (Source *source = sourceFor(id))
+        setOutcome(*source, state, message);
     publish();
     scheduleCommandWake();
+}
+
+void CustomMetricsService::setOutcome(Source &source, State state, const QString &message)
+{
+    // The state before this run started (it is Pending while running).
+    const auto job = m_commandJobs.find(source.id);
+    const State before = job != m_commandJobs.end() ? job->second->lastOutcome : source.state;
+    const QString beforeMessage = job != m_commandJobs.end() ? job->second->lastMessage : source.message;
+    const QString name = source.configuredId.isEmpty() ? source.path : source.configuredId;
+    if (state == State::Error && (before != State::Error || beforeMessage != message))
+        qCWarning(lcCustomMetrics).noquote() << QStringLiteral("custom metric \"%1\" failed: %2").arg(name, message);
+    else if (state != State::Error && before == State::Error)
+        qCInfo(lcCustomMetrics).noquote() << QStringLiteral("custom metric \"%1\" recovered").arg(name);
+    source.state = state;
+    source.message = message;
+    if (job != m_commandJobs.end()) {
+        job->second->lastOutcome = state;
+        job->second->lastMessage = message;
+    }
 }
 
 void CustomMetricsService::disable(Source &source, const QString &title, const std::optional<QString> &symbol,
