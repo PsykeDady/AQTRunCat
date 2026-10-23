@@ -212,6 +212,42 @@ private slots:
         QVERIFY(error.contains(QStringLiteral("invalid JSON")));
         QVERIFY(settings.customMetricFiles().isEmpty());
     }
+
+    // v2F1.2: a snapshot file with "enabled": false is listed without values
+    // (never presented); the flag is written by setEnabled and applied at once.
+    void disabledSnapshotIsListedWithoutValues()
+    {
+        QTemporaryDir temporary;
+        const QString discovery = temporary.filePath(QStringLiteral("metrics"));
+        const QString file = discovery + QStringLiteral("/fixture.json");
+        QByteArray disabled = snapshot(QStringLiteral("5"));
+        disabled.insert(1, "\"enabled\":false,");
+        writeFile(file, disabled);
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
+        CustomMetricsService service(&settings, discovery);
+        QString error;
+        QVERIFY2(service.registerFile(file, &error), qPrintable(error)); // a disabled file is a valid one
+        service.start();
+        QCOMPARE(service.sources().size(), 1);
+        QVERIFY(!service.sources().first().enabled);
+        QCOMPARE(service.sources().first().snapshot->title, QStringLiteral("Fixture")); // name only
+        QVERIFY(service.sources().first().snapshot->metrics.isEmpty());
+        QCOMPARE(service.sources().first().state, State::Unavailable);
+
+        QVERIFY2(service.setEnabled(file, true, &error), qPrintable(error));
+        QVERIFY(service.sources().first().enabled);
+        QCOMPARE(service.sources().first().state, State::Available);
+        QCOMPARE(service.sources().first().snapshot->metrics.first().formattedValue, QStringLiteral("5"));
+
+        // A producer rewriting the file without the flag: enabled (missing = true).
+        atomicWrite(file, snapshot(QStringLiteral("6")));
+        QTRY_COMPARE(service.sources().first().snapshot->metrics.first().formattedValue, QStringLiteral("6"));
+        QVERIFY2(service.setEnabled(file, false, &error), qPrintable(error));
+        QVERIFY(service.sources().first().snapshot->metrics.isEmpty());
+        QFile stored(file);
+        QVERIFY(stored.open(QIODevice::ReadOnly));
+        QVERIFY(stored.readAll().startsWith("{\"enabled\": false,\"title\":\"Fixture\""));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCustomMetricsService)

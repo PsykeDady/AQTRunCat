@@ -51,6 +51,7 @@ public:
     QString discoveryDirectory() const override { return m_discoveryDirectory; }
     bool registerFile(const QString &path, QString *error = nullptr) override;
     void unregisterFile(const QString &path) override;
+    bool setEnabled(const QString &path, bool enabled, QString *error = nullptr) override;
 
 signals:
     void systemSnapshot(const aqtruncat::metrics::SystemMetricsSnapshot &snapshot);

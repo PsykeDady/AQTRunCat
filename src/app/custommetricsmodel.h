@@ -21,6 +21,10 @@ public:
     virtual QString discoveryDirectory() const = 0;
     virtual bool registerFile(const QString &path, QString *error = nullptr) = 0;
     virtual void unregisterFile(const QString &path) = 0;
+    // v2F1.2: writes "enabled" into the source's configuration file; the
+    // engine applies it at once (a disabled source stops running and leaves
+    // the presentation surfaces). False with *error when it cannot.
+    virtual bool setEnabled(const QString &path, bool enabled, QString *error = nullptr) = 0;
 
 signals:
     void sourcesChanged(const QList<aqtruncat::custommetrics::Source> &sources);

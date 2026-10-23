@@ -141,6 +141,30 @@ void CustomMetricsService::unregisterFile(const QString &path)
         reload(true);
 }
 
+bool CustomMetricsService::setEnabled(const QString &path, bool enabled, QString *error)
+{
+    const QString identity = identityFor(path);
+    const auto source = std::find_if(m_sources.cbegin(), m_sources.cend(), [&](const Source &entry) {
+        return entry.id == identity || entry.path == absolutePath(path);
+    });
+    if (source == m_sources.cend()) {
+        if (error)
+            *error = tr("%1 is not a known Custom Metrics source.").arg(path);
+        return false;
+    }
+    if (!source->integration.isEmpty()) {
+        if (error)
+            *error = tr("%1 belongs to an integration: turn it on or off in Integrations.").arg(path);
+        return false;
+    }
+    if (!writeEnabled(source->path, enabled, error))
+        return false;
+    // Applied now, not on the file watcher's next notification.
+    if (m_active)
+        reload(true);
+    return true;
+}
+
 void CustomMetricsService::start()
 {
     if (m_active)
@@ -263,11 +287,19 @@ void CustomMetricsService::reload(bool finalAttempt)
             const CommandParseResult command = parseCommandFile(candidate.path);
             if (command.recognized) {
                 source.type = SourceType::Command;
-                if (command.definition) {
+                if (command.definition && !command.definition->enabled) {
+                    // Disabled: no job (a running one is stopped by
+                    // syncCommandJobs below), no values.
+                    source.configuredId = command.definition->id;
+                    source.integration = command.definition->integration;
+                    disable(source, command.definition->title, command.definition->legacySymbol,
+                            command.definition->icon);
+                } else if (command.definition) {
                     source.configuredId = command.definition->id;
                     source.integration = command.definition->integration;
                     commandDefinitions.append(*command.definition);
-                    if (previous == m_sources.cend() || previous->type != SourceType::Command) {
+                    if (previous == m_sources.cend() || previous->type != SourceType::Command
+                        || !previous->enabled) {
                         Snapshot skeleton;
                         skeleton.title = command.definition->title;
                         skeleton.symbol = command.definition->legacySymbol;
@@ -285,7 +317,9 @@ void CustomMetricsService::reload(bool finalAttempt)
                 }
             } else {
                 const ParseResult parsed = parseFile(candidate.path);
-                if (parsed.snapshot) {
+                if (parsed.snapshot && !parsed.enabled) {
+                    disable(source, parsed.snapshot->title, parsed.snapshot->symbol, parsed.snapshot->icon);
+                } else if (parsed.snapshot) {
                     source.snapshot = parsed.snapshot;
                     source.state = State::Available;
                 } else {
@@ -311,7 +345,7 @@ void CustomMetricsService::reload(bool finalAttempt)
     else
         m_retry.stop();
     if (hasDegradedExplicitSource() || std::any_of(m_sources.cbegin(), m_sources.cend(), [](const Source &s) {
-            return s.type == SourceType::Snapshot && s.state == State::Error;
+            return s.type == SourceType::Snapshot && s.enabled && s.state == State::Error;
         }))
         m_recovery.start();
     else
@@ -366,7 +400,7 @@ void CustomMetricsService::rebuildWatches()
 bool CustomMetricsService::hasDegradedExplicitSource() const
 {
     return std::any_of(m_sources.cbegin(), m_sources.cend(), [](const Source &source) {
-        return source.type == SourceType::Snapshot && source.explicitlyRegistered
+        return source.type == SourceType::Snapshot && source.explicitlyRegistered && source.enabled
             && source.state != State::Available;
     });
 }
@@ -587,6 +621,21 @@ void CustomMetricsService::failCommand(const QString &id, State state, const QSt
     }
     publish();
     scheduleCommandWake();
+}
+
+void CustomMetricsService::disable(Source &source, const QString &title, const std::optional<QString> &symbol,
+                                   const std::optional<IconReference> &icon)
+{
+    // Its name and icon (for Settings and the widget's configuration), no
+    // values: the same skeleton as a command waiting for its first result.
+    source.enabled = false;
+    Snapshot skeleton;
+    skeleton.title = title;
+    skeleton.symbol = symbol;
+    skeleton.icon = icon;
+    source.snapshot = std::move(skeleton);
+    source.state = State::Unavailable;
+    source.message = tr("Disabled.");
 }
 
 Source *CustomMetricsService::sourceFor(const QString &id)

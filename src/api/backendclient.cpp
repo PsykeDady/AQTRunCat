@@ -271,6 +271,20 @@ bool BackendClient::registerFile(const QString &path, QString *error)
     return true;
 }
 
+bool BackendClient::setEnabled(const QString &path, bool enabled, QString *error)
+{
+    QDBusMessage call = QDBusMessage::createMethodCall(aqtruncat::api::ServiceName, aqtruncat::api::ObjectPath,
+                                                       aqtruncat::api::InterfaceName, QStringLiteral("SetCustomMetricEnabled"));
+    call << path << enabled;
+    const QDBusMessage reply = m_options.connection.call(call, QDBus::Block, 10000);
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        if (error)
+            *error = reply.errorMessage();
+        return false;
+    }
+    return true;
+}
+
 void BackendClient::unregisterFile(const QString &path)
 {
     QDBusMessage call = QDBusMessage::createMethodCall(aqtruncat::api::ServiceName, aqtruncat::api::ObjectPath,

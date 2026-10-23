@@ -291,7 +291,7 @@ private slots:
         QCOMPARE(distribution.value(QStringLiteral("formattedValue")).toString(), QStringLiteral("Arch Linux"));
         QCOMPARE(distribution.value(QStringLiteral("data")).toObject().value(QStringLiteral("id")).toString(), QStringLiteral("arch"));
         QVERIFY(distribution.value(QStringLiteral("value")).isNull());
-        QCOMPARE(api::SchemaVersion, 2);
+        QVERIFY(api::SchemaVersion >= 2); // F5 fields since schema 2
     }
 
     void f5SnapshotRoundTrips()
@@ -431,6 +431,26 @@ private slots:
         QVERIFY(!back.snapshot);
         QCOMPARE(back.state, custommetrics::State::Error);
         QCOMPARE(back.message, QStringLiteral("invalid JSON"));
+    }
+
+    // Schema 3 (2.1.2): "enabled" on Custom Metrics, both ways; a payload
+    // without it (an older backend) means enabled.
+    void customMetricEnabledFlag()
+    {
+        QCOMPARE(api::SchemaVersion, 3);
+        custommetrics::Source off;
+        off.id = off.path = QStringLiteral("/data/off.json");
+        off.enabled = false;
+        off.state = custommetrics::State::Unavailable;
+        off.message = QStringLiteral("Disabled.");
+        QJsonObject metric = api::customMetric(off);
+        QCOMPARE(metric.value(QStringLiteral("enabled")), QJsonValue(false));
+        QCOMPARE(metric.value(QStringLiteral("state")).toString(), QStringLiteral("unavailable"));
+        QVERIFY(!api::sourcesFromMetrics(QJsonArray{metric}).first().enabled);
+        off.enabled = true;
+        QCOMPARE(api::customMetric(off).value(QStringLiteral("enabled")), QJsonValue(true));
+        metric.remove(QStringLiteral("enabled"));
+        QVERIFY(api::sourcesFromMetrics(QJsonArray{metric}).first().enabled);
     }
 
     void settingsObjectHasEveryExposedKey()

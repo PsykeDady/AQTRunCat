@@ -583,8 +583,14 @@ QString settledKey(const aqtruncat::custommetrics::Source &source)
 
 } // namespace
 
-void DashboardWindow::updateCustomMetrics(const QList<aqtruncat::custommetrics::Source> &sources)
+void DashboardWindow::updateCustomMetrics(const QList<aqtruncat::custommetrics::Source> &all)
 {
+    // v2F1.2: a disabled source is not presented (Settings still lists it).
+    QList<aqtruncat::custommetrics::Source> sources;
+    for (const aqtruncat::custommetrics::Source &source : all) {
+        if (source.enabled)
+            sources.append(source);
+    }
     // Tracked on every update, also while hidden, so a deferred rebuild
     // presents the same state a visible Dashboard would.
     QHash<QString, SettledState> settled;
@@ -607,6 +613,42 @@ void DashboardWindow::updateCustomMetrics(const QList<aqtruncat::custommetrics::
 void DashboardWindow::rebuildCustomMetrics()
 {
     m_customDirty = false;
+    // Integrations first, as in Settings; each keeps the service's order.
+    // Card indexes run across both sections.
+    QList<const aqtruncat::custommetrics::Source *> ordered;
+    for (const bool official : {true, false}) {
+        for (const aqtruncat::custommetrics::Source &source : std::as_const(m_customSources)) {
+            if (source.integration.isEmpty() != official)
+                ordered.append(&source);
+        }
+    }
+    bool sameList = ordered.size() == m_customCards.size();
+    for (int i = 0; sameList && i < ordered.size(); ++i)
+        sameList = m_customCards.at(i).source == settledKey(*ordered.at(i))
+            && m_customCards.at(i).official == !ordered.at(i)->integration.isEmpty();
+    if (sameList) {
+        // Command sources republish on every run: only the cards that show
+        // something new are replaced, in place; the window does not reflow
+        // or flicker, and the scroll position stays.
+        const bool updates = m_scroll->widget()->updatesEnabled();
+        m_scroll->widget()->setUpdatesEnabled(false);
+        for (int i = 0; i < ordered.size(); ++i) {
+            CustomCard &card = m_customCards[i];
+            const QString key = customCardKey(*ordered.at(i));
+            if (key == card.key)
+                continue;
+            QWidget *replacement = customCard(*ordered.at(i), i);
+            QVBoxLayout *layout = card.official ? m_integrationsLayout : m_customLayout;
+            delete layout->replaceWidget(card.widget, replacement);
+            delete card.widget;
+            card.widget = replacement;
+            card.key = key;
+        }
+        m_scroll->widget()->setUpdatesEnabled(updates);
+        return;
+    }
+
+    m_customCards.clear();
     for (QVBoxLayout *layout : {m_integrationsLayout, m_customLayout}) {
         while (QLayoutItem *item = layout->takeAt(0)) {
             if (QWidget *widget = item->widget())
@@ -614,18 +656,15 @@ void DashboardWindow::rebuildCustomMetrics()
             delete item;
         }
     }
-    // Integrations first, as in Settings; each keeps the service's order.
-    // Card indexes run across both sections.
     int index = 0;
     int integrations = 0;
     int custom = 0;
-    for (const bool official : {true, false}) {
-        for (const aqtruncat::custommetrics::Source &source : std::as_const(m_customSources)) {
-            if (source.integration.isEmpty() == official)
-                continue;
-            (official ? m_integrationsLayout : m_customLayout)->addWidget(customCard(source, index++));
-            ++(official ? integrations : custom);
-        }
+    for (const aqtruncat::custommetrics::Source *source : std::as_const(ordered)) {
+        const bool official = !source->integration.isEmpty();
+        QWidget *widget = customCard(*source, index++);
+        (official ? m_integrationsLayout : m_customLayout)->addWidget(widget);
+        m_customCards.append({settledKey(*source), official, customCardKey(*source), widget});
+        ++(official ? integrations : custom);
     }
     m_integrationsHeader->setVisible(integrations > 0);
     m_integrationsContainer->setVisible(integrations > 0);
@@ -713,17 +752,8 @@ QWidget *DashboardWindow::customCard(const aqtruncat::custommetrics::Source &sou
         }
     }
 
-    // A refresh with a previous valid value stays Pending internally but
-    // keeps presenting the last settled state; only the first execution
-    // (no valid value yet) shows "Waiting…".
-    aqtruncat::custommetrics::State shownState = source.state;
-    QString shownMessage = source.message;
-    if (source.state == aqtruncat::custommetrics::State::Pending && hasValidCustomValue(source)) {
-        const auto settled = m_customSettled.constFind(settledKey(source));
-        shownState = settled != m_customSettled.cend() ? settled->state
-                                                       : aqtruncat::custommetrics::State::Available;
-        shownMessage = settled != m_customSettled.cend() ? settled->message : QString();
-    }
+    QString shownMessage;
+    const aqtruncat::custommetrics::State shownState = presentedState(source, &shownMessage);
 
     QString footer;
     switch (shownState) {
@@ -747,6 +777,39 @@ QWidget *DashboardWindow::customCard(const aqtruncat::custommetrics::Source &sou
     status->setToolTip(shownMessage);
     cardLayout->addWidget(status);
     return card;
+}
+
+aqtruncat::custommetrics::State DashboardWindow::presentedState(const aqtruncat::custommetrics::Source &source,
+                                                                QString *message) const
+{
+    // A refresh with a previous valid value stays Pending internally but
+    // keeps presenting the last settled state; only the first execution
+    // (no valid value yet) shows "Waiting…".
+    if (source.state == aqtruncat::custommetrics::State::Pending && hasValidCustomValue(source)) {
+        const auto settled = m_customSettled.constFind(settledKey(source));
+        *message = settled != m_customSettled.cend() ? settled->message : QString();
+        return settled != m_customSettled.cend() ? settled->state : aqtruncat::custommetrics::State::Available;
+    }
+    *message = source.message;
+    return source.state;
+}
+
+QString DashboardWindow::customCardKey(const aqtruncat::custommetrics::Source &source) const
+{
+    QString message;
+    const aqtruncat::custommetrics::State state = presentedState(source, &message);
+    QStringList parts{source.path, QString::number(int(state)), message};
+    if (source.snapshot) {
+        const aqtruncat::custommetrics::Snapshot &snapshot = *source.snapshot;
+        parts << snapshot.title << snapshot.symbol.value_or(QString())
+              << (snapshot.icon ? snapshot.icon->resolvedValue : QString())
+              << snapshot.lastUpdatedDate.toString(Qt::ISODateWithMs);
+        for (const aqtruncat::custommetrics::Item &item : snapshot.metrics)
+            parts << item.title << item.formattedValue << item.detail
+                  << (item.normalizedValue ? QString::number(*item.normalizedValue) : QStringLiteral("-"))
+                  << QString::number(item.warning);
+    }
+    return parts.join(QChar(0x1f));
 }
 
 void DashboardWindow::toggleVisible()

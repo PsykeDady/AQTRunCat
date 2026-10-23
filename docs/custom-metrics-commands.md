@@ -238,3 +238,127 @@ arrivato con la metrica Claude Code. F2 ha aggiunto `source.output:
 "snapshot"` e l'exit status 69 → Unavailable come estensioni generiche e
 retrocompatibili; il resto di questo documento descrive F1 così come è stato
 chiuso. Vedi `docs/integration-claude-code.md` §6.
+
+## 8. v2F1.2 — `enabled` facoltativo (2.1.2)
+
+Stato: **completata** il 2026-10-23, versione **2.1.2** (Custom Metrics v3,
+primo passo funzionale). Branch `feature/v2/f2`.
+
+### Schema
+
+Campo facoltativo di primo livello, in entrambi i tipi di sorgente (file
+snapshot e configurazione Command / `metric.json`):
+
+```json
+{ "id": "example-metric", "title": "Example Metric", "enabled": false, "source": { "type": "command", "...": "..." } }
+```
+
+- Assente = `true`: i file esistenti restano validi e non vengono
+  riscritti.
+- `true` / `false`: abilitata / disabilitata.
+- Qualsiasi altro tipo (`"false"`, `0`, `null`) è un errore di validazione
+  come gli altri campi: `field "enabled" must be a boolean`; per una
+  configurazione Command resta un errore terminale (mai interpretata come
+  snapshot).
+
+### Backend
+
+`CustomMetricsService` resta l'unica fonte di verità.
+
+- Una sorgente disabilitata resta nell'elenco (`Source::enabled = false`),
+  con stato Unavailable, messaggio "Disabled." e uno snapshot ridotto a
+  titolo e icona (come un comando in attesa del primo risultato), così
+  Settings e la configurazione del Plasmoid mostrano il suo nome ("D20") e
+  non quello del file ("metric"); nessun valore, niente valori vecchi né
+  zero inventati.
+- Command disabilitato: nessun job, quindi nessuna pianificazione, nessuna
+  prima esecuzione, nessun processo. Se viene disabilitato mentre il comando
+  gira, `syncCommandJobs` lo ferma con le regole esistenti (SIGTERM al
+  gruppo, poi SIGKILL, segnali scollegati): un risultato tardivo non può
+  rientrare.
+- Snapshot disabilitato: il file viene letto solo per conoscere il flag;
+  lo snapshot non viene tenuto. Una sorgente disabilitata non attiva il
+  timer di recupero dei file guasti.
+- Riattivato: nuovo job eseguito subito (stato Pending "Waiting for the
+  first command result."), poi la cadenza normale; lo snapshot torna
+  Available alla rilettura. Errori, timeout, exit 69 → Unavailable invariati.
+
+### Scrittura e applicazione
+
+- `custommetrics::writeEnabled()` modifica **solo** il flag: sostituisce il
+  valore di primo livello esistente oppure inserisce `"enabled": …` come
+  prima chiave con l'indentazione della prima chiave esistente. Ordine delle
+  chiavi, formattazione e campi sconosciuti restano byte per byte; il testo
+  modificato viene verificato (deve dare lo stesso oggetto più il flag) e poi
+  sostituisce il file con `QSaveFile` (file temporaneo nella stessa
+  cartella, permessi del file mantenuti, attraverso un symlink verso il suo
+  target). File illeggibile, non oggetto JSON o cartella non scrivibile: errore
+  leggibile, file intatto. Nessun privilegio.
+- `CustomMetricsService::setEnabled()` scrive e ricarica subito (lo stesso
+  `reload` di registrazione/rimozione: i job con definizione invariata non
+  ripartono), senza aspettare il file watcher; un file modificato a mano viene
+  comunque applicato dal watcher come prima. Non è il rescan manuale della
+  2.1.6.
+- D-Bus (schema 3): `SetCustomMetricEnabled(s path, b enabled)` e il campo
+  `enabled` nelle metriche `custom`/`integration`
+  (`docs/backend-dbus-api-cli.md` §5). Le sorgenti delle integrazioni si
+  accendono e spengono in Integrations: il metodo le rifiuta.
+
+### Frontend
+
+- Settings (tray): nella lista Custom Metrics la prima colonna è il nome
+  della metrica (il titolo del file; il nome del file solo se manca, ad
+  esempio per un file non valido) con la casella (selezionata = abilitata,
+  anche quando il campo manca); poi file, origine e stato ("Disabled").
+  La modifica passa dal backend; se il file non si può scrivere compare un
+  avviso con il motivo e la riga torna allo stato reale.
+- Configurazione del Plasmoid: la stessa casella accanto a ogni file (nascosta
+  con un backend senza il campo).
+- Dashboard, Metrics Bar e popup del Plasmoid non mostrano le sorgenti
+  disabilitate. Una selezione della Metrics Bar resta salvata (in Settings
+  "Custom — disabled") e la voce torna al suo posto quando la sorgente viene
+  riabilitata; una sorgente disabilitata non selezionata non viene offerta.
+
+### Correzioni successive (stessa 2.1.2)
+
+- Popup del Plasmoid: quando una metrica compariva o spariva (abilitata,
+  disabilitata, file aggiunto o tolto) `Logic.syncModel` svuotava e
+  ricostruiva il modello e la lista tornava in cima. Ora rimuove, sposta e
+  inserisce le singole righe: la posizione di scorrimento resta (provato con
+  backend reale e lista scorsa in fondo: prima 396 → −4, ora resta in fondo).
+  Difetto presente dalla F4.2.
+- Popup del Plasmoid, secondo difetto (segnalato dopo la prima correzione):
+  a ogni esecuzione di un comando la metrica tornava "pending" e la riga
+  nascondeva valori, barre e voci ("Command is running."), poi li rimostrava:
+  la lista cambiava altezza (misurato 1212 → 1066 → 1212 px con una metrica a
+  tre voci) e scorreva. Ora `Logic.settleRefreshes` fa come la Dashboard Qt:
+  una sorgente che ha già dei valori continua a mostrare l'ultimo stato
+  stabile (con il suo messaggio) durante il refresh; solo una sorgente senza
+  ancora valori mostra "pending". Altezza costante (1212 px) nella stessa
+  prova.
+- Dashboard Qt: a ogni esecuzione di un comando tutte le card Custom Metrics
+  venivano distrutte e ricreate (sfarfallio). Ora, se l'elenco delle sorgenti
+  è lo stesso, viene sostituita solo la card il cui contenuto mostrato è
+  cambiato, al suo posto e con il ridisegno sospeso; un refresh che mostra lo
+  stesso valore non tocca nulla.
+
+### Limite
+
+Un producer esterno che riscrive un file snapshot senza `enabled` lo
+riabilita (campo assente = `true`): il flag vive nel file. Per i file
+prodotti da altri programmi conviene che sia il producer a scriverlo.
+
+### Test
+
+`commandmetric` (`enabledFlag`: assente, true, false, stringa, numero,
+null), `custommetric` (flag degli snapshot, `writeEnabled` che conserva il
+resto del file, i permessi e i symlink, rifiuti senza danni),
+`commandmetricsservice` (disabilitato mai eseguito; disattivazione con
+processo in corso → processo terminato, nessun risultato tardivo;
+riattivazione; rifiuti: sorgente sconosciuta, cartella non scrivibile,
+integrazione), `custommetricsservice` (snapshot disabilitato e producer che
+lo riscrive), `settingswindow` (casella, file aggiornato, Metrics Bar,
+errore di scrittura), `dashboard`, `metricsbarmodel`, `apischema` (schema
+3, andata e ritorno, payload senza campo), `backendipc` (metodo D-Bus,
+`GetMetrics` e `MetricsChanged`, errori), `plasmoidlogic`, `plasmoidpackage`
+(metodo ammesso).

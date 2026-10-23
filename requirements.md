@@ -15,7 +15,7 @@ normative summaries of the 1.x features are in
 [docs/feature-reference.md](docs/feature-reference.md).
 
     2.0.0  Consolidation baseline (1.x complete)            COMPLETE
-    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       IN PROGRESS (2.1.1 done)
+    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       IN PROGRESS (2.1.2 done)
     v2F2   Independent Autostart + new runner   2.2.x       PLANNED
     v2F3   Standalone Settings + new runner     2.3.x       PLANNED
     v2F4   Dependency Advisor + new runner      2.4.x       PLANNED
@@ -113,8 +113,8 @@ Requirements for every v2 runner:
 
 ## v2F1 — Custom Metrics v3 + Rickroll
 
-Status: IN PROGRESS. Version family **2.1.x**; current version **2.1.1**
-(2.1.0 and 2.1.1 COMPLETE, 2.1.2–2.1.7 PLANNED).
+Status: IN PROGRESS. Version family **2.1.x**; current version **2.1.2**
+(2.1.0, 2.1.1 and 2.1.2 COMPLETE, 2.1.3–2.1.7 PLANNED).
 
 Extends Custom Metrics v2 (command and snapshot sources,
 [docs/custom-metrics-commands.md](docs/custom-metrics-commands.md)) without
@@ -161,6 +161,9 @@ runners), metadata in `data/runners/rickroll/`; Cat stays the default.
 
 ### 2.1.2 — Optional `enabled` Flag
 
+Status: COMPLETE (2026-10-23). Record:
+[docs/custom-metrics-commands.md](docs/custom-metrics-commands.md) §8.
+
 - An optional boolean `enabled` in a Custom Metric's JSON. Missing means
   `true` (backward compatible).
 - `enabled: false` disables execution (no command is run, no schedule) and
@@ -169,6 +172,18 @@ runners), metadata in `data/runners/rickroll/`; Cat stays the default.
   add the `enabled` field to the existing JSON; it preserves every
   unrelated field and writes atomically.
 - Changes apply without restarting the application.
+
+As implemented: `enabled` is read from snapshot files and command
+configurations (a non-boolean is a validation error). A disabled source
+stays listed by the backend without values (Unavailable, "Disabled.") and
+never runs; disabling stops an in-flight command. The checkbox (tray
+Settings and Plasmoid configuration) goes through the backend: D-Bus
+`SetCustomMetricEnabled` writes only the flag (other bytes unchanged,
+atomic replace) and applies it at once; payloads carry `enabled` (API
+schema 3, additive). Dashboard, Metrics Bar and Plasmoid popup leave
+disabled sources out; a Metrics Bar selection is kept. Integrations'
+sources are switched in Integrations, not here. A producer that rewrites a
+snapshot file without the flag re-enables it.
 
 ### 2.1.3 — Execution Warnings
 

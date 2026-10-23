@@ -8,6 +8,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <unistd.h>
+
 using namespace aqtruncat::custommetrics;
 
 namespace {
@@ -192,6 +194,107 @@ private slots:
                             {QStringLiteral("metrics"), QJsonArray{}},
                             {QStringLiteral("lastUpdatedDate"), QStringLiteral("2026-01-01T00:00:00Z")}};
         QVERIFY(!parseJson(QJsonDocument(tooLong).toJson()).snapshot);
+    }
+
+    // v2F1.2: the snapshot file's optional top-level "enabled".
+    void snapshotEnabledFlag()
+    {
+        QJsonObject object = QJsonDocument::fromJson(validJson()).object();
+        ParseResult result = parseJson(QJsonDocument(object).toJson());
+        QVERIFY(result.snapshot);
+        QVERIFY(result.enabled); // omitted: enabled, the M6/v2 files are unchanged
+        object.insert(QStringLiteral("enabled"), false);
+        result = parseJson(QJsonDocument(object).toJson());
+        QVERIFY(result.snapshot);
+        QVERIFY(!result.enabled);
+        object.insert(QStringLiteral("enabled"), QStringLiteral("no"));
+        result = parseJson(QJsonDocument(object).toJson());
+        QVERIFY(!result.snapshot);
+        QCOMPARE(result.error, QStringLiteral("field \"enabled\" must be a boolean"));
+    }
+
+    // writeEnabled changes only the flag: key order, formatting and unknown
+    // fields stay byte for byte; the key is inserted first when missing.
+    void writeEnabledKeepsTheRestOfTheFile()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("metric.json"));
+        const QByteArray original =
+            "{\n    \"title\": \"T\",\n    \"source\": {\"type\": \"command\", \"enabled\": \"inner\"},\n"
+            "    \"zeta\": [1, {\"a\": \"}\\\"{\"}],\n    \"alpha\": null\n}\n";
+        auto write = [&](const QByteArray &bytes) {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            file.write(bytes);
+        };
+        auto read = [&] {
+            QFile file(path);
+            return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+        };
+        write(original);
+        QVERIFY(QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadGroup));
+        QString error;
+        QVERIFY2(writeEnabled(path, false, &error), qPrintable(error));
+        QCOMPARE(read(), QByteArray("{\n    \"enabled\": false,\n") + original.mid(2));
+        QCOMPARE(QFile::permissions(path) & (QFileDevice::ReadGroup | QFileDevice::ReadOther | QFileDevice::WriteGroup),
+                 QFileDevice::ReadGroup); // the file's permissions are kept
+        QVERIFY(writeEnabled(path, true, &error));
+        QCOMPARE(read(), QByteArray("{\n    \"enabled\": true,\n") + original.mid(2)); // replaced in place
+        QVERIFY(writeEnabled(path, true, &error));
+        QCOMPARE(read(), QByteArray("{\n    \"enabled\": true,\n") + original.mid(2)); // nothing to change
+
+        write("{\"title\":\"T\",\"enabled\":true}");
+        QVERIFY(writeEnabled(path, false, &error));
+        QCOMPARE(read(), QByteArray("{\"title\":\"T\",\"enabled\":false}"));
+        write("{}");
+        QVERIFY(writeEnabled(path, false, &error));
+        QCOMPARE(read(), QByteArray("{\"enabled\": false}"));
+
+        // Through a symlink: the target changes, the link stays a link.
+        const QString link = directory.filePath(QStringLiteral("link.json"));
+        QVERIFY(QFile::link(path, link));
+        QVERIFY(writeEnabled(link, true, &error));
+        QVERIFY(QFileInfo(link).isSymLink());
+        QCOMPARE(read(), QByteArray("{\"enabled\": true}"));
+    }
+
+    void writeEnabledRefusesWithoutDamage()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("metric.json"));
+        QString error;
+        QVERIFY(!writeEnabled(path, false, &error)); // missing
+        QVERIFY(error.contains(QLatin1String("cannot read")));
+        for (const QByteArray &bad : {QByteArray("[1, 2]"), QByteArray("{\"title\": "), QByteArray("not json")}) {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            file.write(bad);
+            file.close();
+            error.clear();
+            QVERIFY(!writeEnabled(path, false, &error));
+            QVERIFY(error.contains(QLatin1String("not a JSON object")));
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            QCOMPARE(file.readAll(), bad);
+        }
+        // A directory the user cannot write: QSaveFile has nowhere to put its
+        // temporary file; the original stays as it was.
+        if (::geteuid() == 0)
+            QSKIP("root ignores directory permissions");
+        const QByteArray json = "{\"title\": \"T\"}";
+        {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            file.write(json);
+        }
+        QVERIFY(QFile::setPermissions(directory.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+        error.clear();
+        const bool written = writeEnabled(path, false, &error);
+        QVERIFY(QFile::setPermissions(directory.path(), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        QVERIFY(!written);
+        QVERIFY(error.contains(QLatin1String("cannot write")));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), json);
     }
 };
 

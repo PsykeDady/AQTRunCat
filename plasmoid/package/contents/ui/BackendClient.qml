@@ -190,6 +190,12 @@ Item {
              (ok, result, reply) => replied("RegisterCustomMetric", ok, ok ? "" : Logic.errorText(reply)));
     }
 
+    // v2F1.2 (schema 3): writes "enabled" into the Custom Metric's file.
+    function setCustomMetricEnabled(path, enabled) {
+        call("SetCustomMetricEnabled", [new DBus.string(path), new DBus.bool(enabled)], "(sb)",
+             (ok, result, reply) => replied("SetCustomMetricEnabled", ok, ok ? "" : Logic.errorText(reply)));
+    }
+
     function unregisterCustomMetric(path) {
         call("UnregisterCustomMetric", [new DBus.string(path)], "(s)",
              (ok, result, reply) => replied("UnregisterCustomMetric", ok, ok ? "" : Logic.errorText(reply)));

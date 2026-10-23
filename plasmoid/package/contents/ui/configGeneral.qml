@@ -265,8 +265,22 @@ KCM.SimpleKCM {
             RowLayout {
                 required property var modelData
                 Layout.fillWidth: true
+                // v2F1.2: the file's "enabled"; absent with an older backend.
+                QQC2.CheckBox {
+                    visible: typeof modelData.enabled === "boolean"
+                    checked: modelData.enabled !== false
+                    enabled: client.connected
+                    QQC2.ToolTip.text: checked ? "On: the metric runs and is shown" : "Off: the metric does not run and is not shown"
+                    QQC2.ToolTip.visible: hovered
+                    onToggled: {
+                        client.setCustomMetricEnabled(modelData.data.explicitPath || modelData.data.path, checked);
+                        // The backend's state decides (a refused write comes back unchanged).
+                        checked = Qt.binding(() => modelData.enabled !== false);
+                    }
+                }
                 QQC2.Label {
                     Layout.fillWidth: true
+                    opacity: modelData.enabled === false ? 0.6 : 1
                     text: modelData.title + "  ·  " + (modelData.data ? modelData.data.path : "")
                     elide: Text.ElideMiddle
                     textFormat: Text.PlainText

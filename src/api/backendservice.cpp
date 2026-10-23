@@ -14,6 +14,7 @@
 
 #include <QCoreApplication>
 #include <QDBusConnectionInterface>
+#include <QDir>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QRegularExpression>
@@ -527,6 +528,24 @@ void BackendService::UnregisterCustomMetric(const QString &path)
     if (!registered)
         return void(fail(aqtruncat::api::ErrorNotFound, QStringLiteral("%1 is not a registered Custom Metrics file").arg(path)));
     m_custom->unregisterFile(path);
+}
+
+void BackendService::SetCustomMetricEnabled(const QString &path, bool enabled)
+{
+    const QString absolute = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+    const QString canonical = QFileInfo(path).canonicalFilePath();
+    const QList<aqtruncat::custommetrics::Source> &sources = m_custom->sources();
+    const auto source = std::find_if(sources.cbegin(), sources.cend(), [&](const aqtruncat::custommetrics::Source &s) {
+        return s.path == absolute || (!canonical.isEmpty() && s.id == canonical);
+    });
+    if (source == sources.cend())
+        return void(fail(aqtruncat::api::ErrorNotFound, QStringLiteral("%1 is not a Custom Metrics source").arg(path)));
+    if (!source->integration.isEmpty())
+        return void(fail(aqtruncat::api::ErrorInvalidArgument,
+                         QStringLiteral("%1 belongs to the %2 integration: use SetIntegrationEnabled").arg(path, source->integration)));
+    QString error;
+    if (!m_custom->setEnabled(source->path, enabled, &error))
+        fail(aqtruncat::api::ErrorFailed, error);
 }
 
 ProviderIntegration *BackendService::integration(const QString &id) const

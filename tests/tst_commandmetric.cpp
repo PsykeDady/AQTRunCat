@@ -222,6 +222,38 @@ private slots:
             QVERIFY(result.error.contains(QStringLiteral("integration")));
         }
     }
+
+    // v2F1.2: optional top-level "enabled"; missing = true, never a fallback
+    // to the snapshot parser on a wrong type.
+    void enabledFlag_data()
+    {
+        QTest::addColumn<QJsonValue>("enabled");
+        QTest::addColumn<bool>("valid");
+        QTest::addColumn<bool>("expected");
+        QTest::newRow("omitted") << QJsonValue(QJsonValue::Undefined) << true << true;
+        QTest::newRow("true") << QJsonValue(true) << true << true;
+        QTest::newRow("false") << QJsonValue(false) << true << false;
+        QTest::newRow("string") << QJsonValue(QStringLiteral("false")) << false << false;
+        QTest::newRow("number") << QJsonValue(0) << false << false;
+        QTest::newRow("null") << QJsonValue(QJsonValue::Null) << false << false;
+    }
+
+    void enabledFlag()
+    {
+        QFETCH(QJsonValue, enabled);
+        QFETCH(bool, valid);
+        QFETCH(bool, expected);
+        QJsonObject object = QJsonDocument::fromJson(configuration(QStringLiteral("/bin/true"))).object();
+        if (!enabled.isUndefined())
+            object.insert(QStringLiteral("enabled"), enabled);
+        const CommandParseResult result = parseCommandJson(QJsonDocument(object).toJson(), QStringLiteral("/tmp/metric.json"));
+        QVERIFY(result.recognized);
+        QCOMPARE(result.definition.has_value(), valid);
+        if (valid)
+            QCOMPARE(result.definition->enabled, expected);
+        else
+            QCOMPARE(result.error, QStringLiteral("field \"enabled\" must be a boolean"));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCommandMetric)

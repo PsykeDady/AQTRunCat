@@ -157,7 +157,9 @@ backend.
 - `schema` è la versione dei payload JSON: 1 fino a F4.2, **2 da F5**
   (2026-10-22: metriche built-in uptime, GPU, FPS, aggiornamenti, kernel e
   distribuzione, unità `seconds`/`fps`/`count`, quattro impostazioni; vedi
-  `docs/additional-built-in-metrics.md`). Le aggiunte compatibili (nuovi
+  `docs/additional-built-in-metrics.md`), **3 da 2.1.2** (campo `enabled`
+  delle Custom Metrics e metodo `SetCustomMetricEnabled`, vedi
+  `docs/custom-metrics-commands.md` §8). Le aggiunte compatibili (nuovi
   campi, nuove capability, nuovi id di metrica) non cambiano `api`.
 - I client **devono ignorare i campi sconosciuti** e trattare un valore
   sconosciuto di `state` come `error`.
@@ -181,6 +183,7 @@ backend.
 | `SetSetting` | `(s key, s jsonValue) → ()` | valida e salva; l'effetto arriva come `SettingsChanged` / `RunnerChanged` |
 | `RegisterCustomMetric` | `(s path) → ()` | registra un file Custom Metrics (stesse regole di Settings) |
 | `UnregisterCustomMetric` | `(s path) → ()` | rimuove la registrazione esplicita |
+| `SetCustomMetricEnabled` (2.1.2, schema 3) | `(s path, b enabled) → ()` | scrive `"enabled"` nel file della Custom Metric (sostituzione atomica, il resto del file invariato) e lo applica subito: disabilitata non viene più eseguita né mostrata. `NotFound` per una sorgente sconosciuta, `InvalidArgument` per la sorgente di un'integrazione (si usa `SetIntegrationEnabled`), `Failed` se il file non si può scrivere |
 | `SetIntegrationEnabled` | `(s id, b enabled) → s` | `enable`/`disable` dell'adattatore; restituisce il suo messaggio |
 | `SetIntegrationLiveUpdates` | `(s id, b on) → s` | `live-updates on|off` dell'adattatore |
 
@@ -193,7 +196,7 @@ Una parola nuda che non è JSON viene presa come stringa (`slow-down`).
 |---|---|
 | `io.github.psykedady.AQTRunCat1.Error.InvalidArgument` | valore o chiave non validi, chiave in sola lettura, file Custom Metrics non valido |
 | `io.github.psykedady.AQTRunCat1.Error.NotFound` | integrazione sconosciuta o adattatore non installato; file non registrato |
-| `io.github.psykedady.AQTRunCat1.Error.Failed` | l'adattatore ha fallito il comando |
+| `io.github.psykedady.AQTRunCat1.Error.Failed` | l'adattatore ha fallito il comando; il file di una Custom Metric non si può scrivere |
 
 I metodi delle integrazioni rispondono **in differita**, quando il comando
 dell'adattatore è terminato; gli altri client continuano a essere serviti nel
@@ -236,6 +239,7 @@ Ogni metrica è un oggetto con **tutti** i campi seguenti (eventualmente
 | `category` | `builtin` \| `integration` \| `custom` | classificazione di Dashboard e Settings |
 | `kind` | `system` \| `snapshot` \| `command` | provenienza: campionatore interno, file snapshot, comando M6 |
 | `integration` | string \| null | `claude-code`, `codex`… solo per `category = integration` |
+| `enabled` (schema 3) | bool | solo `custom` e `integration`: il campo `"enabled"` del file (assente = `true`). `false`: `state` `unavailable`, `message` "Disabled.", nessun valore né `items`; i frontend non la mostrano (Settings sì, per riattivarla). Assente con un backend precedente = abilitata |
 | `title` | string | titolo da mostrare |
 | `state` | `ok` \| `pending` \| `unavailable` \| `error` | stato attuale |
 | `message` | string | spiegazione di `pending`/`unavailable`/`error` (sicura da mostrare) |

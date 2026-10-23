@@ -444,6 +444,26 @@ private slots:
         QCOMPARE(model.items().last().shortValue, QStringLiteral("6.0%"));
     }
 
+    // v2F1.2: a disabled source has no bar item; the selection is kept and
+    // the item comes back in place once the source is enabled again.
+    void disabledSourceIsHiddenAndKeepsItsPlace()
+    {
+        MetricsBarModel model("/home/test");
+        const QString path = QStringLiteral("/data/sensor.json");
+        model.setConfiguration(true, {customId(path), QStringLiteral("cpu")});
+        model.updateSystem(snapshot());
+        model.updateCustom({source(path)});
+        QTRY_COMPARE(ids(model.items()), (QStringList{customId(path), "cpu"}));
+        cm::Source disabled = source(path);
+        disabled.enabled = false;
+        disabled.snapshot.reset();
+        disabled.state = cm::State::Unavailable;
+        model.updateCustom({disabled});
+        QTRY_COMPARE(ids(model.items()), QStringList{"cpu"});
+        model.updateCustom({source(path)});
+        QTRY_COMPARE(ids(model.items()), (QStringList{customId(path), "cpu"}));
+    }
+
     void changesAreCoalescedAndDeduplicated()
     {
         MetricsBarModel model("/home/test");

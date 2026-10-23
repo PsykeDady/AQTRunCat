@@ -1,12 +1,12 @@
-# MEMORY.md — AQTRunCat maintainer notes (2.1.1)
+# MEMORY.md — AQTRunCat maintainer notes (2.1.2)
 
 > Audience: an AI agent or developer maintaining AQTRunCat without access to
 > earlier conversations. Precedence when sources disagree: **actual
 > code/tests > this file (frozen decisions §5) > docs/ > commit messages**.
 >
-> **State (2026-10-23): AQTRunCat 2.1.1** on branch `feature/v2/main`
-> (v2F1 started: 2.1.0 baseline + 2.1.1 Rickroll runner, uncommitted —
-> the user commits). 2.0.0 (commit 61f3a8e) was the consolidation release
+> **State (2026-10-23): AQTRunCat 2.1.2** on branch `feature/v2/f2`
+> (v2F1: 2.1.0 baseline + 2.1.1 Rickroll committed as 385ceb1; 2.1.2
+> Custom Metrics `enabled` uncommitted — the user commits). 2.0.0 (commit 61f3a8e) was the consolidation release
 > of the complete 1.x application (M0–M9 → 1.0.0, then F1–F7 → 1.7.4),
 > without functional change from 1.7.4. All 1.x features are
 > complete (summary §2, history §4 and §13, normative summaries in
@@ -14,8 +14,8 @@
 > `requirements.md` is the **v2 roadmap**: v2F1 Custom Metrics v3 + Rickroll
 > (2.1.x), v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings
 > (2.3.x), v2F4 Dependency Advisor (2.4.x) (summary at the end of §2).
-> Done: 2.1.0, 2.1.1. Next: 2.1.2 (`enabled` flag) — only on the user's
-> explicit instruction, one sub-feature at a time.
+> Done: 2.1.0, 2.1.1, 2.1.2. Next: 2.1.3 (execution warnings) — only on
+> the user's explicit instruction, one sub-feature at a time.
 >
 > The user owns every Git write (branches, commits, merges, tags); read-only
 > Git only. Reports to the user in Italian; code, comments and
@@ -109,7 +109,7 @@
   = F4.2, 1.5.6 = F5.1–F5.6, 1.6.3 = F6.1–F6.3, 1.7.4 = F7.1–F7.4); 2.0.0 =
   consolidation of 1.7.4. v2 rule (requirements.md "Versioning"): v2F<n>
   raises the minor (v2F1 → 2.1.x), its sub-features the patch. The D-Bus
-  api (1) and payload schema (2) change only with their contract. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
+  api (1) and payload schema (3 since 2.1.2) change only with their contract. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
   debian/changelog, the man page and `plasmoid/package/metadata.json`
   (KPlugin.Version) together (`packaging-versions` test).
   All executables accept `-v`/`--version`; the tray menus show "AQTRunCat
@@ -161,7 +161,8 @@ F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (party
 2.0.0         Consolidation release: version 2.0.0, docs by topic (docs/README.md), v2 roadmap in requirements.md; no functional change
 2.1.0 DONE    v2F1 baseline (roadmap only; version went 2.0.0 → 2.1.1 directly, no separate 2.1.0 build)
 2.1.1 DONE    v2F1.1 Rickroll built-in runner (rickroll, 31 frames 33×36): six built-in runners (docs/built-in-runners.md §10)
-NEXT          v2F1 2.1.2–2.1.7 Custom Metrics v3, v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
+2.1.2 DONE    v2F1.2 optional Custom Metrics "enabled" (+ Settings/Plasmoid checkbox, SetCustomMetricEnabled, API schema 3) (docs/custom-metrics-commands.md §8)
+NEXT          v2F1 2.1.3–2.1.7 Custom Metrics v3, v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
 ```
 
 v2 roadmap summary (requirements.md is authoritative; added 2026-10-23):
@@ -906,6 +907,16 @@ sample on purpose (hot-plug) — caching not needed.
 
 ## 9. Tests and validation
 
+2.1.2 (2026-10-23, Custom Metrics `enabled`): clean build in a fresh
+directory 0 warnings; ctest **53/53**; `packaging-versions` 2.1.2;
+`git diff --check` clean (no shell script changed). Isolated runtime: real
+`aqtruncatd` on a private bus, a slow command metric disabled/re-enabled
+with `gdbus call … SetCustomMetricEnabled`: no process and no new run while
+disabled, payload `enabled:false`/`unavailable`/"Disabled."/no items,
+re-enabled runs at once, file gains only `"enabled": …`, no leftover
+process. Real-session checks (tray Settings checkbox, Plasmoid config) are
+left to the user.
+
 2.1.1 (2026-10-23, Rickroll): clean build in a fresh directory 0 warnings;
 ctest **53/53** (`loadsInPlasma` 3/3 not skipped); `packaging-versions`
 2.1.1; every executable prints 2.1.1; `aqtruncat runner list` shows six
@@ -1587,6 +1598,48 @@ time" refers to the state when the feature was finished.
 ---
 
 ## 13b. v2 history (2.1.0 onwards)
+
+### v2F1.2 — Custom Metrics `enabled` (2.1.2, 2026-10-23)
+
+- Optional top-level `"enabled"` in snapshot files and command configs
+  (`custommetrics::parseEnabled`; missing = true, non-bool = validation
+  error, terminal for commands). `Source::enabled`,
+  `CommandDefinition::enabled`, `ParseResult::enabled`.
+- Backend (`CustomMetricsService`) = single source of truth: a disabled
+  source stays listed, `enabled=false`, state Unavailable, message
+  "Disabled.", a snapshot with only title/symbol/icon (no values; its name
+  shows in Settings); disabled command = no job (in-flight run
+  stopped by `syncCommandJobs` with the process-group rules; disconnected,
+  so no late result); disabled sources never arm the recovery timer;
+  re-enabled = new job run at once.
+- `custommetrics::writeEnabled()`: text edit of only the top-level flag
+  (replace value, or insert as first key with the first key's
+  indentation), verified by re-parsing, then `QSaveFile` (perms kept,
+  follows symlinks). `CustomMetricsService::setEnabled()` writes + `reload(true)`
+  at once (unchanged jobs keep running); integrations' sources refused.
+- API schema **3** (additive): `enabled` on `custom`/`integration` metric
+  objects (absent = true for older backends), D-Bus
+  `SetCustomMetricEnabled(s path, b enabled)` (NotFound / InvalidArgument for
+  integration sources / Failed on write errors). `CustomMetricsModel::setEnabled`
+  (BackendClient → D-Bus).
+- Frontends filter: Dashboard, `MetricsBarModel` (selection kept, item
+  returns in place), Plasmoid `Logic.hiddenMetric` (`enabled === false`).
+  Settings lists disabled sources with a checkbox (column 0, applied queued
+  outside itemChanged; write error → warning + row reverts) and shows a
+  selected disabled bar entry as "Custom — disabled"; Plasmoid config has
+  the same checkbox (`client.setCustomMetricEnabled`).
+- Known limit: a producer rewriting a snapshot file without the flag
+  re-enables it (flag lives in the file).
+- Same 2.1.2, after user feedback: Plasmoid `Logic.syncModel` is now
+  incremental (remove/move/insert rows, never `clear()`), so the popup keeps
+  its scroll position when a metric comes or goes (bug since F4.2), and
+  `Logic.settleRefreshes` keeps a Custom Metric that already has values in
+  its last settled state while its command runs again (pending used to
+  collapse the row → height jump → scroll moved), as the Qt Dashboard does;
+  Dashboard replaces only the Custom Metrics cards whose presentation key
+  changed (`customCardKey`, same source list) instead of rebuilding all on
+  every command run; Settings Custom Metrics list columns are now Name
+  (title, checkbox) / File / Origin / Status.
 
 ### v2F1.1 — Rickroll runner (2.1.1, 2026-10-23)
 

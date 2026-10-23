@@ -117,6 +117,8 @@ CommandParseResult parseCommandJson(const QByteArray &json, const QString &confi
         }
         definition.integration = integration.toString();
     }
+    if (!parseEnabled(object, definition.enabled, result.error))
+        return result;
 
     const QJsonObject source = sourceValue.toObject();
     if (!requiredString(source, "executable", definition.configuredExecutable, result.error))

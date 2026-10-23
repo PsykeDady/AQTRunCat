@@ -18,6 +18,9 @@
 #include <QTimer>
 #include <QTreeWidget>
 #include <QMenu>
+#include <QMessageBox>
+
+#include <unistd.h>
 
 namespace {
 
@@ -140,20 +143,22 @@ private slots:
             {{QStringLiteral("cat"), QStringLiteral("Cat"), aqtruncat::RunnerSource::Bundled}}, &service);
         auto *tree = child<QTreeWidget>(window, "customMetricFiles");
         QCOMPARE(tree->topLevelItemCount(), 1);
-        QCOMPARE(tree->topLevelItem(0)->text(1), QStringLiteral("Discovered"));
+        QCOMPARE(tree->topLevelItem(0)->text(0), QStringLiteral("Fixture")); // the metric's own title
+        QCOMPARE(tree->topLevelItem(0)->text(1), file);
+        QCOMPARE(tree->topLevelItem(0)->text(2), QStringLiteral("Discovered"));
 
         QString error;
         QVERIFY2(window.addCustomMetricFile(file, &error), qPrintable(error));
         QTRY_COMPARE(tree->topLevelItemCount(), 1); // same canonical file, no duplicate
-        QTRY_COMPARE(tree->topLevelItem(0)->text(1), QStringLiteral("Registered + discovered"));
+        QTRY_COMPARE(tree->topLevelItem(0)->text(2), QStringLiteral("Registered + discovered"));
         tree->setCurrentItem(tree->topLevelItem(0));
         service.rescan(); // republished sources (e.g. every command run) keep the selection
         QVERIFY(tree->currentItem());
-        QCOMPARE(tree->currentItem()->text(0), file);
+        QCOMPARE(tree->currentItem()->text(1), file);
         QVERIFY(child<QPushButton>(window, "removeCustomMetric")->isEnabled());
         child<QPushButton>(window, "removeCustomMetric")->click();
         QTRY_COMPARE(tree->topLevelItemCount(), 1);
-        QCOMPARE(tree->topLevelItem(0)->text(1), QStringLiteral("Discovered"));
+        QCOMPARE(tree->topLevelItem(0)->text(2), QStringLiteral("Discovered"));
         QVERIFY(QFileInfo::exists(file));
         QVERIFY(settings.customMetricFiles().isEmpty());
     }
@@ -359,6 +364,79 @@ private slots:
         QTimer::singleShot(0, [] { requestApplicationQuit(); });
         QTimer::singleShot(3000, [] { QCoreApplication::exit(7); });
         QCOMPARE(QCoreApplication::exec(), 0);
+    }
+
+    // v2F1.2: the checkbox of each Custom Metric is its file's "enabled".
+    void customMetricEnableCheckbox()
+    {
+        QTemporaryDir temporary;
+        const QString discovery = temporary.filePath(QStringLiteral("metrics"));
+        QDir().mkpath(discovery);
+        const QString file = discovery + QStringLiteral("/fixture.json");
+        const QByteArray json = R"({"title":"Fixture","metricsBarValue":"7","future":{"kept":true},
+            "metrics":[{"title":"Value","formattedValue":"7"}],"lastUpdatedDate":"2026-06-05T04:50:40Z"})";
+        {
+            QFile out(file);
+            QVERIFY(out.open(QIODevice::WriteOnly));
+            out.write(json);
+        }
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
+        CustomMetricsService service(&settings, discovery);
+        service.start();
+        SettingsWindow window(&settings,
+            {{QStringLiteral("cat"), QStringLiteral("Cat"), aqtruncat::RunnerSource::Bundled}}, &service);
+        auto *tree = child<QTreeWidget>(window, "customMetricFiles");
+        auto *bar = child<QTreeWidget>(window, "metricsBarItems");
+        QCOMPARE(tree->topLevelItemCount(), 1);
+        QCOMPARE(tree->topLevelItem(0)->checkState(0), Qt::Checked); // no "enabled" = on
+        QCOMPARE(bar->topLevelItemCount(), 9 + 7 + 1);
+        const QString id = QStringLiteral("custom:") + QFileInfo(file).canonicalFilePath();
+
+        // Off: written to the file (other fields kept), listed as Disabled,
+        // no longer offered to the Metrics Bar.
+        tree->topLevelItem(0)->setCheckState(0, Qt::Unchecked);
+        QTRY_COMPARE(tree->topLevelItem(0)->text(3), QStringLiteral("Disabled"));
+        QCOMPARE(tree->topLevelItem(0)->checkState(0), Qt::Unchecked);
+        QCOMPARE(tree->topLevelItem(0)->text(0), QStringLiteral("Fixture")); // still its name
+        QFile in(file);
+        QVERIFY(in.open(QIODevice::ReadOnly));
+        const QByteArray stored = in.readAll();
+        in.close();
+        QCOMPARE(stored, QByteArray("{\"enabled\": false,") + json.mid(1));
+        QVERIFY(!service.sources().first().enabled);
+        QTRY_COMPARE(bar->topLevelItemCount(), 9 + 7);
+
+        // A selection made while it was on stays, marked as disabled.
+        settings.setMetricsBarItems({id});
+        QTRY_COMPARE(bar->topLevelItem(0)->text(1), QStringLiteral("Custom — disabled"));
+        QCOMPARE(bar->topLevelItem(0)->checkState(0), Qt::Checked);
+
+        // On again: running and offered again, the selection unchanged.
+        tree->topLevelItem(0)->setCheckState(0, Qt::Checked);
+        QTRY_COMPARE(tree->topLevelItem(0)->text(3), QStringLiteral("Available"));
+        QTRY_COMPARE(bar->topLevelItem(0)->text(1), QStringLiteral("Custom"));
+        QCOMPARE(settings.metricsBarItems(), QStringList{id});
+
+        // A file that cannot be written: a warning, the row shows the truth.
+        if (::geteuid() == 0)
+            QSKIP("root ignores directory permissions");
+        QVERIFY(QFile::setPermissions(discovery, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+        QString warning;
+        QTimer closer; // closes the warning once it is shown
+        connect(&closer, &QTimer::timeout, this, [&] {
+            if (auto *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+                warning = box->text();
+                box->close();
+            }
+        });
+        closer.start(20);
+        tree->topLevelItem(0)->setCheckState(0, Qt::Unchecked);
+        QTRY_VERIFY(!warning.isEmpty());
+        closer.stop();
+        QVERIFY(QFile::setPermissions(discovery, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        QVERIFY2(warning.contains(QLatin1String("cannot write")), qPrintable(warning));
+        QTRY_COMPARE(tree->topLevelItem(0)->checkState(0), Qt::Checked);
+        QVERIFY(service.sources().first().enabled);
     }
 };
 

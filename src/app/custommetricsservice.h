@@ -29,6 +29,7 @@ public:
 
     bool registerFile(const QString &path, QString *error = nullptr) override;
     void unregisterFile(const QString &path) override;
+    bool setEnabled(const QString &path, bool enabled, QString *error = nullptr) override;
 
 public slots:
     void start();
@@ -52,6 +53,9 @@ private:
     void failCommand(const QString &id, aqtruncat::custommetrics::State state,
                      const QString &message);
     aqtruncat::custommetrics::Source *sourceFor(const QString &id);
+    void disable(aqtruncat::custommetrics::Source &source, const QString &title,
+                 const std::optional<QString> &symbol,
+                 const std::optional<aqtruncat::custommetrics::IconReference> &icon);
     void publish();
     void stopCommand(CommandJob &job);
     void stopCommands();

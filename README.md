@@ -337,6 +337,13 @@ snapshot object (`"output": "snapshot"`) to show several values in one card,
 and exit with status 69 to report that its data source is absent
 (Unavailable rather than Error).
 
+Any Custom Metric file may carry `"enabled": false` (since 2.1.2; missing
+means enabled). A disabled metric is never run and is not shown in the
+Dashboard, the Metrics Bar or the Plasma widget; Settings (and the widget's
+configuration) still list it, with a checkbox that writes the flag into the
+file — changing nothing else in it — and applies it at once. A Metrics Bar
+selection is kept while the metric is off.
+
 ### Claude Code usage (Integrations)
 
 AQTRunCat officially supports Claude Code. In **Settings → Integrations**

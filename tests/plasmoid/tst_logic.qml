@@ -223,6 +223,34 @@ TestCase {
         compare(model.get(0).metricId, "memory");
     }
 
+    // A metric that appears, goes or moves changes only its own row: never a
+    // reset of the model (which sends the popup back to the top).
+    function test_syncModelNeverResets() {
+        model.clear();
+        const rows = ids => Logic.metricRows(ids.map(id => metric({ id: id, title: id })));
+        Logic.syncModel(model, rows(["cpu", "memory", "custom:/a", "custom:/b"]));
+        let resets = 0, inserted = 0, removed = 0;
+        const onReset = () => ++resets;
+        const onInserted = () => ++inserted;
+        const onRemoved = () => ++removed;
+        model.modelReset.connect(onReset);
+        model.rowsInserted.connect(onInserted);
+        model.rowsRemoved.connect(onRemoved);
+        Logic.syncModel(model, rows(["cpu", "memory", "custom:/b"]));         // one goes (disabled)
+        Logic.syncModel(model, rows(["cpu", "memory", "custom:/a", "custom:/b"])); // and comes back
+        Logic.syncModel(model, rows(["memory", "cpu", "custom:/a", "custom:/b", "custom:/c"])); // moved, added
+        model.modelReset.disconnect(onReset);
+        model.rowsInserted.disconnect(onInserted);
+        model.rowsRemoved.disconnect(onRemoved);
+        compare(resets, 0);
+        compare(removed, 1);
+        compare(inserted, 2);
+        const order = [];
+        for (let i = 0; i < model.count; ++i)
+            order.push(model.get(i).metricId);
+        compare(order, ["memory", "cpu", "custom:/a", "custom:/b", "custom:/c"]);
+    }
+
     function test_runnerToShow() {
         const catalog = {
             schema: 1, requested: "gone", selected: "cat", defaultRunnerId: "cat",
@@ -282,6 +310,47 @@ TestCase {
         compare(rick.frames.length, 31);
         compare(rick.sequence[30], 30);
         compare(rick.frames[30], "file:///usr/share/aqtruncat/runners/rickroll/rickroll-frame-30.png");
+    }
+
+    // A command running again (pending, last values still there) keeps
+    // presenting its settled state: the row neither collapses nor flickers.
+    function test_settleRefreshes() {
+        const items = [{ title: "D6", formattedValue: "4", normalized: 0.5 }, { title: "D20", formattedValue: "12", normalized: 0.5 }];
+        const dice = (state, message, list) => metric({ id: "custom:/dice", category: "custom", kind: "command", title: "Dice",
+                                                      state: state, message: message, items: list });
+        let result = Logic.settleRefreshes([metric(), dice("ok", "", items)], {});
+        compare(result.metrics[1].state, "ok");
+        const running = dice("pending", "Command is running.", items);
+        result = Logic.settleRefreshes([metric(), running], result.settled);
+        compare(result.metrics[1].state, "ok");
+        compare(result.metrics[1].message, "");
+        compare(running.state, "pending"); // the input is not modified
+        compare(Logic.metricRows(result.metrics)[1].itemsJson, Logic.metricRows([dice("ok", "", items)])[0].itemsJson);
+        // A settled error stays an error during the next run.
+        result = Logic.settleRefreshes([dice("error", "Command exited with status 1.", items)], result.settled);
+        result = Logic.settleRefreshes([running], result.settled);
+        compare(result.metrics[0].state, "error");
+        compare(result.metrics[0].message, "Command exited with status 1.");
+        // No value yet: really pending; built-in metrics are never touched.
+        result = Logic.settleRefreshes([dice("pending", "Waiting for the first command result.", []),
+                                        metric({ state: "pending" })], {});
+        compare(result.metrics[0].state, "pending");
+        compare(result.metrics[1].state, "pending");
+    }
+
+    // v2F1.2 (schema 3): a disabled Custom Metric is left out of the popup;
+    // without the field (older backend) or with true it is shown.
+    function test_disabledCustomMetricIsHidden() {
+        const metrics = [
+            { id: "custom:/a.json", category: "custom", kind: "snapshot", title: "A", state: "ok", enabled: true, items: [], data: {} },
+            { id: "custom:/b.json", category: "custom", kind: "command", title: "B", state: "unavailable", message: "Disabled.",
+              enabled: false, items: [], data: {} },
+            { id: "custom:/c.json", category: "custom", kind: "snapshot", title: "C", state: "ok", items: [], data: {} }
+        ];
+        verify(Logic.hiddenMetric(metrics[1]));
+        verify(!Logic.hiddenMetric(metrics[0]));
+        verify(!Logic.hiddenMetric(metrics[2]));
+        compare(Logic.metricRows(metrics, {}).map(r => r.title), ["A", "C"]);
     }
 
     function test_frameInterval() {

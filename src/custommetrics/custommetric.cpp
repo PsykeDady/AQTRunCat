@@ -8,9 +8,11 @@
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QRegularExpression>
+#include <QSaveFile>
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace aqtruncat::custommetrics {
 namespace {
@@ -128,6 +130,8 @@ ParseResult parseJson(const QByteArray &json, const QString &baseDirectory)
     }
 
     const QJsonObject object = document.object();
+    if (!parseEnabled(object, result.enabled, result.error))
+        return result;
     Snapshot snapshot;
     if (!requiredString(object, "title", snapshot.title, result.error))
         return result;
@@ -243,6 +247,153 @@ ParseResult parseFile(const QString &path)
         return result;
     }
     return parseJson(bytes, QFileInfo(path).absolutePath());
+}
+
+bool parseEnabled(const QJsonObject &object, bool &enabled, QString &error)
+{
+    const QJsonValue value = object.value(QStringLiteral("enabled"));
+    if (value.isUndefined()) {
+        enabled = true;
+        return true;
+    }
+    if (!value.isBool()) {
+        error = QStringLiteral("field \"enabled\" must be a boolean");
+        return false;
+    }
+    enabled = value.toBool();
+    return true;
+}
+
+namespace {
+
+int skipSpace(const QByteArray &text, int at)
+{
+    while (at < text.size() && (text[at] == ' ' || text[at] == '\t' || text[at] == '\n' || text[at] == '\r'))
+        ++at;
+    return at;
+}
+
+// End (one past the closing quote) of the string starting at text[at] == '"'.
+int skipString(const QByteArray &text, int at)
+{
+    for (++at; at < text.size(); ++at) {
+        if (text[at] == '\\')
+            ++at;
+        else if (text[at] == '"')
+            return at + 1;
+    }
+    return -1;
+}
+
+// End of the JSON value starting at text[at].
+int skipValue(const QByteArray &text, int at)
+{
+    if (at >= text.size())
+        return -1;
+    if (text[at] == '"')
+        return skipString(text, at);
+    if (text[at] == '{' || text[at] == '[') {
+        int depth = 0;
+        while (at < text.size()) {
+            const char c = text[at];
+            if (c == '"') {
+                at = skipString(text, at);
+                if (at < 0)
+                    return -1;
+                continue;
+            }
+            if (c == '{' || c == '[')
+                ++depth;
+            else if (c == '}' || c == ']') {
+                if (--depth == 0)
+                    return at + 1;
+            }
+            ++at;
+        }
+        return -1;
+    }
+    while (at < text.size() && !QByteArrayView(",}] \t\r\n").contains(text[at]))
+        ++at;
+    return at;
+}
+
+// The text with "enabled" set: the top-level value replaced in place, or
+// the key inserted first with the indentation of the existing first key.
+std::optional<QByteArray> withEnabled(const QByteArray &text, bool enabled)
+{
+    const QByteArray literal = enabled ? QByteArrayLiteral("true") : QByteArrayLiteral("false");
+    int open = text.startsWith("\xEF\xBB\xBF") ? 3 : 0;
+    open = skipSpace(text, open);
+    if (open >= text.size() || text[open] != '{')
+        return std::nullopt;
+    int at = skipSpace(text, open + 1);
+    const int firstKey = at;
+    std::optional<std::pair<int, int>> found;
+    while (at < text.size() && text[at] == '"') {
+        const int keyEnd = skipString(text, at);
+        if (keyEnd < 0)
+            return std::nullopt;
+        const bool isEnabled = text.mid(at, keyEnd - at) == QByteArrayLiteral("\"enabled\"");
+        at = skipSpace(text, keyEnd);
+        if (at >= text.size() || text[at] != ':')
+            return std::nullopt;
+        at = skipSpace(text, at + 1);
+        const int valueEnd = skipValue(text, at);
+        if (valueEnd < 0)
+            return std::nullopt;
+        if (isEnabled)
+            found = std::pair{at, valueEnd};
+        at = skipSpace(text, valueEnd);
+        if (at < text.size() && text[at] == ',')
+            at = skipSpace(text, at + 1);
+    }
+    QByteArray edited = text;
+    if (found) {
+        edited.replace(found->first, found->second - found->first, literal);
+    } else if (firstKey < text.size() && text[firstKey] == '"') {
+        const QByteArray indent = text.mid(open + 1, firstKey - open - 1);
+        edited.insert(open + 1, indent + "\"enabled\": " + literal + ',');
+    } else {
+        edited.insert(open + 1, "\"enabled\": " + literal);
+    }
+    return edited;
+}
+
+} // namespace
+
+bool writeEnabled(const QString &path, bool enabled, QString *error)
+{
+    auto fail = [error](const QString &message) {
+        if (error)
+            *error = message;
+        return false;
+    };
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return fail(QStringLiteral("cannot read %1: %2").arg(path, file.errorString()));
+    const QByteArray text = file.read(MaxJsonBytes + 1);
+    file.close();
+    if (text.size() > MaxJsonBytes)
+        return fail(QStringLiteral("JSON exceeds the %1 byte limit").arg(MaxJsonBytes));
+    QJsonParseError parseError;
+    const QJsonDocument original = QJsonDocument::fromJson(text, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !original.isObject())
+        return fail(QStringLiteral("%1 is not a JSON object").arg(path));
+
+    QJsonObject expected = original.object();
+    expected.insert(QStringLiteral("enabled"), enabled);
+    const std::optional<QByteArray> edited = withEnabled(text, enabled);
+    if (!edited || QJsonDocument::fromJson(*edited).object() != expected)
+        return fail(QStringLiteral("cannot update \"enabled\" in %1 without changing other content").arg(path));
+    if (*edited == text)
+        return true;
+
+    QSaveFile out(path);
+    if (!out.open(QIODevice::WriteOnly))
+        return fail(QStringLiteral("cannot write %1: %2").arg(path, out.errorString()));
+    if (out.write(*edited) != edited->size() || !out.commit())
+        return fail(QStringLiteral("cannot write %1: %2").arg(path, out.errorString()));
+    return true;
 }
 
 } // namespace aqtruncat::custommetrics

@@ -101,7 +101,13 @@ void MetricsBarModel::updateSystem(const aqtruncat::metrics::SystemMetricsSnapsh
 
 void MetricsBarModel::updateCustom(const QList<aqtruncat::custommetrics::Source> &sources)
 {
-    m_sources = sources;
+    // v2F1.2: a disabled source shows nothing; its selection is kept, so it
+    // comes back in place when it is enabled again.
+    m_sources.clear();
+    for (const aqtruncat::custommetrics::Source &source : sources) {
+        if (source.enabled)
+            m_sources.append(source);
+    }
     scheduleRebuild();
 }
 

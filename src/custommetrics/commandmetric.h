@@ -41,6 +41,7 @@ struct CommandDefinition {
     // "integration" field written by that integration's adapter. Empty for
     // the user's own Custom Metrics. Presentation only: execution is the same.
     QString integration;
+    bool enabled = true; // v2F1.2: top-level "enabled"; false = never scheduled
     std::optional<IconReference> icon;
     std::optional<QString> legacySymbol;
     QString configuredExecutable;

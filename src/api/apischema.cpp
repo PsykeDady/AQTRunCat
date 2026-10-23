@@ -707,6 +707,7 @@ QJsonObject customMetric(const custommetrics::Source &source)
                                       integration ? QStringLiteral("integration") : QStringLiteral("custom"),
                                       command ? QStringLiteral("command") : QStringLiteral("snapshot"), title);
     metric.insert(QStringLiteral("integration"), integration ? QJsonValue(source.integration) : QJsonValue());
+    metric.insert(QStringLiteral("enabled"), source.enabled); // schema 3
     metric.insert(QStringLiteral("state"), stateName(source.state));
     metric.insert(QStringLiteral("message"), source.message);
     QJsonArray items;
@@ -917,6 +918,7 @@ QList<custommetrics::Source> sourcesFromMetrics(const QJsonArray &array)
         source.discovered = data.value(QStringLiteral("discovered")).toBool();
         source.configuredId = data.value(QStringLiteral("configuredId")).toString();
         source.integration = metric.value(QStringLiteral("integration")).toString();
+        source.enabled = metric.value(QStringLiteral("enabled")).toBool(true); // absent before schema 3
         source.type = metric.value(QStringLiteral("kind")) == QLatin1String("command") ? custommetrics::SourceType::Command
                                                                                      : custommetrics::SourceType::Snapshot;
         const QString state = metric.value(QStringLiteral("state")).toString();

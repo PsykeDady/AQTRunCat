@@ -153,9 +153,46 @@ function metricRow(metric) {
 
 // FPS with its source turned OFF (data.condition "disabled") is the user's
 // choice not to see it, not an unavailable value: the metric is left out.
-// Every other FPS condition is shown with its status.
+// Every other FPS condition is shown with its status. v2F1.2 (schema 3): a
+// Custom Metric whose file says "enabled": false is left out the same way
+// (the configuration page still lists it).
 function hiddenMetric(metric) {
-    return !!metric && metric.id === "fps" && !!metric.data && metric.data.condition === "disabled";
+    if (!metric)
+        return false;
+    if (metric.enabled === false)
+        return true;
+    return metric.id === "fps" && !!metric.data && metric.data.condition === "disabled";
+}
+
+// A Custom Metric (or integration) stays "pending" while its command runs
+// again, with its last values still in the payload. Like the Qt Dashboard,
+// such a refresh keeps presenting the last settled state (and message)
+// instead of "Command is running." without values: the row keeps its size,
+// the popup neither flickers nor scrolls. Only a source with no value yet
+// shows "pending". settled maps id → {state, message}: pass the previous
+// result's settled back in; the input metrics are not modified.
+function settleRefreshes(metrics, settled) {
+    var previous = settled || {};
+    var next = {};
+    var result = [];
+    for (var i = 0; i < metrics.length; ++i) {
+        var metric = metrics[i];
+        var hasValue = !!metric && (metric.category === "custom" || metric.category === "integration")
+            && Array.isArray(metric.items) && metric.items.length > 0;
+        if (!hasValue) {
+            result.push(metric);
+            continue;
+        }
+        if (metric.state !== "pending") {
+            next[metric.id] = { state: metric.state, message: typeof metric.message === "string" ? metric.message : "" };
+            result.push(metric);
+            continue;
+        }
+        var shown = previous[metric.id] || { state: "ok", message: "" };
+        next[metric.id] = shown;
+        result.push(Object.assign({}, metric, { state: shown.state, message: shown.message }));
+    }
+    return { metrics: result, settled: next };
 }
 
 // Rows grouped by category (built-in, integrations, custom), API order kept
@@ -257,24 +294,40 @@ function hoverText(status, runnerName, metrics, current) {
     return lines.join("\n");
 }
 
-// Brings a ListModel to rows with the least changes: same ids in the same
-// order only update the roles that differ (delegates stay), anything else
-// rebuilds it.
+// Brings a ListModel to rows with the least changes: rows are removed,
+// moved or inserted one by one and the others only get the roles that
+// differ, so delegates stay and the list keeps its scroll position (a
+// clear() would reset the view to the top whenever a metric appears or
+// goes, e.g. a Custom Metric enabled or disabled).
 function syncModel(model, rows) {
-    var same = model.count === rows.length;
-    for (var i = 0; same && i < rows.length; ++i)
-        same = model.get(i).metricId === rows[i].metricId;
-    if (!same) {
-        model.clear();
-        for (var j = 0; j < rows.length; ++j)
-            model.append(rows[j]);
-        return;
+    var wanted = {};
+    var i;
+    for (i = 0; i < rows.length; ++i)
+        wanted[rows[i].metricId] = true;
+    for (i = model.count - 1; i >= 0; --i) {
+        if (!wanted[model.get(i).metricId])
+            model.remove(i, 1);
     }
-    for (var k = 0; k < rows.length; ++k) {
-        var current = model.get(k);
-        for (var key in rows[k]) {
-            if (current[key] !== rows[k][key])
-                model.setProperty(k, key, rows[k][key]);
+    for (i = 0; i < rows.length; ++i) {
+        var id = rows[i].metricId;
+        if (i >= model.count || model.get(i).metricId !== id) {
+            var from = -1;
+            for (var j = i + 1; j < model.count; ++j) {
+                if (model.get(j).metricId === id) {
+                    from = j;
+                    break;
+                }
+            }
+            if (from < 0) {
+                model.insert(i, rows[i]);
+                continue;
+            }
+            model.move(from, i, 1);
+        }
+        var current = model.get(i);
+        for (var key in rows[i]) {
+            if (current[key] !== rows[i][key])
+                model.setProperty(i, key, rows[i][key]);
         }
     }
 }

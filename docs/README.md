@@ -1,6 +1,6 @@
 # AQTRunCat Documentation
 
-Technical documentation of AQTRunCat **2.1.1**, by topic. Users start with
+Technical documentation of AQTRunCat **2.1.2**, by topic. Users start with
 the main [README](../README.md); the v2 roadmap is
 [requirements.md](../requirements.md). The topic documents are design and
 validation records written in Italian; [feature-reference.md](feature-reference.md)
@@ -90,3 +90,4 @@ Commit messages, code comments and the documents themselves refer to the
 | v2 milestone | Version | Document |
 |---|---|---|
 | v2F1.1 Rickroll runner (with the 2.1.0 baseline) | 2.1.1 | built-in-runners.md §10 |
+| v2F1.2 optional Custom Metrics `enabled` | 2.1.2 | custom-metrics-commands.md §8 |

@@ -77,6 +77,12 @@ private:
     void updateUpdates(TextRow &row, const aqtruncat::metrics::UpdatesMetrics &updates);
     void rebuildCustomMetrics();
     QWidget *customCard(const aqtruncat::custommetrics::Source &source, int index);
+    // What a card presents: the state (the settled one during a refresh) and
+    // the text of its status line; and a key of everything the card shows,
+    // so an unchanged card is left alone.
+    aqtruncat::custommetrics::State presentedState(const aqtruncat::custommetrics::Source &source,
+                                                   QString *message) const;
+    QString customCardKey(const aqtruncat::custommetrics::Source &source) const;
 
     std::string m_homePath;
     QVBoxLayout *m_layout = nullptr;
@@ -96,6 +102,16 @@ private:
     // latest list and rebuilds its cards when shown.
     QList<aqtruncat::custommetrics::Source> m_customSources;
     bool m_customDirty = false;
+    // The cards on screen, in order (integrations, then custom), with the
+    // source and presentation key each was built from: a refresh replaces
+    // only the cards whose key changed; a different list rebuilds them all.
+    struct CustomCard {
+        QString source;
+        bool official = false;
+        QString key;
+        QWidget *widget = nullptr;
+    };
+    QList<CustomCard> m_customCards;
     // Presentation only: the last settled (non-Pending) state of each source
     // that holds a valid value. A refresh keeps the source Pending, but its
     // card keeps showing this state instead of flickering to "Waiting…".

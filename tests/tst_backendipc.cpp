@@ -278,6 +278,51 @@ private slots:
         }
     }
 
+    // v2F1.2 (schema 3): SetCustomMetricEnabled writes the file and every
+    // client sees "enabled" in GetMetrics and in MetricsChanged at once.
+    void customMetricEnabledThroughTheApi()
+    {
+        const QString file = m_metricsDir + QStringLiteral("/sensors.json");
+        writeFile(file, R"({"title":"Sensors","metricsBarValue":"48°","metrics":[{"title":"T","formattedValue":"48 °C"}],"lastUpdatedDate":"2026-06-05T04:50:40Z"})");
+        startBackend();
+        SignalLog log;
+        log.subscribe();
+        const QString id = aqtruncat::metricsbar::customId(QFileInfo(file).canonicalFilePath());
+        QJsonObject metric = metricById(callObject(QStringLiteral("GetMetrics")).value(QStringLiteral("metrics")).toArray(), id);
+        QCOMPARE(metric.value(QStringLiteral("enabled")), QJsonValue(true));
+        QCOMPARE(metric.value(QStringLiteral("state")).toString(), QStringLiteral("ok"));
+
+        QDBusMessage reply = call(QStringLiteral("SetCustomMetricEnabled"), {file, false});
+        QVERIFY2(reply.type() == QDBusMessage::ReplyMessage, qPrintable(reply.errorMessage()));
+        metric = metricById(callObject(QStringLiteral("GetMetrics")).value(QStringLiteral("metrics")).toArray(), id);
+        QCOMPARE(metric.value(QStringLiteral("enabled")), QJsonValue(false));
+        QCOMPARE(metric.value(QStringLiteral("state")).toString(), QStringLiteral("unavailable"));
+        QVERIFY(metric.value(QStringLiteral("items")).toArray().isEmpty()); // no stale value
+        QTRY_VERIFY_WITH_TIMEOUT([&] {
+            for (const QJsonObject &delta : std::as_const(log.deltas)) {
+                for (const QJsonValue &value : delta.value(QStringLiteral("metrics")).toArray()) {
+                    if (value.toObject().value(QStringLiteral("id")) == id
+                        && value.toObject().value(QStringLiteral("enabled")) == QJsonValue(false))
+                        return true;
+                }
+            }
+            return false;
+        }(), 5000);
+        QFile stored(file);
+        QVERIFY(stored.open(QIODevice::ReadOnly));
+        QVERIFY(stored.readAll().startsWith("{\"enabled\": false,\"title\":\"Sensors\""));
+        stored.close();
+
+        QCOMPARE(call(QStringLiteral("SetCustomMetricEnabled"), {m_root.filePath(QStringLiteral("none.json")), true}).errorName(),
+                 aqtruncat::api::ErrorNotFound);
+        reply = call(QStringLiteral("SetCustomMetricEnabled"), {file, true});
+        QVERIFY2(reply.type() == QDBusMessage::ReplyMessage, qPrintable(reply.errorMessage()));
+        metric = metricById(callObject(QStringLiteral("GetMetrics")).value(QStringLiteral("metrics")).toArray(), id);
+        QCOMPARE(metric.value(QStringLiteral("enabled")), QJsonValue(true));
+        QCOMPARE(metric.value(QStringLiteral("state")).toString(), QStringLiteral("ok"));
+        QFile::remove(file);
+    }
+
     void customMetricsAndIntegrationsAreClassified()
     {
         writeFile(m_metricsDir + QStringLiteral("/sensors.json"),
@@ -434,6 +479,19 @@ private slots:
             QString error;
             QVERIFY(!first.registerFile(broken, &error));
             QVERIFY(!error.isEmpty());
+
+            // v2F1.2: disabled through one frontend's model, every client
+            // follows; the Dashboard drops the card and gets it back.
+            const QString sensors = m_metricsDir + QStringLiteral("/sensors.json");
+            QVERIFY2(first.setEnabled(sensors, false, &error), qPrintable(error));
+            QTRY_VERIFY_WITH_TIMEOUT(!second.sources().isEmpty() && !second.sources().first().enabled, 10000);
+            QTRY_VERIFY_WITH_TIMEOUT(!first.sources().first().enabled, 10000);
+            QTRY_VERIFY_WITH_TIMEOUT(!dashboard.findChild<QLabel *>(QStringLiteral("customTitle_0")), 10000);
+            QVERIFY(!first.setEnabled(m_root.filePath(QStringLiteral("elsewhere/none.json")), true, &error));
+            QVERIFY(error.contains(QLatin1String("not a Custom Metrics source")));
+            QVERIFY2(first.setEnabled(sensors, true, &error), qPrintable(error));
+            QTRY_VERIFY_WITH_TIMEOUT(second.sources().first().enabled, 10000);
+            QTRY_VERIFY_WITH_TIMEOUT(dashboard.findChild<QLabel *>(QStringLiteral("customTitle_0")), 10000);
         }
         // Clients gone: the backend keeps serving.
         QTest::qWait(300);
@@ -605,7 +663,7 @@ private slots:
                 QCOMPARE(value.toObject().value(QStringLiteral("data")).toObject().value(QStringLiteral("device")).toString(), id.mid(4));
         }
         QCOMPARE(QJsonDocument::fromJson(ctl({QStringLiteral("--json"), QStringLiteral("status")}).out).object()
-                     .value(QStringLiteral("info")).toObject().value(QStringLiteral("schema")).toInt(), 2);
+                     .value(QStringLiteral("info")).toObject().value(QStringLiteral("schema")).toInt(), aqtruncat::api::SchemaVersion);
 
         // The F5 settings through the API, validated.
         QCOMPARE(ctl({QStringLiteral("settings"), QStringLiteral("set"), QStringLiteral("fpsSource"), QStringLiteral("off")}).exitCode, 0);

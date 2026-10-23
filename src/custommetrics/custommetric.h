@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QDateTime>
+#include <QJsonObject>
 #include <QJsonValue>
 #include <QList>
 #include <QString>
@@ -87,6 +88,11 @@ struct Source {
     // integration); empty = a user-defined Custom Metric. Never derived from
     // title, symbol or path; M6 snapshots are always user-defined.
     QString integration;
+    // v2F1.2: the configuration's optional top-level "enabled" (missing =
+    // true). A disabled source is never run and keeps no values (a snapshot
+    // with only its title and icon), state Unavailable; presentation
+    // surfaces leave it out, Settings still lists it to enable it again.
+    bool enabled = true;
     State state = State::Pending;
     QString message;
     std::optional<Snapshot> snapshot; // last known good snapshot, retained on failure
@@ -95,7 +101,21 @@ struct Source {
 struct ParseResult {
     std::optional<Snapshot> snapshot;
     QString error;
+    bool enabled = true; // the snapshot file's top-level "enabled"
 };
+
+// v2F1.2: the optional top-level "enabled" of a configuration object.
+// Missing means true; any other type than a boolean is an error.
+bool parseEnabled(const QJsonObject &object, bool &enabled, QString &error);
+
+// v2F1.2: writes "enabled": <enabled> into the configuration file at path,
+// keeping every other byte of the file (key order, formatting, unrelated
+// fields): the existing top-level value is replaced or the key is inserted
+// first. The edited text is verified to parse to the same object plus the
+// flag, then replaces the file atomically (QSaveFile: same directory, the
+// file's permissions, through a symlink to its target). Returns false with
+// *error when the file is unreadable, not a JSON object, or not writable.
+bool writeEnabled(const QString &path, bool enabled, QString *error = nullptr);
 
 // Shared by snapshot and command configurations: a legacy string symbol, or
 // {type: theme|file, value}. Relative file paths resolve from baseDirectory

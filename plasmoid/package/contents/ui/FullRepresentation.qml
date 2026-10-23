@@ -33,8 +33,14 @@ PlasmaExtras.Representation {
 
     readonly property var shown: ({ builtin: showBuiltin, integration: showIntegrations, custom: showCustom })
 
+    // Last settled state of each Custom Metric, so that a command running
+    // again does not collapse its row (Logic.settleRefreshes).
+    property var settled: ({})
+
     function sync() {
-        Logic.syncModel(metricModel, Logic.metricRows(client.metrics, shown));
+        const presented = Logic.settleRefreshes(client.metrics, settled);
+        settled = presented.settled;
+        Logic.syncModel(metricModel, Logic.metricRows(presented.metrics, shown));
     }
     onShownChanged: sync()
     Connections {

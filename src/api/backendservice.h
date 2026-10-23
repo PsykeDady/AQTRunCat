@@ -91,6 +91,10 @@ public slots:
     Q_SCRIPTABLE void SetSetting(const QString &key, const QString &jsonValue);
     Q_SCRIPTABLE void RegisterCustomMetric(const QString &path);
     Q_SCRIPTABLE void UnregisterCustomMetric(const QString &path);
+    // v2F1.2 (schema 3): writes "enabled" into a Custom Metric's file and
+    // applies it at once. NotFound for an unknown source, InvalidArgument
+    // for an integration's source, Failed when the file cannot be written.
+    Q_SCRIPTABLE void SetCustomMetricEnabled(const QString &path, bool enabled);
     Q_SCRIPTABLE QString SetIntegrationEnabled(const QString &id, bool enabled);
     Q_SCRIPTABLE QString SetIntegrationLiveUpdates(const QString &id, bool on);
 

@@ -381,6 +381,121 @@ private slots:
         QCOMPARE(onlySource(service).snapshot->metrics.size(), 2);
         QCOMPARE(*onlySource(service).snapshot->metricsBarValue, QStringLiteral("3"));
     }
+
+    // v2F1.2: "enabled": false — listed, never scheduled or executed, no
+    // value; missing "enabled" keeps the v2 behaviour (covered above).
+    void disabledCommandNeverRuns()
+    {
+        QTemporaryDir temporary;
+        const QString marker = temporary.filePath(QStringLiteral("executed"));
+        const QString config = temporary.filePath(QStringLiteral("metric.json"));
+        writeConfiguration(config, helperPath(), {QStringLiteral("touch"), marker});
+        QFile written(config);
+        QVERIFY(written.open(QIODevice::ReadOnly));
+        QJsonObject object = QJsonDocument::fromJson(written.readAll()).object();
+        written.close();
+        object.insert(QStringLiteral("enabled"), false);
+        writeFile(config, QJsonDocument(object).toJson());
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
+        settings.setCustomMetricFiles({config});
+        CustomMetricsService service(&settings, temporary.filePath(QStringLiteral("discovery")));
+        service.start();
+        QVERIFY(!onlySource(service).enabled);
+        QCOMPARE(onlySource(service).type, SourceType::Command);
+        QCOMPARE(onlySource(service).state, State::Unavailable);
+        QCOMPARE(onlySource(service).message, QStringLiteral("Disabled."));
+        QCOMPARE(onlySource(service).snapshot->title, QStringLiteral("Fixture")); // its name, no values
+        QVERIFY(onlySource(service).snapshot->metrics.isEmpty());
+        QTest::qWait(1500); // more than one interval
+        QVERIFY(!QFileInfo::exists(marker));
+        QVERIFY(!onlySource(service).enabled);
+    }
+
+    // Disabled while its command runs: the process (group) is stopped, the
+    // late result never comes back, no timer keeps it alive; enabled again,
+    // it is scheduled at once.
+    void runtimeDisableStopsTheRunAndEnableResumes()
+    {
+        QTemporaryDir temporary;
+        const QString config = temporary.filePath(QStringLiteral("metric.json"));
+        const QString pidFile = temporary.filePath(QStringLiteral("pid"));
+        writeConfiguration(config, helperPath(), {QStringLiteral("pid-sleep"), pidFile, QStringLiteral("700")}, 1, 30);
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
+        settings.setCustomMetricFiles({config});
+        CustomMetricsService service(&settings, temporary.filePath(QStringLiteral("discovery")));
+        service.start();
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Available, 3000);
+        QFile::remove(pidFile);
+        QTRY_VERIFY_WITH_TIMEOUT(readPid(pidFile) > 0, 3000); // the next run is in flight
+        const pid_t running = readPid(pidFile);
+
+        QString error;
+        QVERIFY2(service.setEnabled(config, false, &error), qPrintable(error));
+        QVERIFY(!onlySource(service).enabled); // applied at once, not on the watcher
+        QVERIFY(onlySource(service).snapshot->metrics.isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(processGone(running), 2000);
+        QFile::remove(pidFile);
+        QTest::qWait(2000); // its result, and any next run, would have come by now
+        QVERIFY(!onlySource(service).enabled);
+        QCOMPARE(onlySource(service).state, State::Unavailable);
+        QVERIFY(!QFileInfo::exists(pidFile));
+
+        // The file: the flag added, nothing else changed.
+        QFile file(config);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QJsonObject stored = QJsonDocument::fromJson(file.readAll()).object();
+        QCOMPARE(stored.value(QStringLiteral("enabled")), QJsonValue(false));
+        stored.remove(QStringLiteral("enabled"));
+        QCOMPARE(stored.value(QStringLiteral("display")).toObject().value(QStringLiteral("suffix")).toString(), QStringLiteral(" units"));
+        file.close();
+
+        QVERIFY2(service.setEnabled(config, true, &error), qPrintable(error));
+        QVERIFY(onlySource(service).enabled);
+        QTRY_VERIFY_WITH_TIMEOUT(readPid(pidFile) > 0, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Available, 3000);
+        QCOMPARE(onlySource(service).snapshot->metrics.first().formattedValue, QStringLiteral("done units"));
+        service.stop();
+    }
+
+    void setEnabledRefusals()
+    {
+        QTemporaryDir temporary;
+        const QString config = temporary.filePath(QStringLiteral("metric.json"));
+        writeConfiguration(config, helperPath(), {QStringLiteral("value"), QStringLiteral("1")});
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
+        settings.setCustomMetricFiles({config});
+        CustomMetricsService service(&settings, temporary.filePath(QStringLiteral("discovery")));
+        service.start();
+        QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Available, 2000);
+        QString error;
+        QVERIFY(!service.setEnabled(temporary.filePath(QStringLiteral("other.json")), false, &error));
+        QVERIFY(error.contains(QLatin1String("not a known")));
+
+        if (::geteuid() != 0) {
+            // Not writable: refused with the reason, the metric keeps running.
+            QVERIFY(QFile::setPermissions(temporary.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+            error.clear();
+            const bool written = service.setEnabled(config, false, &error);
+            QVERIFY(QFile::setPermissions(temporary.path(), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+            QVERIFY(!written);
+            QVERIFY(error.contains(QLatin1String("cannot write")));
+            QVERIFY(onlySource(service).enabled);
+            QCOMPARE(onlySource(service).state, State::Available);
+        }
+
+        // An integration's source is switched in Integrations, not here.
+        QFile file(config);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QJsonObject object = QJsonDocument::fromJson(file.readAll()).object();
+        file.close();
+        object.insert(QStringLiteral("integration"), QStringLiteral("claude-code"));
+        writeFile(config, QJsonDocument(object).toJson());
+        service.rescan();
+        QCOMPARE(onlySource(service).integration, QStringLiteral("claude-code"));
+        error.clear();
+        QVERIFY(!service.setEnabled(config, false, &error));
+        QVERIFY(error.contains(QLatin1String("Integrations")));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCommandMetricsService)

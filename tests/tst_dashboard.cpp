@@ -3,11 +3,14 @@
 
 #include <QApplication>
 #include <QFile>
+#include <QFileInfo>
 #include <QLabel>
 #include <QProgressBar>
 #include <QSignalSpy>
 #include <QScrollArea>
 #include <QRegularExpression>
+#include <QPointer>
+#include <QScrollBar>
 #include <QTest>
 #include <QTemporaryDir>
 
@@ -330,6 +333,70 @@ private slots:
         QVERIFY(child<QWidget>(window, "customMetricsHeader")->isHidden());
         QVERIFY(child<QWidget>(window, "customMetricsContainer")->isHidden());
         QVERIFY(child<QWidget>(window, "integrationsHeader")->isHidden());
+    }
+
+    // A refresh replaces only the cards that show something new, in place:
+    // the others stay (no flicker, no reflow) and the scroll position too.
+    void refreshReplacesOnlyChangedCards()
+    {
+        DashboardWindow window("/home/alice");
+        window.resize(400, 300);
+        window.show();
+        auto source = [](const QString &path, const QString &value, aqtruncat::custommetrics::State state) {
+            aqtruncat::custommetrics::Snapshot snapshot;
+            snapshot.title = QFileInfo(path).completeBaseName();
+            snapshot.metrics = {{QStringLiteral("Value"), value, std::nullopt}};
+            snapshot.lastUpdatedDate = QDateTime::fromString(QStringLiteral("2026-06-05T04:50:40Z"), Qt::ISODate);
+            aqtruncat::custommetrics::Source result;
+            result.id = result.path = path;
+            result.state = state;
+            result.snapshot = snapshot;
+            return result;
+        };
+        using aqtruncat::custommetrics::State;
+        window.updateCustomMetrics({source(QStringLiteral("/m/a.json"), QStringLiteral("1"), State::Available),
+                                    source(QStringLiteral("/m/b.json"), QStringLiteral("2"), State::Available)});
+        QPointer<QWidget> first = child<QWidget>(window, "customSource_0");
+        QPointer<QWidget> second = child<QWidget>(window, "customSource_1");
+        auto *scroll = child<QScrollArea>(window, "dashboardScroll");
+        QApplication::processEvents();
+        scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum());
+        const int position = scroll->verticalScrollBar()->value();
+        QVERIFY(position > 0);
+
+        // A command run: Pending with the same value, then the same value again.
+        window.updateCustomMetrics({source(QStringLiteral("/m/a.json"), QStringLiteral("1"), State::Available),
+                                    source(QStringLiteral("/m/b.json"), QStringLiteral("2"), State::Pending)});
+        window.updateCustomMetrics({source(QStringLiteral("/m/a.json"), QStringLiteral("1"), State::Available),
+                                    source(QStringLiteral("/m/b.json"), QStringLiteral("2"), State::Available)});
+        QCOMPARE(child<QWidget>(window, "customSource_0"), first.data());
+        QCOMPARE(child<QWidget>(window, "customSource_1"), second.data());
+        // A new value: only that card is rebuilt, at its place.
+        window.updateCustomMetrics({source(QStringLiteral("/m/a.json"), QStringLiteral("1"), State::Available),
+                                    source(QStringLiteral("/m/b.json"), QStringLiteral("3"), State::Available)});
+        QCOMPARE(child<QWidget>(window, "customSource_0"), first.data());
+        QVERIFY(second.isNull());
+        QCOMPARE(child<QLabel>(window, "customValue_1_0")->text(), QStringLiteral("3"));
+        QApplication::processEvents();
+        QCOMPARE(scroll->verticalScrollBar()->value(), position);
+    }
+
+    // v2F1.2: a disabled source has no card (nor a status line).
+    void disabledCustomMetricHasNoCard()
+    {
+        DashboardWindow window("/home/alice");
+        window.show();
+        aqtruncat::custommetrics::Source disabled;
+        disabled.path = QStringLiteral("/tmp/off.json");
+        disabled.enabled = false;
+        disabled.state = aqtruncat::custommetrics::State::Unavailable;
+        disabled.message = QStringLiteral("Disabled.");
+        window.updateCustomMetrics({disabled});
+        QVERIFY(!window.findChild<QLabel *>(QStringLiteral("customStatus_0")));
+        QVERIFY(child<QWidget>(window, "customMetricsHeader")->isHidden());
+        disabled.enabled = true;
+        window.updateCustomMetrics({disabled});
+        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Unavailable"));
     }
 
     void integrationsAndCustomMetricsAreSeparateSections()

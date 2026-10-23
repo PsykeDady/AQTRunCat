@@ -286,7 +286,7 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
     customLayout->addWidget(directory);
     m_customMetricFiles = new QTreeWidget(customBox);
     m_customMetricFiles->setObjectName(QStringLiteral("customMetricFiles"));
-    m_customMetricFiles->setHeaderLabels({tr("File"), tr("Origin"), tr("Status")});
+    m_customMetricFiles->setHeaderLabels({tr("Name"), tr("File"), tr("Origin"), tr("Status")});
     m_customMetricFiles->setRootIsDecorated(false);
     m_customMetricFiles->setUniformRowHeights(true);
     m_customMetricFiles->setMinimumHeight(110);
@@ -404,6 +404,10 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
         QString error;
         if (!addCustomMetricFile(path, &error))
             QMessageBox::warning(this, tr("Invalid Custom Metrics File"), error);
+    });
+    connect(m_customMetricFiles, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem *item, int column) {
+        if (column == 0)
+            storeCustomMetricEnabled(item);
     });
     connect(m_customMetricFiles, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) {
         m_removeCustomMetric->setEnabled(item && item->data(0, Qt::UserRole + 1).toBool());
@@ -813,11 +817,14 @@ void SettingsWindow::rebuildCustomMetrics()
 {
     // Command sources republish on every run: keep the user's selection.
     const QString current = m_customMetricFiles->currentItem()
-        ? m_customMetricFiles->currentItem()->text(0) : QString();
+        ? m_customMetricFiles->currentItem()->text(1) : QString();
+    m_rebuildingCustomMetrics = true; // setCheckState below emits itemChanged
     m_customMetricFiles->clear();
     m_removeCustomMetric->setEnabled(false);
-    if (!m_customMetrics)
+    if (!m_customMetrics) {
+        m_rebuildingCustomMetrics = false;
         return;
+    }
     QTreeWidgetItem *restored = nullptr;
     const QString integrationFile = integrationMetricFile();
     for (const aqtruncat::custommetrics::Source &source : m_customMetrics->sources()) {
@@ -829,9 +836,20 @@ void SettingsWindow::rebuildCustomMetrics()
         auto *item = new QTreeWidgetItem(m_customMetricFiles);
         if (!current.isEmpty() && source.path == current)
             restored = item;
-        item->setText(0, source.path);
+        // The metric's own title first (a disabled one keeps it too); the
+        // file name only while the file has none (unreadable, invalid).
+        item->setText(0, source.snapshot && !source.snapshot->title.isEmpty() ? source.snapshot->title
+                                                                             : QFileInfo(source.path).completeBaseName());
+        item->setText(1, source.path);
+        item->setToolTip(1, source.path);
         item->setData(0, Qt::UserRole, source.explicitPath.isEmpty() ? source.path : source.explicitPath);
         item->setData(0, Qt::UserRole + 1, source.explicitlyRegistered);
+        // v2F1.2: the checkbox is the file's "enabled" (missing = on).
+        item->setData(0, Qt::UserRole + 2, source.enabled);
+        item->setFlags((item->flags() | Qt::ItemIsUserCheckable) & ~Qt::ItemIsAutoTristate);
+        item->setCheckState(0, source.enabled ? Qt::Checked : Qt::Unchecked);
+        item->setToolTip(0, source.enabled ? tr("On: the metric runs and is shown. Uncheck to disable it.")
+                                           : tr("Off: the metric does not run and is not shown. Check to enable it."));
         QString origin;
         if (source.explicitlyRegistered && source.discovered)
             origin = tr("Registered + discovered");
@@ -841,19 +859,47 @@ void SettingsWindow::rebuildCustomMetrics()
             origin = tr("Discovered");
         if (source.type == aqtruncat::custommetrics::SourceType::Command)
             origin = tr("Command — %1").arg(origin);
-        item->setText(1, origin);
+        item->setText(2, origin);
         switch (source.state) {
-        case aqtruncat::custommetrics::State::Available: item->setText(2, tr("Available")); break;
-        case aqtruncat::custommetrics::State::Pending: item->setText(2, tr("Waiting…")); break;
-        case aqtruncat::custommetrics::State::Unavailable: item->setText(2, tr("Unavailable")); break;
-        case aqtruncat::custommetrics::State::Error: item->setText(2, tr("Error")); break;
+        case aqtruncat::custommetrics::State::Available: item->setText(3, tr("Available")); break;
+        case aqtruncat::custommetrics::State::Pending: item->setText(3, tr("Waiting…")); break;
+        case aqtruncat::custommetrics::State::Unavailable: item->setText(3, tr("Unavailable")); break;
+        case aqtruncat::custommetrics::State::Error: item->setText(3, tr("Error")); break;
         }
-        item->setToolTip(2, source.message);
+        if (!source.enabled)
+            item->setText(3, tr("Disabled"));
+        item->setToolTip(3, source.message);
     }
-    for (int column = 0; column < 3; ++column)
+    for (int column = 0; column < 4; ++column)
         m_customMetricFiles->resizeColumnToContents(column);
     if (restored)
         m_customMetricFiles->setCurrentItem(restored);
+    m_rebuildingCustomMetrics = false;
+}
+
+void SettingsWindow::storeCustomMetricEnabled(QTreeWidgetItem *item)
+{
+    if (m_rebuildingCustomMetrics || !m_customMetrics || !item)
+        return;
+    const bool wanted = item->checkState(0) == Qt::Checked;
+    if (wanted == item->data(0, Qt::UserRole + 2).toBool())
+        return;
+    item->setData(0, Qt::UserRole + 2, wanted);
+    // Applied after this itemChanged: the engine republishes its sources and
+    // the list is rebuilt, which must not delete the emitting item.
+    const QString path = item->data(0, Qt::UserRole).toString();
+    QMetaObject::invokeMethod(this, [this, path, wanted] { applyCustomMetricEnabled(path, wanted); },
+                              Qt::QueuedConnection);
+}
+
+void SettingsWindow::applyCustomMetricEnabled(const QString &path, bool enabled)
+{
+    QString error;
+    if (m_customMetrics && m_customMetrics->setEnabled(path, enabled, &error))
+        return; // the republished sources update the row
+    QMessageBox::warning(this, enabled ? tr("Cannot Enable Custom Metric") : tr("Cannot Disable Custom Metric"),
+                         error.isEmpty() ? tr("The file could not be changed.") : error);
+    rebuildCustomMetrics(); // back to the actual state
 }
 
 void SettingsWindow::rebuildMetricsBar()
@@ -896,6 +942,11 @@ void SettingsWindow::rebuildMetricsBar()
             const QString itemId = itemIdFromCustomItemId(id);
             const auto source = std::find_if(sources.cbegin(), sources.cend(),
                                              [&](const auto &s) { return s.id == sourceId; });
+            if (source != sources.cend() && !source->enabled) {
+                // v2F1.2: kept selected, shown again once enabled.
+                addRow(id, itemId, tr("Custom — disabled"), checked);
+                return true;
+            }
             const aqtruncat::custommetrics::Snapshot *snapshot =
                 source != sources.cend() && source->snapshot ? &*source->snapshot : nullptr;
             const aqtruncat::custommetrics::Item *metric = nullptr;
@@ -924,6 +975,10 @@ void SettingsWindow::rebuildMetricsBar()
         }
         const auto &snapshot = source->snapshot;
         const QString name = snapshot ? snapshot->title : QFileInfo(source->path).completeBaseName();
+        if (!source->enabled) {
+            addRow(id, name, tr("Custom — disabled"), checked);
+            return true;
+        }
         const bool noValue = source->type == aqtruncat::custommetrics::SourceType::Snapshot && snapshot
             && (!snapshot->metricsBarValue || snapshot->metricsBarValue->trimmed().isEmpty());
         const QString kind = source->integration.isEmpty() ? tr("Custom") : tr("Integration");
@@ -939,6 +994,8 @@ void SettingsWindow::rebuildMetricsBar()
             addKnown(metric.id, false);
     }
     for (const auto &source : sources) {
+        if (!source.enabled)
+            continue; // not offered while disabled (a selection stays, above)
         // A multi-value source whose items carry their own compact values is
         // offered per item; the whole-source entry stays only if selected.
         QStringList itemIds;

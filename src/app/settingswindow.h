@@ -12,6 +12,7 @@ class QLabel;
 class QLineEdit;
 class QRadioButton;
 class QTreeWidget;
+class QTreeWidgetItem;
 class QPushButton;
 class RunnerPreviewWidget;
 class CustomMetricsModel;
@@ -50,6 +51,8 @@ private:
     void rebuildGpus();
     void storeCheckedInterfaces();
     void rebuildCustomMetrics();
+    void storeCustomMetricEnabled(QTreeWidgetItem *item);
+    void applyCustomMetricEnabled(const QString &path, bool enabled);
     void rebuildMetricsBar();
     void storeMetricsBarItems();
     void moveMetricsBarItem(int delta);
@@ -68,6 +71,7 @@ private:
     std::vector<aqtruncat::metrics::InterfaceMetrics> m_availableInterfaces;
     std::vector<std::pair<std::string, std::string>> m_availableGpus; // id, model
     bool m_rebuilding = false;
+    bool m_rebuildingCustomMetrics = false;
 
     QComboBox *m_runnerCombo = nullptr;
     RunnerPreviewWidget *m_preview = nullptr;
