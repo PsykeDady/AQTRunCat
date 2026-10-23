@@ -1,12 +1,12 @@
-# MEMORY.md — AQTRunCat maintainer notes (2.1.3)
+# MEMORY.md — AQTRunCat maintainer notes (2.1.4)
 
 > Audience: an AI agent or developer maintaining AQTRunCat without access to
 > earlier conversations. Precedence when sources disagree: **actual
 > code/tests > this file (frozen decisions §5) > docs/ > commit messages**.
 >
-> **State (2026-10-23): AQTRunCat 2.1.3** on branch `feature/v2/f3`
-> (v2F1: 2.1.1 Rickroll = 385ceb1, 2.1.2 `enabled` = 0a72597; 2.1.3
-> execution warnings uncommitted — the user commits). 2.0.0 (commit 61f3a8e) was the consolidation release
+> **State (2026-10-23): AQTRunCat 2.1.4** on branch `feature/v2/f3`
+> (v2F1: 2.1.1 = 385ceb1, 2.1.2 = 0a72597, 2.1.3 = 613bdbe; 2.1.4
+> `display.showBar` uncommitted — the user commits). 2.0.0 (commit 61f3a8e) was the consolidation release
 > of the complete 1.x application (M0–M9 → 1.0.0, then F1–F7 → 1.7.4),
 > without functional change from 1.7.4. All 1.x features are
 > complete (summary §2, history §4 and §13, normative summaries in
@@ -14,8 +14,8 @@
 > `requirements.md` is the **v2 roadmap**: v2F1 Custom Metrics v3 + Rickroll
 > (2.1.x), v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings
 > (2.3.x), v2F4 Dependency Advisor (2.4.x) (summary at the end of §2).
-> Done: 2.1.0–2.1.3. Next: 2.1.4 (optional progress bar) — only on the
-> user's explicit instruction, one sub-feature at a time.
+> Done: 2.1.0–2.1.4. Next: 2.1.5 (metric groups and JSON inheritance) —
+> only on the user's explicit instruction, one sub-feature at a time.
 >
 > The user owns every Git write (branches, commits, merges, tags); read-only
 > Git only. Reports to the user in Italian; code, comments and
@@ -109,7 +109,7 @@
   = F4.2, 1.5.6 = F5.1–F5.6, 1.6.3 = F6.1–F6.3, 1.7.4 = F7.1–F7.4); 2.0.0 =
   consolidation of 1.7.4. v2 rule (requirements.md "Versioning"): v2F<n>
   raises the minor (v2F1 → 2.1.x), its sub-features the patch. The D-Bus
-  api (1) and payload schema (3 since 2.1.2) change only with their contract. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
+  api (1) and payload schema (4 since 2.1.4) change only with their contract. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
   debian/changelog, the man page and `plasmoid/package/metadata.json`
   (KPlugin.Version) together (`packaging-versions` test).
   All executables accept `-v`/`--version`; the tray menus show "AQTRunCat
@@ -161,9 +161,10 @@ F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (party
 2.0.0         Consolidation release: version 2.0.0, docs by topic (docs/README.md), v2 roadmap in requirements.md; no functional change
 2.1.0 DONE    v2F1 baseline (roadmap only; version went 2.0.0 → 2.1.1 directly, no separate 2.1.0 build)
 2.1.1 DONE    v2F1.1 Rickroll built-in runner (rickroll, 31 frames 33×36): six built-in runners (docs/built-in-runners.md §10)
+2.1.4 DONE    v2F1.4 optional display.showBar (API schema 4) (docs/custom-metrics-commands.md §10)
 2.1.3 DONE    v2F1.3 Custom Metric execution warnings (docs/custom-metrics-commands.md §9)
 2.1.2 DONE    v2F1.2 optional Custom Metrics "enabled" (+ Settings/Plasmoid checkbox, SetCustomMetricEnabled, API schema 3) (docs/custom-metrics-commands.md §8)
-NEXT          v2F1 2.1.4–2.1.7 Custom Metrics v3, v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
+NEXT          v2F1 2.1.5–2.1.7 Custom Metrics v3, v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
 ```
 
 v2 roadmap summary (requirements.md is authoritative; added 2026-10-23):
@@ -908,6 +909,10 @@ sample on purpose (hot-plug) — caching not needed.
 
 ## 9. Tests and validation
 
+2.1.4 (2026-10-23, `display.showBar`): clean build in a fresh directory
+0 warnings; ctest **53/53**; `packaging-versions` 2.1.4; `git diff --check`
+clean (no shell script changed).
+
 2.1.3 (2026-10-23, execution warnings): clean build in a fresh directory
 0 warnings; ctest **53/53**; `packaging-versions` 2.1.3; `git diff --check`
 clean (no shell script in the repo changed). Isolated runtime: real backend,
@@ -1608,6 +1613,21 @@ time" refers to the state when the feature was finished.
 ---
 
 ## 13b. v2 history (2.1.0 onwards)
+
+### v2F1.4 — `display.showBar` (2.1.4, 2026-10-23)
+
+- `custommetrics::parseShowBar()` (both parsers): optional bool; non-bool
+  or non-object `display` = validation error. Command configs: with
+  snapshot output `display` may hold `showBar` alone. Snapshot files: other
+  `display` keys ignored.
+- `CommandDefinition::showBar`, `Snapshot::showBar` (default true; set in
+  `snapshotFromCommandOutput` for both outputs — config wins — and in the
+  command skeletons). Presentation only: execution/values/normalized unchanged.
+- API schema **4**: `showBar` on custom/integration metrics (absent = true).
+- Dashboard `customCard`: bar only if normalizedValue && showBar (not
+  created otherwise; card key includes showBar). Plasmoid `Logic.itemRows`/
+  `metricRow`: fraction null when `showBar === false`. Metrics Bar has no
+  bars (unchanged). No Settings editor (none exists for display props).
 
 ### v2F1.3 — Execution warnings (2.1.3, 2026-10-23)
 

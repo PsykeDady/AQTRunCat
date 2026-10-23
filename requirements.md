@@ -15,7 +15,7 @@ normative summaries of the 1.x features are in
 [docs/feature-reference.md](docs/feature-reference.md).
 
     2.0.0  Consolidation baseline (1.x complete)            COMPLETE
-    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       IN PROGRESS (2.1.3 done)
+    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       IN PROGRESS (2.1.4 done)
     v2F2   Independent Autostart + new runner   2.2.x       PLANNED
     v2F3   Standalone Settings + new runner     2.3.x       PLANNED
     v2F4   Dependency Advisor + new runner      2.4.x       PLANNED
@@ -113,8 +113,8 @@ Requirements for every v2 runner:
 
 ## v2F1 — Custom Metrics v3 + Rickroll
 
-Status: IN PROGRESS. Version family **2.1.x**; current version **2.1.3**
-(2.1.0–2.1.3 COMPLETE, 2.1.4–2.1.7 PLANNED).
+Status: IN PROGRESS. Version family **2.1.x**; current version **2.1.4**
+(2.1.0–2.1.4 COMPLETE, 2.1.5–2.1.7 PLANNED).
 
 Extends Custom Metrics v2 (command and snapshot sources,
 [docs/custom-metrics-commands.md](docs/custom-metrics-commands.md)) without
@@ -211,11 +211,25 @@ status. The backend logs one line per new failure and one per recovery
 
 ### 2.1.4 — Optional Progress Bar
 
+Status: COMPLETE (2026-10-23). Record:
+[docs/custom-metrics-commands.md](docs/custom-metrics-commands.md) §10.
+
 - An optional display setting, e.g. `display.showBar` (boolean).
 - Text-only or numeric metrics can be shown without a bar.
 - Absent: the current behaviour (a bar when a normalized value exists).
 - Applied consistently on every surface that draws bars (Qt Dashboard,
   Plasmoid popup).
+
+As implemented: `display.showBar` (boolean; any other type is a validation
+error; a non-object `display` too) in command configurations — with
+snapshot output `display` may now hold `showBar` alone — and in snapshot
+files (other `display` keys ignored there, as unknown keys are). Only
+`false` changes anything: no bar in the Dashboard (none created, the card
+is shorter) and in the Plasmoid popup; values, normalized data, icons,
+titles, statuses and warnings are unchanged; `true` never invents a bar.
+The Metrics Bar draws no bars (unchanged). Effective value in the payload
+as `showBar` (API schema 4, additive). No Settings editor (Settings has none
+for display properties): set it in the file.
 
 ### 2.1.5 — Optional Metric Groups and JSON Inheritance
 

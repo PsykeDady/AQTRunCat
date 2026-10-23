@@ -482,6 +482,22 @@ private slots:
         QTRY_COMPARE(ids(model.items()), (QStringList{customId(path), "cpu"}));
     }
 
+    // v2F1.4: the Metrics Bar draws no bars: showBar changes nothing there.
+    void showBarDoesNotChangeTheMetricsBar()
+    {
+        MetricsBarModel model("/home/test");
+        const QString path = QStringLiteral("/data/claude.json");
+        model.setConfiguration(true, {customId(path)});
+        model.updateCustom({source(path)});
+        QTRY_COMPARE(model.items().size(), 1);
+        const Item withBar = model.items().first();
+        cm::Source hidden = source(path);
+        hidden.snapshot->showBar = false;
+        model.updateCustom({hidden});
+        QTest::qWait(100);
+        QCOMPARE(model.items().first(), withBar);
+    }
+
     void changesAreCoalescedAndDeduplicated()
     {
         MetricsBarModel model("/home/test");

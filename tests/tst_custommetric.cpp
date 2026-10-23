@@ -296,6 +296,24 @@ private slots:
         QVERIFY(file.open(QIODevice::ReadOnly));
         QCOMPARE(file.readAll(), json);
     }
+
+    // v2F1.4: display.showBar in a snapshot file; other display keys are
+    // ignored like any unknown key (RunCat Neo compatibility).
+    void snapshotShowBar()
+    {
+        QJsonObject object = QJsonDocument::fromJson(validJson()).object();
+        ParseResult result = parseJson(QJsonDocument(object).toJson());
+        QVERIFY(result.snapshot->showBar);
+        object.insert(QStringLiteral("display"), QJsonObject{{QStringLiteral("showBar"), false}, {QStringLiteral("future"), 1}});
+        result = parseJson(QJsonDocument(object).toJson());
+        QVERIFY(result.snapshot);
+        QVERIFY(!result.snapshot->showBar);
+        QCOMPARE(*result.snapshot->metrics.at(1).normalizedValue, 0.054); // data unchanged
+        object.insert(QStringLiteral("display"), QJsonObject{{QStringLiteral("showBar"), 1}});
+        result = parseJson(QJsonDocument(object).toJson());
+        QVERIFY(!result.snapshot);
+        QCOMPARE(result.error, QStringLiteral("field \"display.showBar\" must be a boolean"));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCustomMetric)

@@ -54,6 +54,7 @@ struct CommandDefinition {
     QString prefix;
     QString suffix;
     std::optional<NormalizedRange> normalizedRange;
+    bool showBar = true; // v2F1.4: display.showBar (also with snapshot output)
 
     bool operator==(const CommandDefinition &) const = default;
 };

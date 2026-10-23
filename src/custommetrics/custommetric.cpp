@@ -133,6 +133,8 @@ ParseResult parseJson(const QByteArray &json, const QString &baseDirectory)
     if (!parseEnabled(object, result.enabled, result.error))
         return result;
     Snapshot snapshot;
+    if (!parseShowBar(object, snapshot.showBar, result.error))
+        return result;
     if (!requiredString(object, "title", snapshot.title, result.error))
         return result;
     if (!parseSymbol(object.value(QStringLiteral("symbol")), baseDirectory,
@@ -261,6 +263,27 @@ bool parseEnabled(const QJsonObject &object, bool &enabled, QString &error)
         return false;
     }
     enabled = value.toBool();
+    return true;
+}
+
+bool parseShowBar(const QJsonObject &object, bool &showBar, QString &error)
+{
+    showBar = true;
+    const QJsonValue display = object.value(QStringLiteral("display"));
+    if (display.isUndefined())
+        return true;
+    if (!display.isObject()) {
+        error = QStringLiteral("field \"display\" must be an object");
+        return false;
+    }
+    const QJsonValue value = display.toObject().value(QStringLiteral("showBar"));
+    if (value.isUndefined())
+        return true;
+    if (!value.isBool()) {
+        error = QStringLiteral("field \"display.showBar\" must be a boolean");
+        return false;
+    }
+    showBar = value.toBool();
     return true;
 }
 

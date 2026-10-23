@@ -327,6 +327,7 @@ void CustomMetricsService::reload(bool finalAttempt)
                         skeleton.title = command.definition->title;
                         skeleton.symbol = command.definition->legacySymbol;
                         skeleton.icon = command.definition->icon;
+                        skeleton.showBar = command.definition->showBar;
                         source.snapshot = std::move(skeleton);
                         source.state = State::Pending;
                         source.message = tr("Waiting for the first command result.");
@@ -451,6 +452,7 @@ void CustomMetricsService::syncCommandJobs(const QList<CommandDefinition> &defin
             skeleton.title = definition.title;
             skeleton.symbol = definition.legacySymbol;
             skeleton.icon = definition.icon;
+            skeleton.showBar = definition.showBar;
             source->snapshot = std::move(skeleton);
             source->state = State::Pending;
             source->message = tr("Waiting for the first command result.");

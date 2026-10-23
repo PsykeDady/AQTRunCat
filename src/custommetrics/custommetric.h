@@ -69,7 +69,15 @@ struct Snapshot {
     std::optional<QString> metricsBarValue;
     QList<Item> metrics;
     QDateTime lastUpdatedDate;
+    // v2F1.4: the configuration's optional display.showBar; false hides the
+    // progress bars of this source's items. Missing (or true) = as before: a
+    // bar wherever an item has a normalized value, never an invented one.
+    bool showBar = true;
 };
+
+// v2F1.4: the optional display.showBar of a configuration object; a
+// "display" that is not an object, or a non-boolean showBar, is an error.
+bool parseShowBar(const QJsonObject &object, bool &showBar, QString &error);
 
 enum class SourceType {
     Snapshot,

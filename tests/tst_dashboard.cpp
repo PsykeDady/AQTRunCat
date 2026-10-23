@@ -381,6 +381,55 @@ private slots:
         QCOMPARE(scroll->verticalScrollBar()->value(), position);
     }
 
+    // v2F1.4: display.showBar false: value, title and status stay, the bar
+    // is not there at all; true without a normalized value invents none.
+    void showBarFalseHidesOnlyTheBar()
+    {
+        DashboardWindow window("/home/alice");
+        window.show();
+        namespace cm = aqtruncat::custommetrics;
+        cm::Snapshot snapshot;
+        snapshot.title = QStringLiteral("Dice");
+        snapshot.metrics = {{QStringLiteral("D20"), QStringLiteral("12"), 0.6}, {QStringLiteral("Text"), QStringLiteral("high"), std::nullopt}};
+        snapshot.lastUpdatedDate = QDateTime::fromString(QStringLiteral("2026-06-05T04:50:40Z"), Qt::ISODate);
+        cm::Source source;
+        source.id = source.path = QStringLiteral("/m/dice.json");
+        source.state = cm::State::Available;
+        source.snapshot = snapshot;
+        window.updateCustomMetrics({source});
+        QVERIFY(window.findChild<QProgressBar *>(QStringLiteral("customProgress_0_0"))); // legacy: a bar
+        QVERIFY(!window.findChild<QProgressBar *>(QStringLiteral("customProgress_0_1"))); // text: none
+        const int withBar = child<QWidget>(window, "customSource_0")->sizeHint().height();
+
+        source.snapshot->showBar = false;
+        window.updateCustomMetrics({source});
+        QVERIFY(!window.findChild<QProgressBar *>(QStringLiteral("customProgress_0_0")));
+        QCOMPARE(child<QLabel>(window, "customValue_0_0")->text(), QStringLiteral("12"));
+        QCOMPARE(child<QLabel>(window, "customTitle_0")->text(), QStringLiteral("Dice"));
+        QVERIFY(child<QLabel>(window, "customStatus_0")->text().startsWith(QStringLiteral("Last updated: ")));
+        QVERIFY(child<QWidget>(window, "customSource_0")->sizeHint().height() < withBar); // no empty room
+
+        // Warnings and Unavailable stay as they are without a bar.
+        source.state = cm::State::Error;
+        source.message = QStringLiteral("Command exited with status 1.");
+        window.updateCustomMetrics({source});
+        QVERIFY(window.findChild<QLabel *>(QStringLiteral("customError_0")));
+        QCOMPARE(child<QLabel>(window, "customValue_0_0")->text(), QStringLiteral("—"));
+        QVERIFY(!window.findChild<QProgressBar *>(QStringLiteral("customProgress_0_0")));
+        source.state = cm::State::Unavailable;
+        source.message = QStringLiteral("not running");
+        window.updateCustomMetrics({source});
+        QCOMPARE(child<QLabel>(window, "customStatus_0")->text(), QStringLiteral("Unavailable"));
+        QVERIFY(!window.findChild<QProgressBar *>(QStringLiteral("customProgress_0_0")));
+
+        // true: as before (a bar only where there is a normalized value).
+        source.state = cm::State::Available;
+        source.snapshot->showBar = true;
+        window.updateCustomMetrics({source});
+        QVERIFY(window.findChild<QProgressBar *>(QStringLiteral("customProgress_0_0")));
+        QVERIFY(!window.findChild<QProgressBar *>(QStringLiteral("customProgress_0_1")));
+    }
+
     // v2F1.2: a disabled source has no card (nor a status line).
     void disabledCustomMetricHasNoCard()
     {

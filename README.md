@@ -342,6 +342,12 @@ that is not valid — is an error: since 2.1.3 the Dashboard, the Metrics Bar
 (the exit status and the first line the command wrote on standard error)
 instead of a value, and the next successful run clears it.
 
+A Custom Metric with a normalized value (from `display.normalizedRange`, or
+a snapshot item's `normalizedValue`) gets a progress bar in the Dashboard and
+the Plasma widget; `"display": { "showBar": false }` (since 2.1.4) hides it
+and keeps the value, icon, title and status. There is no editor for it in
+Settings: add it to the file.
+
 Any Custom Metric file may carry `"enabled": false` (since 2.1.2; missing
 means enabled). A disabled metric is never run and is not shown in the
 Dashboard, the Metrics Bar or the Plasma widget; Settings (and the widget's

@@ -437,7 +437,7 @@ private slots:
     // without it (an older backend) means enabled.
     void customMetricEnabledFlag()
     {
-        QCOMPARE(api::SchemaVersion, 3);
+        QVERIFY(api::SchemaVersion >= 3); // "enabled" since schema 3
         custommetrics::Source off;
         off.id = off.path = QStringLiteral("/data/off.json");
         off.enabled = false;
@@ -451,6 +451,31 @@ private slots:
         QCOMPARE(api::customMetric(off).value(QStringLiteral("enabled")), QJsonValue(true));
         metric.remove(QStringLiteral("enabled"));
         QVERIFY(api::sourcesFromMetrics(QJsonArray{metric}).first().enabled);
+    }
+
+    // Schema 4 (2.1.4): the effective display.showBar, both ways; absent
+    // (older backend) = bars as before.
+    void customMetricShowBar()
+    {
+        QCOMPARE(api::SchemaVersion, 4);
+        custommetrics::Source source;
+        source.id = source.path = QStringLiteral("/data/dice.json");
+        source.state = custommetrics::State::Available;
+        custommetrics::Snapshot snapshot;
+        snapshot.title = QStringLiteral("Dice");
+        snapshot.metrics = {{QStringLiteral("D20"), QStringLiteral("12"), 0.6}};
+        snapshot.showBar = false;
+        source.snapshot = snapshot;
+        QJsonObject metric = api::customMetric(source);
+        QCOMPARE(metric.value(QStringLiteral("showBar")), QJsonValue(false));
+        QCOMPARE(metric.value(QStringLiteral("items")).toArray().first().toObject().value(QStringLiteral("normalized")).toDouble(), 0.6);
+        QVERIFY(!api::sourcesFromMetrics(QJsonArray{metric}).first().snapshot->showBar);
+        metric.remove(QStringLiteral("showBar"));
+        QVERIFY(api::sourcesFromMetrics(QJsonArray{metric}).first().snapshot->showBar);
+        source.snapshot->showBar = true;
+        QCOMPARE(api::customMetric(source).value(QStringLiteral("showBar")), QJsonValue(true));
+        source.snapshot.reset();
+        QCOMPARE(api::customMetric(source).value(QStringLiteral("showBar")), QJsonValue(true));
     }
 
     void settingsObjectHasEveryExposedKey()

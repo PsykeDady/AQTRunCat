@@ -745,7 +745,9 @@ QWidget *DashboardWindow::customCard(const aqtruncat::custommetrics::Source &sou
             value->setObjectName(QStringLiteral("customValue_%1_%2").arg(index).arg(itemIndex));
             rowLayout->addWidget(value);
             cardLayout->addWidget(row);
-            if (metric.normalizedValue) {
+            // v2F1.4: display.showBar false: no bar at all (the card is
+            // shorter); otherwise a bar wherever there is a normalized value.
+            if (metric.normalizedValue && source.snapshot->showBar) {
                 auto *bar = new QProgressBar(card);
                 bar->setTextVisible(false);
                 bar->setObjectName(QStringLiteral("customProgress_%1_%2").arg(index).arg(itemIndex));
@@ -820,7 +822,7 @@ QString DashboardWindow::customCardKey(const aqtruncat::custommetrics::Source &s
     QStringList parts{source.path, QString::number(int(state)), message};
     if (source.snapshot) {
         const aqtruncat::custommetrics::Snapshot &snapshot = *source.snapshot;
-        parts << snapshot.title << snapshot.symbol.value_or(QString())
+        parts << snapshot.title << QString::number(snapshot.showBar) << snapshot.symbol.value_or(QString())
               << (snapshot.icon ? snapshot.icon->resolvedValue : QString())
               << snapshot.lastUpdatedDate.toString(Qt::ISODateWithMs);
         for (const aqtruncat::custommetrics::Item &item : snapshot.metrics)

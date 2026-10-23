@@ -168,10 +168,16 @@ CommandParseResult parseCommandJson(const QByteArray &json, const QString &confi
     }
 
     const QJsonValue displayValue = object.value(QStringLiteral("display"));
-    if (!displayValue.isUndefined() && definition.output == CommandOutput::Snapshot) {
-        // A snapshot carries its own formatted values and normalized values.
-        result.error = QStringLiteral("field \"display\" applies only to scalar output");
+    if (!parseShowBar(object, definition.showBar, result.error))
         return result;
+    if (!displayValue.isUndefined() && definition.output == CommandOutput::Snapshot) {
+        // A snapshot carries its own formatted values and normalized values;
+        // only whether its bars are drawn (v2F1.4) belongs to the configuration.
+        const QStringList keys = displayValue.toObject().keys();
+        if (!keys.isEmpty() && keys != QStringList{QStringLiteral("showBar")}) {
+            result.error = QStringLiteral("field \"display\" applies only to scalar output (except \"showBar\")");
+            return result;
+        }
     }
     if (!displayValue.isUndefined()) {
         if (!displayValue.isObject()) {
@@ -239,6 +245,7 @@ ScalarResult snapshotFromCommandOutput(const CommandDefinition &definition,
         parsed.snapshot->title = definition.title;
         parsed.snapshot->symbol = definition.legacySymbol;
         parsed.snapshot->icon = definition.icon;
+        parsed.snapshot->showBar = definition.showBar;
         result.snapshot = std::move(parsed.snapshot);
         return result;
     }
@@ -286,6 +293,7 @@ ScalarResult snapshotFromCommandOutput(const CommandDefinition &definition,
     snapshot.metricsBarValue = formatted;
     snapshot.metrics.append(std::move(item));
     snapshot.lastUpdatedDate = updatedAt;
+    snapshot.showBar = definition.showBar;
     result.snapshot = std::move(snapshot);
     return result;
 }

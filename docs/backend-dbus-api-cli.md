@@ -159,7 +159,8 @@ backend.
   distribuzione, unità `seconds`/`fps`/`count`, quattro impostazioni; vedi
   `docs/additional-built-in-metrics.md`), **3 da 2.1.2** (campo `enabled`
   delle Custom Metrics e metodo `SetCustomMetricEnabled`, vedi
-  `docs/custom-metrics-commands.md` §8). Le aggiunte compatibili (nuovi
+  `docs/custom-metrics-commands.md` §8), **4 da 2.1.4** (campo `showBar`,
+  §10). Le aggiunte compatibili (nuovi
   campi, nuove capability, nuovi id di metrica) non cambiano `api`.
 - I client **devono ignorare i campi sconosciuti** e trattare un valore
   sconosciuto di `state` come `error`.
@@ -239,6 +240,7 @@ Ogni metrica è un oggetto con **tutti** i campi seguenti (eventualmente
 | `category` | `builtin` \| `integration` \| `custom` | classificazione di Dashboard e Settings |
 | `kind` | `system` \| `snapshot` \| `command` | provenienza: campionatore interno, file snapshot, comando M6 |
 | `integration` | string \| null | `claude-code`, `codex`… solo per `category = integration` |
+| `showBar` (schema 4) | bool | solo `custom` e `integration`: il `display.showBar` effettivo della configurazione (assente = `true`). `false`: i client non disegnano barre per la metrica né per le sue voci; `normalized` resta nel payload. Assente con un backend precedente = barre come prima |
 | `enabled` (schema 3) | bool | solo `custom` e `integration`: il campo `"enabled"` del file (assente = `true`). `false`: `state` `unavailable`, `message` "Disabled.", nessun valore né `items`; i frontend non la mostrano (Settings sì, per riattivarla). Assente con un backend precedente = abilitata |
 | `title` | string | titolo da mostrare |
 | `state` | `ok` \| `pending` \| `unavailable` \| `error` | stato attuale |

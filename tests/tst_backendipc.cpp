@@ -370,6 +370,33 @@ private slots:
         QDir(package).removeRecursively();
     }
 
+    // v2F1.4: display.showBar reaches the clients; values and normalized
+    // data are the same as with a bar.
+    void showBarThroughTheApi()
+    {
+        const QString package = m_metricsDir + QStringLiteral("/dice");
+        const QString helper = QCoreApplication::applicationDirPath() + QStringLiteral("/custommetric_test_helper");
+        writeFile(package + QStringLiteral("/metric.json"),
+                  QJsonDocument(QJsonObject{{QStringLiteral("id"), QStringLiteral("dice")},
+                                            {QStringLiteral("title"), QStringLiteral("D20")},
+                                            {QStringLiteral("source"), QJsonObject{
+                                                 {QStringLiteral("type"), QStringLiteral("command")},
+                                                 {QStringLiteral("executable"), helper},
+                                                 {QStringLiteral("arguments"), QJsonArray{QStringLiteral("value"), QStringLiteral("10")}}}},
+                                            {QStringLiteral("display"), QJsonObject{
+                                                 {QStringLiteral("normalizedRange"), QJsonObject{{QStringLiteral("minimum"), 0}, {QStringLiteral("maximum"), 20}}},
+                                                 {QStringLiteral("showBar"), false}}}})
+                      .toJson());
+        startBackend();
+        const QString id = aqtruncat::metricsbar::customId(QFileInfo(package + QStringLiteral("/metric.json")).canonicalFilePath());
+        auto metric = [&] { return metricById(callObject(QStringLiteral("GetMetrics")).value(QStringLiteral("metrics")).toArray(), id); };
+        QTRY_COMPARE_WITH_TIMEOUT(metric().value(QStringLiteral("state")).toString(), QStringLiteral("ok"), 10000);
+        QCOMPARE(metric().value(QStringLiteral("showBar")), QJsonValue(false));
+        QCOMPARE(metric().value(QStringLiteral("formattedValue")).toString(), QStringLiteral("10"));
+        QCOMPARE(metric().value(QStringLiteral("items")).toArray().first().toObject().value(QStringLiteral("normalized")).toDouble(), 0.5);
+        QDir(package).removeRecursively();
+    }
+
     void customMetricsAndIntegrationsAreClassified()
     {
         writeFile(m_metricsDir + QStringLiteral("/sensors.json"),

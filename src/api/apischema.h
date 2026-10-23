@@ -26,8 +26,9 @@ inline const QString ObjectPath = QStringLiteral("/io/github/psykedady/AQTRunCat
 // keep it and raise SchemaVersion.
 inline const QString InterfaceName = QStringLiteral("io.github.psykedady.AQTRunCat1");
 inline constexpr int ApiVersion = 1;
-inline constexpr int SchemaVersion = 3; // 2 (F5): uptime, GPUs, FPS, updates, kernel, distribution;
-                                        // 3 (2.1.2): Custom Metrics "enabled", SetCustomMetricEnabled
+inline constexpr int SchemaVersion = 4; // 2 (F5): uptime, GPUs, FPS, updates, kernel, distribution;
+                                        // 3 (2.1.2): Custom Metrics "enabled", SetCustomMetricEnabled;
+                                        // 4 (2.1.4): Custom Metrics "showBar"
 inline const QString ErrorInvalidArgument = QStringLiteral("io.github.psykedady.AQTRunCat1.Error.InvalidArgument");
 inline const QString ErrorNotFound = QStringLiteral("io.github.psykedady.AQTRunCat1.Error.NotFound");
 inline const QString ErrorFailed = QStringLiteral("io.github.psykedady.AQTRunCat1.Error.Failed");

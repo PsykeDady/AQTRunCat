@@ -254,6 +254,71 @@ private slots:
         else
             QCOMPARE(result.error, QStringLiteral("field \"enabled\" must be a boolean"));
     }
+
+    // v2F1.4: optional display.showBar; only presentation, the normalized
+    // value is still computed (and validated) when the bar is hidden.
+    void showBarFlag_data()
+    {
+        QTest::addColumn<QJsonValue>("showBar");
+        QTest::addColumn<bool>("valid");
+        QTest::addColumn<bool>("expected");
+        QTest::newRow("omitted") << QJsonValue(QJsonValue::Undefined) << true << true;
+        QTest::newRow("true") << QJsonValue(true) << true << true;
+        QTest::newRow("false") << QJsonValue(false) << true << false;
+        QTest::newRow("string") << QJsonValue(QStringLiteral("false")) << false << false;
+        QTest::newRow("number") << QJsonValue(0) << false << false;
+        QTest::newRow("null") << QJsonValue(QJsonValue::Null) << false << false;
+    }
+
+    void showBarFlag()
+    {
+        QFETCH(QJsonValue, showBar);
+        QFETCH(bool, valid);
+        QFETCH(bool, expected);
+        QJsonObject object = QJsonDocument::fromJson(configuration(QStringLiteral("/bin/true"))).object();
+        QJsonObject display = object.value(QStringLiteral("display")).toObject();
+        if (!showBar.isUndefined())
+            display.insert(QStringLiteral("showBar"), showBar);
+        object.insert(QStringLiteral("display"), display);
+        const CommandParseResult result = parseCommandJson(QJsonDocument(object).toJson(), QStringLiteral("/tmp/metric.json"));
+        QVERIFY(result.recognized);
+        QCOMPARE(result.definition.has_value(), valid);
+        if (!valid) {
+            QCOMPARE(result.error, QStringLiteral("field \"display.showBar\" must be a boolean"));
+            return;
+        }
+        QCOMPARE(result.definition->showBar, expected);
+        const ScalarResult output = snapshotFromCommandOutput(*result.definition, "42\n");
+        QVERIFY(output.snapshot);
+        QCOMPARE(output.snapshot->showBar, expected);
+        QCOMPARE(*output.snapshot->metrics.first().normalizedValue, 0.42); // data unchanged
+        QCOMPARE(output.snapshot->metrics.first().formattedValue, QStringLiteral("~42 °C"));
+    }
+
+    void showBarWithSnapshotOutput()
+    {
+        QJsonObject object = QJsonDocument::fromJson(configuration(QStringLiteral("/bin/true"))).object();
+        QJsonObject source = object.value(QStringLiteral("source")).toObject();
+        source.insert(QStringLiteral("output"), QStringLiteral("snapshot"));
+        object.insert(QStringLiteral("source"), source);
+        object.insert(QStringLiteral("display"), QJsonObject{{QStringLiteral("showBar"), false}});
+        CommandParseResult result = parseCommandJson(QJsonDocument(object).toJson(), QStringLiteral("/tmp/metric.json"));
+        QVERIFY2(result.definition, qPrintable(result.error)); // showBar alone is allowed
+        QVERIFY(!result.definition->showBar);
+        const ScalarResult output = snapshotFromCommandOutput(*result.definition,
+            R"({"title":"x","metrics":[{"title":"A","formattedValue":"1","normalizedValue":0.5}],"lastUpdatedDate":"2026-10-16T10:00:00Z"})");
+        QVERIFY(output.snapshot);
+        QVERIFY(!output.snapshot->showBar); // the configuration decides
+        QCOMPARE(*output.snapshot->metrics.first().normalizedValue, 0.5);
+        // Formatting keys still belong to scalar output only.
+        object.insert(QStringLiteral("display"), QJsonObject{{QStringLiteral("showBar"), false}, {QStringLiteral("suffix"), QStringLiteral("x")}});
+        result = parseCommandJson(QJsonDocument(object).toJson(), QStringLiteral("/tmp/metric.json"));
+        QVERIFY(!result.definition);
+        QVERIFY(result.error.startsWith(QStringLiteral("field \"display\" applies only to scalar output")));
+        object.insert(QStringLiteral("display"), QStringLiteral("none"));
+        result = parseCommandJson(QJsonDocument(object).toJson(), QStringLiteral("/tmp/metric.json"));
+        QCOMPARE(result.error, QStringLiteral("field \"display\" must be an object"));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCommandMetric)

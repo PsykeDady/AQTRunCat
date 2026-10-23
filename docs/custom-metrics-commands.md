@@ -454,3 +454,65 @@ da un file): fail → `error | Command exited with status 3. sensor offline`;
 error. Log (`QT_FORCE_STDERR_LOGGING=1`): `failed`, `recovered`, `failed`;
 la seconda riga di stderr (`token=SECRET…`) non compare né nel messaggio né
 nel log.
+
+## 10. v2F1.4 — `display.showBar` facoltativo (2.1.4)
+
+Stato: **completata** il 2026-10-23, versione **2.1.4**. Branch
+`feature/v2/f3`.
+
+### Comportamento prima
+
+Una barra compariva nella Dashboard Qt e nel popup del Plasmoid per ogni
+voce con un valore normalizzato (`display.normalizedRange` per l'output
+scalare, `normalizedValue` delle voci di uno snapshot); nessuna barra per i
+valori testuali. La Metrics Bar non disegna barre (icone con testo).
+
+### Schema
+
+```json
+{ "display": { "showBar": false } }
+```
+
+- Configurazioni Command: `display.showBar` booleano, facoltativo. Con
+  `"output": "snapshot"` `display` era vietato; ora può contenere **solo**
+  `showBar` (prefissi, suffissi e `normalizedRange` restano dell'output
+  scalare).
+- File snapshot: `display.showBar` letto allo stesso modo; le altre chiavi di
+  `display` sono ignorate come ogni chiave sconosciuta.
+- Assente = comportamento 2.1.3 identico; `true` = lo stesso (una barra solo
+  dove c'è un valore normalizzato, mai inventata); `false` = nessuna barra.
+  Un tipo non booleano (`"false"`, `0`, `null`) o un `display` che non è un
+  oggetto è un errore di validazione come gli altri.
+
+### Architettura
+
+- `custommetrics::parseShowBar()` condiviso dai due parser;
+  `CommandDefinition::showBar` e `Snapshot::showBar` (anche negli scheletri
+  e nello snapshot dell'output snapshot, dove decide la configurazione).
+- Solo presentazione: esecuzione, cadenza, timeout, valori e `normalized`
+  invariati (i test lo verificano).
+- Payload (schema 4, additivo): `showBar` effettivo sulle metriche
+  `custom`/`integration`; assente = `true`.
+- Dashboard: con `false` la barra non viene creata (la card è più bassa,
+  nessuno spazio vuoto); in errore restano icona, "—" e motivo (2.1.3).
+- Plasmoid: `Logic.itemRows`/`metricRow` azzerano la frazione con
+  `showBar === false`; nessun parsing di configurazione in QML.
+- Metrics Bar: nessuna modifica (non ha barre); Settings: nessun editor delle
+  proprietà di presentazione, quindi nessun controllo nuovo: si scrive nel
+  file, e il file watcher lo applica senza riavvio.
+
+### Test
+
+`commandmetric` (`showBarFlag`: assente, true, false, stringa, numero,
+null; valore e `normalized` invariati; output snapshot con solo `showBar`
+accettato, con `suffix` rifiutato, `display` non oggetto), `custommetric`
+(file snapshot), `apischema` (schema 4, andata e ritorno, payload senza
+campo), `dashboard` (nessuna barra, card più bassa, valore/titolo/stato,
+errore e Unavailable senza barra, `true` senza valore normalizzato),
+`plasmoidlogic`, `metricsbarmodel` (nessuna differenza), `backendipc`
+(`showBar` false via `GetMetrics`, `normalized` presente).
+
+Runtime isolato: backend reale su bus privato e il vero
+`FullRepresentation.qml` offscreen con due metriche uguali ("12 / 20",
+`normalizedRange` 1–20): quella con `showBar: false` occupa una sola riga
+(titolo e valore), quella predefinita ha la barra sotto.

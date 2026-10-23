@@ -312,6 +312,25 @@ TestCase {
         compare(rick.frames[30], "file:///usr/share/aqtruncat/runners/rickroll/rickroll-frame-30.png");
     }
 
+    // v2F1.4 (schema 4): showBar false → no bar for the metric or its items;
+    // absent or true → as before (a bar only with a normalized value).
+    function test_showBar() {
+        const items = [{ title: "D6", formattedValue: "4", normalized: 0.5 }, { title: "Text", formattedValue: "high", normalized: null }];
+        const dice = fields => metric(Object.assign({ id: "custom:/dice", category: "custom", kind: "command", title: "Dice",
+                                                      state: "ok", items: items }, fields));
+        const legacy = JSON.parse(Logic.metricRows([dice({})])[0].itemsJson);
+        compare(legacy[0].fraction, 0.5);
+        compare(legacy[1].fraction, null);
+        compare(JSON.parse(Logic.metricRows([dice({ showBar: true })])[0].itemsJson)[0].fraction, 0.5);
+        const hidden = JSON.parse(Logic.metricRows([dice({ showBar: false })])[0].itemsJson);
+        compare(hidden[0].fraction, null);
+        compare(hidden[0].value, "4"); // the value stays
+        const single = Logic.metricRows([dice({ showBar: false, items: [items[0]] })])[0];
+        compare(single.hasFraction, false);
+        compare(single.value, "4");
+        compare(Logic.metricRows([dice({ items: [items[0]] })])[0].hasFraction, true);
+    }
+
     // v2F1.3: an execution error never shows the last values, only its
     // reason (the delegate's icon is dialog-error, Unavailable's
     // dialog-warning); a settled error stays during the next run.

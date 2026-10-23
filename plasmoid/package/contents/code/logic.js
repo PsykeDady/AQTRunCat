@@ -81,6 +81,8 @@ function detailText(metric) {
 
 function itemRows(metric) {
     var items = metric && Array.isArray(metric.items) ? metric.items : [];
+    // v2F1.4 (schema 4): display.showBar false → no bars; absent → as before.
+    var bars = !metric || metric.showBar !== false;
     var rows = [];
     for (var i = 0; i < items.length; ++i) {
         var item = items[i] || {};
@@ -89,7 +91,7 @@ function itemRows(metric) {
             title: typeof item.title === "string" ? item.title : "",
             value: formatted.length > 0 ? formatted : "—",
             detail: typeof item.detail === "string" ? item.detail : "",
-            fraction: fraction(item.normalized),
+            fraction: bars ? fraction(item.normalized) : null,
             warning: item.warning === true
         });
     }
@@ -114,7 +116,7 @@ function iconSource(metric) {
 // One flat row per metric for a ListModel. Nested items travel as JSON
 // text, so that an unchanged metric compares equal and its delegate stays.
 function metricRow(metric) {
-    var f = fraction(metric.normalized);
+    var f = metric.showBar === false ? null : fraction(metric.normalized);
     var row = {
         metricId: String(metric.id),
         category: categoryOf(metric),

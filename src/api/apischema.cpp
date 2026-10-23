@@ -708,6 +708,7 @@ QJsonObject customMetric(const custommetrics::Source &source)
                                       command ? QStringLiteral("command") : QStringLiteral("snapshot"), title);
     metric.insert(QStringLiteral("integration"), integration ? QJsonValue(source.integration) : QJsonValue());
     metric.insert(QStringLiteral("enabled"), source.enabled); // schema 3
+    metric.insert(QStringLiteral("showBar"), !source.snapshot || source.snapshot->showBar); // schema 4
     metric.insert(QStringLiteral("state"), stateName(source.state));
     metric.insert(QStringLiteral("message"), source.message);
     QJsonArray items;
@@ -930,6 +931,7 @@ QList<custommetrics::Source> sourcesFromMetrics(const QJsonArray &array)
         if (data.value(QStringLiteral("hasSnapshot")).toBool()) {
             custommetrics::Snapshot snapshot;
             snapshot.title = metric.value(QStringLiteral("title")).toString();
+            snapshot.showBar = metric.value(QStringLiteral("showBar")).toBool(true); // absent before schema 4
             const QJsonObject icon = metric.value(QStringLiteral("icon")).toObject();
             const QString iconType = icon.value(QStringLiteral("type")).toString();
             if (iconType == QLatin1String("symbol")) {
