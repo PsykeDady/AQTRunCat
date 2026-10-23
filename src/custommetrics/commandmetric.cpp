@@ -132,7 +132,7 @@ CommandParseResult parseCommandJson(const QByteArray &json, const QString &confi
     const QJsonValue arguments = source.value(QStringLiteral("arguments"));
     if (!arguments.isUndefined()) {
         if (!arguments.isArray()) {
-            result.error = QStringLiteral("field \"arguments\" must be an array of strings");
+            result.error = QStringLiteral("field \"arguments\" must be an array of strings or numbers");
             return result;
         }
         if (arguments.toArray().size() > 256) {
@@ -140,8 +140,17 @@ CommandParseResult parseCommandJson(const QByteArray &json, const QString &confi
             return result;
         }
         for (const QJsonValue &argument : arguments.toArray()) {
+            // v2F1.5: a JSON number is passed as its decimal text ("arguments":
+            // [20] → "20"); anything else but a bounded string is refused.
+            if (argument.isDouble() && std::isfinite(argument.toDouble())) {
+                const double number = argument.toDouble();
+                definition.arguments.append(std::floor(number) == number && std::abs(number) < 1e15
+                                                ? QString::number(qint64(number))
+                                                : QString::number(number, 'g', 15));
+                continue;
+            }
             if (!argument.isString() || argument.toString().size() > MaxStringCharacters) {
-                result.error = QStringLiteral("field \"arguments\" must contain only bounded strings");
+                result.error = QStringLiteral("field \"arguments\" must contain only bounded strings or numbers");
                 return result;
             }
             definition.arguments.append(argument.toString());

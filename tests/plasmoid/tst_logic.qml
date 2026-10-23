@@ -312,6 +312,44 @@ TestCase {
         compare(rick.frames[30], "file:///usr/share/aqtruncat/runners/rickroll/rickroll-frame-30.png");
     }
 
+    // v2F1.5 (schema 5): a group is one row whose items are its children's
+    // compact cells; children are no rows of their own; disabled children
+    // are left out; a group without enabled children is not shown.
+    function test_groupRow() {
+        const g = "/m/dice/metric.json";
+        const group = metric({ id: "custom:" + g, category: "custom", kind: "group", title: "Dice Metrics", state: "ok",
+                               items: [], data: { sourceId: g, groupId: "" } });
+        const child = (n, fields) => metric(Object.assign({ id: "custom:/m/dice/d" + n, category: "custom", kind: "command",
+            title: "D" + n, state: "ok", showBar: n === 20, enabled: true,
+            items: [{ title: "D" + n, formattedValue: String(n / 2), normalized: 0.5 }],
+            data: { sourceId: "/m/dice/d" + n, groupId: g } }, fields || {}));
+        let rows = Logic.metricRows([group, child(6), child(20), child(100, { state: "error", message: "boom" })]);
+        compare(rows.length, 1);
+        compare(rows[0].group, true);
+        compare(rows[0].title, "Dice Metrics");
+        const cells = JSON.parse(rows[0].itemsJson);
+        compare(cells.map(c => c.title), ["D6", "D20", "D100"]);
+        compare(cells[0].value, "3");
+        compare(cells[0].fraction, null);   // showBar false
+        compare(cells[1].fraction, 0.5);    // showBar true
+        compare(cells[2].value, "—");
+        compare(cells[2].state, "error");
+        compare(cells[2].detail, "boom");
+        compare(cells[0].icon, ""); // no icon of its own
+        // A child's own icon (not the group's) is in its cell.
+        const withIcons = [Object.assign({}, group, { icon: { type: "theme", value: "roll" } }),
+                           child(6, { icon: { type: "theme", value: "roll" } }),
+                           child(20, { icon: { type: "theme", value: "dialog-information" } })];
+        const iconCells = JSON.parse(Logic.metricRows(withIcons)[0].itemsJson);
+        compare(iconCells[0].icon, "");
+        compare(iconCells[1].icon, "dialog-information");
+        rows = Logic.metricRows([group, child(6, { enabled: false }), child(20)]);
+        compare(JSON.parse(rows[0].itemsJson).map(c => c.title), ["D20"]);
+        compare(Logic.metricRows([group, child(6, { enabled: false })]).length, 0);
+        compare(Logic.metricRows([metric(), group]).length, 1); // an empty group: nothing
+        compare(Logic.metricRows([metric()])[0].group, false);
+    }
+
     // v2F1.4 (schema 4): showBar false → no bar for the metric or its items;
     // absent or true → as before (a bar only with a normalized value).
     function test_showBar() {

@@ -397,6 +397,44 @@ private slots:
         QDir(package).removeRecursively();
     }
 
+    // v2F1.5 (schema 5): the group structure reaches the clients: the
+    // container (kind "group", never a value), its children with
+    // data.groupId and hierarchical configuredId, each with its own result;
+    // the Qt client rebuilds the same tree.
+    void groupsThroughTheApi()
+    {
+        const QString group = m_metricsDir + QStringLiteral("/dice");
+        const QString helper = QCoreApplication::applicationDirPath() + QStringLiteral("/custommetric_test_helper");
+        writeFile(group + QStringLiteral("/metric.json"),
+                  QJsonDocument(QJsonObject{{QStringLiteral("id"), QStringLiteral("dice")}, {QStringLiteral("title"), QStringLiteral("Dice")},
+                                            {QStringLiteral("source"), QJsonObject{{QStringLiteral("type"), QStringLiteral("group")},
+                                                                                   {QStringLiteral("executable"), helper}}}}).toJson());
+        for (const int sides : {6, 20})
+            writeFile(group + QStringLiteral("/d%1/metric.json").arg(sides),
+                      QJsonDocument(QJsonObject{{QStringLiteral("title"), QStringLiteral("D%1").arg(sides)},
+                                                {QStringLiteral("source"), QJsonObject{{QStringLiteral("type"), QStringLiteral("command")},
+                                                                                       {QStringLiteral("arguments"), QJsonArray{QStringLiteral("value"), sides}}}}}).toJson());
+        startBackend();
+        const QString groupId = QFileInfo(group + QStringLiteral("/metric.json")).canonicalFilePath();
+        auto metrics = [&] { return callObject(QStringLiteral("GetMetrics")).value(QStringLiteral("metrics")).toArray(); };
+        QTRY_VERIFY_WITH_TIMEOUT(metricById(metrics(), aqtruncat::metricsbar::customId(QFileInfo(group + QStringLiteral("/d20/metric.json")).canonicalFilePath()))
+                                     .value(QStringLiteral("state")) == QLatin1String("ok"), 10000);
+        const QJsonObject container = metricById(metrics(), aqtruncat::metricsbar::customId(groupId));
+        QCOMPARE(container.value(QStringLiteral("kind")).toString(), QStringLiteral("group"));
+        QCOMPARE(container.value(QStringLiteral("title")).toString(), QStringLiteral("Dice"));
+        QVERIFY(container.value(QStringLiteral("items")).toArray().isEmpty());
+        for (const int sides : {6, 20}) {
+            const QJsonObject child = metricById(metrics(), aqtruncat::metricsbar::customId(
+                QFileInfo(group + QStringLiteral("/d%1/metric.json").arg(sides)).canonicalFilePath()));
+            QCOMPARE(child.value(QStringLiteral("data")).toObject().value(QStringLiteral("groupId")).toString(), groupId);
+            QCOMPARE(child.value(QStringLiteral("data")).toObject().value(QStringLiteral("configuredId")).toString(),
+                     QStringLiteral("dice/d%1").arg(sides));
+            QTRY_COMPARE_WITH_TIMEOUT(metricById(metrics(), child.value(QStringLiteral("id")).toString())
+                                          .value(QStringLiteral("formattedValue")).toString(), QString::number(sides), 10000);
+        }
+        QDir(group).removeRecursively();
+    }
+
     void customMetricsAndIntegrationsAreClassified()
     {
         writeFile(m_metricsDir + QStringLiteral("/sensors.json"),

@@ -1,5 +1,6 @@
 #include "app/dashboardwindow.h"
 #include "app/metricsampler.h"
+#include "app/flowlayout.h"
 
 #include <QApplication>
 #include <QFile>
@@ -62,6 +63,42 @@ SystemMetricsSnapshot populatedSnapshot()
 }
 
 } // namespace
+
+
+namespace groupfixture {
+// A dice group as the service publishes it: the container, then children.
+inline QList<aqtruncat::custommetrics::Source> dice()
+{
+    namespace cm = aqtruncat::custommetrics;
+    QList<cm::Source> sources;
+    cm::Source group;
+    group.id = group.path = QStringLiteral("/m/dice/metric.json");
+    group.type = cm::SourceType::Group;
+    group.state = cm::State::Available;
+    group.configuredId = QStringLiteral("dice-metrics");
+    cm::Snapshot title;
+    title.title = QStringLiteral("Dice Metrics");
+    group.snapshot = title;
+    sources.append(group);
+    for (const int sides : {6, 20, 100}) {
+        cm::Source child;
+        child.id = child.path = QStringLiteral("/m/dice/d%1/metric.json").arg(sides);
+        child.type = cm::SourceType::Command;
+        child.parentId = group.id;
+        child.configuredId = QStringLiteral("dice-metrics/d%1").arg(sides);
+        child.state = cm::State::Available;
+        cm::Snapshot snapshot;
+        snapshot.title = QStringLiteral("D%1").arg(sides);
+        snapshot.metricsBarValue = QString::number(sides / 2);
+        snapshot.metrics = {{QStringLiteral("D%1").arg(sides), QString::number(sides / 2), 0.5}};
+        snapshot.showBar = sides == 20;
+        snapshot.lastUpdatedDate = QDateTime::fromString(QStringLiteral("2026-10-23T10:00:00Z"), Qt::ISODate);
+        child.snapshot = snapshot;
+        sources.append(child);
+    }
+    return sources;
+}
+}
 
 class TestDashboard : public QObject
 {
@@ -379,6 +416,74 @@ private slots:
         QCOMPARE(child<QLabel>(window, "customValue_1_0")->text(), QStringLiteral("3"));
         QApplication::processEvents();
         QCOMPARE(scroll->verticalScrollBar()->value(), position);
+    }
+
+    // v2F1.5: a group is one card: its title, then each child as a compact
+    // cell (title and value, a small bar only where showBar allows it) that
+    // wraps; children are not cards of their own; without enabled children
+    // the group is not shown.
+    void groupIsOneCompactCard()
+    {
+        DashboardWindow window("/home/alice");
+        window.resize(220, 400);
+        window.show();
+        namespace cm = aqtruncat::custommetrics;
+        QList<cm::Source> sources = groupfixture::dice();
+        window.updateCustomMetrics(sources);
+        QCOMPARE(child<QLabel>(window, "customTitle_0")->text(), QStringLiteral("Dice Metrics"));
+        QVERIFY(child<QWidget>(window, "customGroup_0"));
+        QVERIFY(!window.findChild<QWidget *>(QStringLiteral("customSource_1"))); // no card per child
+        QCOMPARE(child<QLabel>(window, "customChildValue_0_0")->text(), QStringLiteral("3"));
+        QCOMPARE(child<QLabel>(window, "customChildValue_0_1")->text(), QStringLiteral("10"));
+        QCOMPARE(child<QLabel>(window, "customChildValue_0_2")->text(), QStringLiteral("50"));
+        QVERIFY(!window.findChild<QProgressBar *>(QStringLiteral("customChildProgress_0_0")));
+        QVERIFY(window.findChild<QProgressBar *>(QStringLiteral("customChildProgress_0_1")));  // D20: showBar true
+        QVERIFY(child<QWidget>(window, "customChild_0_0")->toolTip().startsWith(QStringLiteral("Last updated: ")));
+        QVERIFY(!window.findChild<QLabel *>(QStringLiteral("customChildIcon_0_0"))); // the group's icon: not repeated
+
+        // A child with an icon of its own shows it before its title.
+        cm::IconReference own{cm::IconType::Theme, QStringLiteral("dialog-information"), QStringLiteral("dialog-information")};
+        sources[2].snapshot->icon = own;
+        window.updateCustomMetrics(sources);
+        QVERIFY(window.findChild<QLabel *>(QStringLiteral("customChildIcon_0_1")));
+        QVERIFY(!window.findChild<QLabel *>(QStringLiteral("customChildIcon_0_0")));
+        sources[2].snapshot->icon.reset();
+        // The cells are side by side in a FlowLayout, which wraps them
+        // onto more lines when the width is not enough.
+        QVERIFY(dynamic_cast<FlowLayout *>(child<QWidget>(window, "customGroupCells_0")->layout()));
+        QWidget host;
+        auto *flow = new FlowLayout(&host, 10, 4);
+        for (int i = 0; i < 3; ++i) {
+            auto *cell = new QLabel(QStringLiteral("D%1 99").arg(i), &host);
+            cell->setFixedSize(50, 20);
+            flow->addWidget(cell);
+        }
+        flow->setGeometry(QRect(0, 0, 400, 100));
+        QCOMPARE(flow->itemAt(2)->geometry().y(), 0);           // wide: one line
+        QCOMPARE(flow->heightForWidth(400), 20);
+        flow->setGeometry(QRect(0, 0, 120, 100));
+        QCOMPARE(flow->itemAt(1)->geometry().topLeft(), QPoint(60, 0));
+        QCOMPARE(flow->itemAt(2)->geometry().topLeft(), QPoint(0, 24)); // narrow: wrapped
+        QCOMPARE(flow->heightForWidth(120), 44);
+
+        // A child failing: its own error mark and "—", the others unchanged.
+        sources[2].state = cm::State::Error;
+        sources[2].message = QStringLiteral("Command exited with status 1.");
+        window.updateCustomMetrics(sources);
+        QVERIFY(window.findChild<QLabel *>(QStringLiteral("customChildError_0_1")));
+        QCOMPARE(child<QLabel>(window, "customChildValue_0_1")->text(), QStringLiteral("—"));
+        QCOMPARE(child<QWidget>(window, "customChild_0_1")->toolTip(), QStringLiteral("Error: Command exited with status 1."));
+        QCOMPARE(child<QLabel>(window, "customChildValue_0_0")->text(), QStringLiteral("3"));
+
+        // Disabled children are left out; none left: no card at all.
+        sources[1].enabled = false;
+        window.updateCustomMetrics(sources);
+        QCOMPARE(child<QLabel>(window, "customChildValue_0_0")->text(), QStringLiteral("—")); // D20 (failed) first now
+        for (int i : {2, 3})
+            sources[i].enabled = false;
+        window.updateCustomMetrics(sources);
+        QVERIFY(!window.findChild<QWidget *>(QStringLiteral("customGroup_0")));
+        QVERIFY(child<QWidget>(window, "customMetricsHeader")->isHidden());
     }
 
     // v2F1.4: display.showBar false: value, title and status stay, the bar

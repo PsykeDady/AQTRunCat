@@ -366,6 +366,70 @@ private slots:
         QCOMPARE(QCoreApplication::exec(), 0);
     }
 
+    // v2F1.5: a group is a row with its children under it; each checkbox is
+    // its file's own "enabled"; under a disabled group a checked child is
+    // "Disabled by group" and its file is never touched.
+    void customMetricGroupsAreATree()
+    {
+        QTemporaryDir temporary;
+        const QString discovery = temporary.filePath(QStringLiteral("metrics"));
+        const QString group = discovery + QStringLiteral("/dice");
+        QDir().mkpath(group + QStringLiteral("/d6"));
+        QDir().mkpath(group + QStringLiteral("/d20"));
+        auto write = [](const QString &path, const QByteArray &json) {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            file.write(json);
+        };
+        write(group + QStringLiteral("/metric.json"),
+              R"({"id":"dice","title":"Dice","source":{"type":"group","executable":"/bin/true"}})");
+        write(group + QStringLiteral("/d6/metric.json"), R"({"title":"D6","source":{"type":"command"}})");
+        write(group + QStringLiteral("/d20/metric.json"), R"({"title":"D20","source":{"type":"command"}})");
+        QFile d6File(group + QStringLiteral("/d6/metric.json"));
+        QVERIFY(d6File.open(QIODevice::ReadOnly));
+        const QByteArray d6 = d6File.readAll();
+        d6File.close();
+
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
+        CustomMetricsService service(&settings, discovery);
+        service.start();
+        SettingsWindow window(&settings,
+            {{QStringLiteral("cat"), QStringLiteral("Cat"), aqtruncat::RunnerSource::Bundled}}, &service);
+        auto *tree = child<QTreeWidget>(window, "customMetricFiles");
+        QCOMPARE(tree->topLevelItemCount(), 1);
+        QTreeWidgetItem *top = tree->topLevelItem(0);
+        QCOMPARE(top->text(0), QStringLiteral("Dice"));
+        QCOMPARE(top->text(2), QStringLiteral("Group — Discovered"));
+        QCOMPARE(top->text(3), QStringLiteral("Group"));
+        QCOMPARE(top->childCount(), 2);
+        QCOMPARE(top->child(1)->text(0), QStringLiteral("D20"));
+        QCOMPARE(top->child(0)->text(0), QStringLiteral("D6"));
+        QCOMPARE(top->child(0)->text(2), QStringLiteral("Group child"));
+        QVERIFY(tree->rootIsDecorated());
+
+        // The group off: its children are disabled by it, still checked.
+        top->setCheckState(0, Qt::Unchecked);
+        QTRY_COMPARE(tree->topLevelItem(0)->text(3), QStringLiteral("Disabled"));
+        top = tree->topLevelItem(0);
+        QCOMPARE(top->child(0)->checkState(0), Qt::Checked);
+        QCOMPARE(top->child(0)->text(3), QStringLiteral("Disabled by group"));
+        QVERIFY(!service.sources().at(2).enabled);
+        QFile after(group + QStringLiteral("/d6/metric.json"));
+        QVERIFY(after.open(QIODevice::ReadOnly));
+        QCOMPARE(after.readAll(), d6); // the child's file untouched
+        after.close();
+
+        // A child switched off on its own while the group is off, then the
+        // group on again: the child keeps its own "off".
+        top->child(0)->setCheckState(0, Qt::Unchecked);
+        QTRY_COMPARE(tree->topLevelItem(0)->child(0)->text(3), QStringLiteral("Disabled"));
+        tree->topLevelItem(0)->setCheckState(0, Qt::Checked);
+        QTRY_COMPARE(tree->topLevelItem(0)->text(3), QStringLiteral("Group"));
+        QCOMPARE(tree->topLevelItem(0)->child(0)->checkState(0), Qt::Unchecked);
+        QCOMPARE(tree->topLevelItem(0)->child(0)->text(3), QStringLiteral("Disabled"));
+        QVERIFY(tree->topLevelItem(0)->child(1)->text(3) != QLatin1String("Disabled by group"));
+    }
+
     // v2F1.2: the checkbox of each Custom Metric is its file's "enabled".
     void customMetricEnableCheckbox()
     {

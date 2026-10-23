@@ -342,6 +342,17 @@ that is not valid — is an error: since 2.1.3 the Dashboard, the Metrics Bar
 (the exit status and the first line the command wrote on standard error)
 instead of a value, and the next successful run clears it.
 
+Several command metrics can share one configuration as a **group** (since
+2.1.5): a package whose `metric.json` has `"source": {"type": "group", ...}`
+holds the program, schedule, icon and display options; each subdirectory
+with its own `metric.json` is a child that inherits all of it and overrides
+what it declares (for example its title and `arguments`). The group itself
+never runs; each child runs on its own schedule, with its own value and
+errors. The Dashboard and the Plasma widget show a group as one compact card
+(`🎲 Dice Metrics — D6 4  D20 17  D100 73`), Settings as a tree where
+groups and children are switched on and off. A complete example is in
+[docs/custom-metrics-commands.md](docs/custom-metrics-commands.md) §11.
+
 A Custom Metric with a normalized value (from `display.normalizedRange`, or
 a snapshot item's `normalizedValue`) gets a progress bar in the Dashboard and
 the Plasma widget; `"display": { "showBar": false }` (since 2.1.4) hides it

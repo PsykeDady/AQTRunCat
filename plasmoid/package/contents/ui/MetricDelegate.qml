@@ -27,6 +27,8 @@ ColumnLayout {
     required property bool warning
     required property string icon
     required property string itemsJson
+    // v2F1.5: a group: items are its children's compact cells.
+    required property bool group
     property bool showDetails: true
 
     readonly property var items: {
@@ -100,8 +102,65 @@ ColumnLayout {
         opacity: 0.7
     }
 
+    // v2F1.5: a group's children, side by side, wrapping to the width.
+    Flow {
+        Layout.fillWidth: true
+        visible: metric.group
+        spacing: Kirigami.Units.largeSpacing
+        Repeater {
+            model: metric.group ? metric.items : []
+            ColumnLayout {
+                id: cell
+                required property var modelData
+                spacing: 0
+                Accessible.role: Accessible.StaticText
+                Accessible.name: modelData.title + ": " + modelData.value
+
+                HoverHandler { id: cellHover }
+                PlasmaComponents.ToolTip {
+                    text: cell.modelData.detail
+                    visible: cellHover.hovered && text.length > 0
+                }
+                RowLayout {
+                    id: cellRow
+                    spacing: Kirigami.Units.smallSpacing
+                    Kirigami.Icon {
+                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                        visible: cell.modelData.state === "error" || cell.modelData.state === "unavailable"
+                        source: cell.modelData.state === "error" ? "dialog-error" : "dialog-warning"
+                    }
+                    Kirigami.Icon {
+                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                        visible: (cell.modelData.icon || "").length > 0
+                        source: cell.modelData.icon || ""
+                    }
+                    PlasmaComponents.Label {
+                        text: cell.modelData.title
+                        textFormat: Text.PlainText
+                    }
+                    PlasmaComponents.Label {
+                        text: cell.modelData.value
+                        textFormat: Text.PlainText
+                        font.bold: cell.modelData.state === "ok"
+                        opacity: cell.modelData.state === "ok" ? 1 : 0.6
+                    }
+                }
+                PlasmaComponents.ProgressBar {
+                    // As wide as the cell's text: a bar never widens its cell.
+                    Layout.preferredWidth: Math.max(cellRow.implicitWidth, Kirigami.Units.gridUnit * 3)
+                    visible: cell.modelData.fraction !== null
+                    from: 0
+                    to: 1
+                    value: cell.modelData.fraction === null ? 0 : cell.modelData.fraction
+                }
+            }
+        }
+    }
+
     Repeater {
-        model: metric.ok ? metric.items : []
+        model: metric.ok && !metric.group ? metric.items : []
 
         ColumnLayout {
             id: item

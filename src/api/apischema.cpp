@@ -701,11 +701,13 @@ QJsonArray builtInMetrics(const std::optional<metrics::SystemMetricsSnapshot> &s
 QJsonObject customMetric(const custommetrics::Source &source)
 {
     const bool integration = !source.integration.isEmpty();
-    const bool command = source.type == custommetrics::SourceType::Command;
+    const QString kind = source.type == custommetrics::SourceType::Command ? QStringLiteral("command")
+        : source.type == custommetrics::SourceType::Group                  ? QStringLiteral("group") // schema 5
+                                                                           : QStringLiteral("snapshot");
     const QString title = source.snapshot ? source.snapshot->title : QFileInfo(source.path).completeBaseName();
     QJsonObject metric = metricObject(metricsbar::customId(source.id),
                                       integration ? QStringLiteral("integration") : QStringLiteral("custom"),
-                                      command ? QStringLiteral("command") : QStringLiteral("snapshot"), title);
+                                      kind, title);
     metric.insert(QStringLiteral("integration"), integration ? QJsonValue(source.integration) : QJsonValue());
     metric.insert(QStringLiteral("enabled"), source.enabled); // schema 3
     metric.insert(QStringLiteral("showBar"), !source.snapshot || source.snapshot->showBar); // schema 4
@@ -741,7 +743,10 @@ QJsonObject customMetric(const custommetrics::Source &source)
         {QStringLiteral("explicit"), source.explicitlyRegistered},
         {QStringLiteral("discovered"), source.discovered},
         {QStringLiteral("configuredId"), source.configuredId},
-        {QStringLiteral("hasSnapshot"), source.snapshot.has_value()}});
+        {QStringLiteral("hasSnapshot"), source.snapshot.has_value()},
+        // schema 5: the group a child belongs to, and its own "enabled"
+        {QStringLiteral("groupId"), source.parentId},
+        {QStringLiteral("configuredEnabled"), source.configuredEnabled}});
     return metric;
 }
 
@@ -920,8 +925,12 @@ QList<custommetrics::Source> sourcesFromMetrics(const QJsonArray &array)
         source.configuredId = data.value(QStringLiteral("configuredId")).toString();
         source.integration = metric.value(QStringLiteral("integration")).toString();
         source.enabled = metric.value(QStringLiteral("enabled")).toBool(true); // absent before schema 3
-        source.type = metric.value(QStringLiteral("kind")) == QLatin1String("command") ? custommetrics::SourceType::Command
-                                                                                     : custommetrics::SourceType::Snapshot;
+        const QString kind = metric.value(QStringLiteral("kind")).toString();
+        source.type = kind == QLatin1String("command") ? custommetrics::SourceType::Command
+            : kind == QLatin1String("group")           ? custommetrics::SourceType::Group
+                                                       : custommetrics::SourceType::Snapshot;
+        source.parentId = data.value(QStringLiteral("groupId")).toString();
+        source.configuredEnabled = data.value(QStringLiteral("configuredEnabled")).toBool(source.enabled);
         const QString state = metric.value(QStringLiteral("state")).toString();
         source.state = state == QLatin1String("ok")            ? custommetrics::State::Available
             : state == QLatin1String("pending")                ? custommetrics::State::Pending

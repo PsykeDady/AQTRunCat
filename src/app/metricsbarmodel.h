@@ -74,6 +74,7 @@ signals:
     void itemsChanged(const QList<aqtruncat::metricsbar::Item> &items);
 
 private:
+    void nameGroupChild(const aqtruncat::custommetrics::Source &source, aqtruncat::metricsbar::Item &item) const;
     void scheduleRebuild();
     void rebuild();
     std::optional<aqtruncat::metricsbar::Item> builtIn(const aqtruncat::metricsbar::BuiltInMetric &metric) const;

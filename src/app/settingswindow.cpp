@@ -289,7 +289,7 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
     m_customMetricFiles = new QTreeWidget(customBox);
     m_customMetricFiles->setObjectName(QStringLiteral("customMetricFiles"));
     m_customMetricFiles->setHeaderLabels({tr("Name"), tr("File"), tr("Origin"), tr("Status")});
-    m_customMetricFiles->setRootIsDecorated(false);
+    m_customMetricFiles->setRootIsDecorated(false); // decorated when there are groups (v2F1.5)
     m_customMetricFiles->setUniformRowHeights(true);
     m_customMetricFiles->setMinimumHeight(110);
     m_customMetricFiles->setMaximumHeight(160);
@@ -829,13 +829,17 @@ void SettingsWindow::rebuildCustomMetrics()
     }
     QTreeWidgetItem *restored = nullptr;
     const QString integrationFile = integrationMetricFile();
+    QHash<QString, QTreeWidgetItem *> groups; // v2F1.5: children under their group
     for (const aqtruncat::custommetrics::Source &source : m_customMetrics->sources()) {
         // Managed in Integrations, not one of the user's Custom Metrics. The
         // path check covers a package written before the provenance field.
         if (!source.integration.isEmpty()
             || (!integrationFile.isEmpty() && QDir::cleanPath(source.path) == integrationFile))
             continue;
-        auto *item = new QTreeWidgetItem(m_customMetricFiles);
+        QTreeWidgetItem *parent = groups.value(source.parentId);
+        auto *item = parent ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(m_customMetricFiles);
+        if (source.type == aqtruncat::custommetrics::SourceType::Group)
+            groups.insert(source.id, item);
         if (!current.isEmpty() && source.path == current)
             restored = item;
         // The metric's own title first (a disabled one keeps it too); the
@@ -846,10 +850,11 @@ void SettingsWindow::rebuildCustomMetrics()
         item->setToolTip(1, source.path);
         item->setData(0, Qt::UserRole, source.explicitPath.isEmpty() ? source.path : source.explicitPath);
         item->setData(0, Qt::UserRole + 1, source.explicitlyRegistered);
-        // v2F1.2: the checkbox is the file's "enabled" (missing = on).
-        item->setData(0, Qt::UserRole + 2, source.enabled);
+        // v2F1.2: the checkbox is the file's own "enabled" (missing = on);
+        // v2F1.5: under a disabled group a checked child stays inactive.
+        item->setData(0, Qt::UserRole + 2, source.configuredEnabled);
         item->setFlags((item->flags() | Qt::ItemIsUserCheckable) & ~Qt::ItemIsAutoTristate);
-        item->setCheckState(0, source.enabled ? Qt::Checked : Qt::Unchecked);
+        item->setCheckState(0, source.configuredEnabled ? Qt::Checked : Qt::Unchecked);
         item->setToolTip(0, source.enabled ? tr("On: the metric runs and is shown. Uncheck to disable it.")
                                            : tr("Off: the metric does not run and is not shown. Check to enable it."));
         QString origin;
@@ -859,7 +864,11 @@ void SettingsWindow::rebuildCustomMetrics()
             origin = tr("Registered");
         else
             origin = tr("Discovered");
-        if (source.type == aqtruncat::custommetrics::SourceType::Command)
+        if (!source.parentId.isEmpty())
+            origin = source.type == aqtruncat::custommetrics::SourceType::Group ? tr("Group in a group") : tr("Group child");
+        else if (source.type == aqtruncat::custommetrics::SourceType::Group)
+            origin = tr("Group — %1").arg(origin);
+        else if (source.type == aqtruncat::custommetrics::SourceType::Command)
             origin = tr("Command — %1").arg(origin);
         item->setText(2, origin);
         switch (source.state) {
@@ -868,13 +877,21 @@ void SettingsWindow::rebuildCustomMetrics()
         case aqtruncat::custommetrics::State::Unavailable: item->setText(3, tr("Unavailable")); break;
         case aqtruncat::custommetrics::State::Error: item->setText(3, tr("Error")); break;
         }
-        if (!source.enabled)
+        if (source.type == aqtruncat::custommetrics::SourceType::Group && source.state != aqtruncat::custommetrics::State::Error)
+            item->setText(3, source.enabled ? tr("Group") : tr("Disabled"));
+        if (!source.enabled && source.configuredEnabled) {
+            item->setText(3, tr("Disabled by group"));
+            for (int column = 0; column < 4; ++column)
+                item->setForeground(column, palette().brush(QPalette::Disabled, QPalette::Text));
+        } else if (!source.enabled)
             item->setText(3, tr("Disabled"));
         else if (source.state == aqtruncat::custommetrics::State::Error)
             item->setIcon(3, QIcon::fromTheme(QStringLiteral("dialog-error"),
                                               style()->standardIcon(QStyle::SP_MessageBoxCritical)));
         item->setToolTip(3, source.message);
     }
+    m_customMetricFiles->setRootIsDecorated(!groups.isEmpty());
+    m_customMetricFiles->expandAll();
     for (int column = 0; column < 4; ++column)
         m_customMetricFiles->resizeColumnToContents(column);
     if (restored)
@@ -979,7 +996,14 @@ void SettingsWindow::rebuildMetricsBar()
             return true;
         }
         const auto &snapshot = source->snapshot;
-        const QString name = snapshot ? snapshot->title : QFileInfo(source->path).completeBaseName();
+        QString name = snapshot ? snapshot->title : QFileInfo(source->path).completeBaseName();
+        if (!source->parentId.isEmpty()) {
+            // v2F1.5: a group's child, named with its group.
+            const auto group = std::find_if(sources.cbegin(), sources.cend(),
+                                            [&](const auto &s) { return s.id == source->parentId; });
+            if (group != sources.cend() && group->snapshot)
+                name = group->snapshot->title + QStringLiteral(" — ") + name;
+        }
         if (!source->enabled) {
             addRow(id, name, tr("Custom — disabled"), checked);
             return true;
@@ -999,8 +1023,8 @@ void SettingsWindow::rebuildMetricsBar()
             addKnown(metric.id, false);
     }
     for (const auto &source : sources) {
-        if (!source.enabled)
-            continue; // not offered while disabled (a selection stays, above)
+        if (!source.enabled || source.type == aqtruncat::custommetrics::SourceType::Group)
+            continue; // not offered while disabled (a selection stays, above); groups are containers
         // A multi-value source whose items carry their own compact values is
         // offered per item; the whole-source entry stays only if selected.
         QStringList itemIds;

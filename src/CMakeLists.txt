@@ -91,6 +91,8 @@ add_library(aqtruncat_engine STATIC
     custommetrics/commandmetric.h
     custommetrics/custommetric.cpp
     custommetrics/custommetric.h
+    custommetrics/metricgroup.cpp
+    custommetrics/metricgroup.h
     app/applicationquit.cpp
     app/applicationquit.h
     app/appsettings.cpp
@@ -159,6 +161,8 @@ add_library(aqtruncat_desktop STATIC
     app/customsymbol.cpp
     app/customsymbol.h
     app/dashboardwindow.cpp
+    app/flowlayout.cpp
+    app/flowlayout.h
     app/dashboardwindow.h
     app/metricsbarmodel.cpp
     app/metricsbarmodel.h

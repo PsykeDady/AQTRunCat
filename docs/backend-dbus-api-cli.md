@@ -160,7 +160,8 @@ backend.
   `docs/additional-built-in-metrics.md`), **3 da 2.1.2** (campo `enabled`
   delle Custom Metrics e metodo `SetCustomMetricEnabled`, vedi
   `docs/custom-metrics-commands.md` §8), **4 da 2.1.4** (campo `showBar`,
-  §10). Le aggiunte compatibili (nuovi
+  §10), **5 da 2.1.5** (gruppi: `kind` `group`, `data.groupId`,
+  `data.configuredEnabled`, §11). Le aggiunte compatibili (nuovi
   campi, nuove capability, nuovi id di metrica) non cambiano `api`.
 - I client **devono ignorare i campi sconosciuti** e trattare un valore
   sconosciuto di `state` come `error`.
@@ -240,6 +241,7 @@ Ogni metrica è un oggetto con **tutti** i campi seguenti (eventualmente
 | `category` | `builtin` \| `integration` \| `custom` | classificazione di Dashboard e Settings |
 | `kind` | `system` \| `snapshot` \| `command` | provenienza: campionatore interno, file snapshot, comando M6 |
 | `integration` | string \| null | `claude-code`, `codex`… solo per `category = integration` |
+| `kind` `group` (schema 5) | — | un gruppo di Custom Metrics (v2F1.5): contenitore mai eseguito, `state` `ok` (o `error` se il suo `metric.json` non è valido), titolo e icona, nessun valore né `items`. I figli sono metriche `command` con `data.groupId` = `data.sourceId` del gruppo. I client mostrano il gruppo con i figli abilitati dentro e lo nascondono se non ne ha |
 | `showBar` (schema 4) | bool | solo `custom` e `integration`: il `display.showBar` effettivo della configurazione (assente = `true`). `false`: i client non disegnano barre per la metrica né per le sue voci; `normalized` resta nel payload. Assente con un backend precedente = barre come prima |
 | `enabled` (schema 3) | bool | solo `custom` e `integration`: il campo `"enabled"` del file (assente = `true`). `false`: `state` `unavailable`, `message` "Disabled.", nessun valore né `items`; i frontend non la mostrano (Settings sì, per riattivarla). Assente con un backend precedente = abilitata |
 | `title` | string | titolo da mostrare |
@@ -302,7 +304,11 @@ Ogni voce di `items` ha: `id` (string|null), `title`, `formattedValue`,
     `codename`, `buildId`, `variant`, `source`. Dettagli e semantica:
     `docs/additional-built-in-metrics.md` §2.
 - Integrazioni e Custom Metrics: `sourceId`, `path`, `explicitPath`,
-  `explicit`, `discovered`, `configuredId`, `hasSnapshot`. Sono percorsi dei
+  `explicit`, `discovered`, `configuredId`, `hasSnapshot`; da schema 5
+  `groupId` (il `sourceId` del gruppo di un figlio, vuoto al primo livello;
+  `configuredId` di un figlio è gerarchico, `dice-metrics/d20`) e
+  `configuredEnabled` (il campo `enabled` del file stesso; `enabled` resta
+  lo stato effettivo, falso anche sotto un gruppo disabilitato). Sono percorsi dei
   file di metrica di AQTRunCat, che l'utente ha registrato o che stanno nella
   cartella di scoperta. Non vengono mai esposti i file privati dei provider.
 

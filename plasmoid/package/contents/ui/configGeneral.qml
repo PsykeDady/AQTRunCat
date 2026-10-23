@@ -48,6 +48,19 @@ KCM.SimpleKCM {
     readonly property var catalog: client.runnerCatalog
     readonly property var runners: catalog && Array.isArray(catalog.runners) ? catalog.runners : []
     readonly property var customSources: client.metrics.filter(m => m.category === "custom")
+    // v2F1.5: how deep a source is in groups (for the indentation below).
+    function groupDepth(metric) {
+        let depth = 0;
+        let parent = metric.data ? metric.data.groupId : "";
+        while (parent && depth < 8) {
+            const group = customSources.find(m => m.data && m.data.sourceId === parent);
+            if (!group)
+                break;
+            ++depth;
+            parent = group.data.groupId;
+        }
+        return depth;
+    }
     readonly property var networkInterfaces: {
         const download = client.metrics.find(m => m.id === "network.download");
         const list = download && download.data && Array.isArray(download.data.interfaces) ? download.data.interfaces : [];
@@ -264,18 +277,22 @@ KCM.SimpleKCM {
             model: page.customSources
             RowLayout {
                 required property var modelData
+                // v2F1.2 / v2F1.5: the file's own "enabled" (a checked child of a
+                // disabled group stays inactive, shown faded).
+                readonly property bool own: modelData.data && typeof modelData.data.configuredEnabled === "boolean"
+                                            ? modelData.data.configuredEnabled : modelData.enabled !== false
                 Layout.fillWidth: true
-                // v2F1.2: the file's "enabled"; absent with an older backend.
+                Layout.leftMargin: page.groupDepth(modelData) * Kirigami.Units.gridUnit
                 QQC2.CheckBox {
                     visible: typeof modelData.enabled === "boolean"
-                    checked: modelData.enabled !== false
+                    checked: parent.own
                     enabled: client.connected
                     QQC2.ToolTip.text: checked ? "On: the metric runs and is shown" : "Off: the metric does not run and is not shown"
                     QQC2.ToolTip.visible: hovered
                     onToggled: {
                         client.setCustomMetricEnabled(modelData.data.explicitPath || modelData.data.path, checked);
                         // The backend's state decides (a refused write comes back unchanged).
-                        checked = Qt.binding(() => modelData.enabled !== false);
+                        checked = Qt.binding(() => parent.own);
                     }
                 }
                 QQC2.Label {

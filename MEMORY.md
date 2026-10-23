@@ -1,12 +1,12 @@
-# MEMORY.md — AQTRunCat maintainer notes (2.1.4)
+# MEMORY.md — AQTRunCat maintainer notes (2.1.5)
 
 > Audience: an AI agent or developer maintaining AQTRunCat without access to
 > earlier conversations. Precedence when sources disagree: **actual
 > code/tests > this file (frozen decisions §5) > docs/ > commit messages**.
 >
-> **State (2026-10-23): AQTRunCat 2.1.4** on branch `feature/v2/f3`
-> (v2F1: 2.1.1 = 385ceb1, 2.1.2 = 0a72597, 2.1.3 = 613bdbe; 2.1.4
-> `display.showBar` uncommitted — the user commits). 2.0.0 (commit 61f3a8e) was the consolidation release
+> **State (2026-10-23): AQTRunCat 2.1.5** on branch `feature/v2/f4`
+> (v2F1: 2.1.1 = 385ceb1, 2.1.2 = 0a72597, 2.1.3 = 613bdbe, 2.1.4 =
+> f3440d6; 2.1.5 groups uncommitted — the user commits). 2.0.0 (commit 61f3a8e) was the consolidation release
 > of the complete 1.x application (M0–M9 → 1.0.0, then F1–F7 → 1.7.4),
 > without functional change from 1.7.4. All 1.x features are
 > complete (summary §2, history §4 and §13, normative summaries in
@@ -14,8 +14,8 @@
 > `requirements.md` is the **v2 roadmap**: v2F1 Custom Metrics v3 + Rickroll
 > (2.1.x), v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings
 > (2.3.x), v2F4 Dependency Advisor (2.4.x) (summary at the end of §2).
-> Done: 2.1.0–2.1.4. Next: 2.1.5 (metric groups and JSON inheritance) —
-> only on the user's explicit instruction, one sub-feature at a time.
+> Done: 2.1.0–2.1.5. Next: 2.1.6 (reload Custom Metrics) — only on the
+> user's explicit instruction, one sub-feature at a time.
 >
 > The user owns every Git write (branches, commits, merges, tags); read-only
 > Git only. Reports to the user in Italian; code, comments and
@@ -109,7 +109,7 @@
   = F4.2, 1.5.6 = F5.1–F5.6, 1.6.3 = F6.1–F6.3, 1.7.4 = F7.1–F7.4); 2.0.0 =
   consolidation of 1.7.4. v2 rule (requirements.md "Versioning"): v2F<n>
   raises the minor (v2F1 → 2.1.x), its sub-features the patch. The D-Bus
-  api (1) and payload schema (4 since 2.1.4) change only with their contract. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
+  api (1) and payload schema (5 since 2.1.5) change only with their contract. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
   debian/changelog, the man page and `plasmoid/package/metadata.json`
   (KPlugin.Version) together (`packaging-versions` test).
   All executables accept `-v`/`--version`; the tray menus show "AQTRunCat
@@ -161,10 +161,11 @@ F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (party
 2.0.0         Consolidation release: version 2.0.0, docs by topic (docs/README.md), v2 roadmap in requirements.md; no functional change
 2.1.0 DONE    v2F1 baseline (roadmap only; version went 2.0.0 → 2.1.1 directly, no separate 2.1.0 build)
 2.1.1 DONE    v2F1.1 Rickroll built-in runner (rickroll, 31 frames 33×36): six built-in runners (docs/built-in-runners.md §10)
+2.1.5 DONE    v2F1.5 Custom Metric groups + JSON inheritance (API schema 5) (docs/custom-metrics-commands.md §11)
 2.1.4 DONE    v2F1.4 optional display.showBar (API schema 4) (docs/custom-metrics-commands.md §10)
 2.1.3 DONE    v2F1.3 Custom Metric execution warnings (docs/custom-metrics-commands.md §9)
 2.1.2 DONE    v2F1.2 optional Custom Metrics "enabled" (+ Settings/Plasmoid checkbox, SetCustomMetricEnabled, API schema 3) (docs/custom-metrics-commands.md §8)
-NEXT          v2F1 2.1.5–2.1.7 Custom Metrics v3, v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
+NEXT          v2F1 2.1.6–2.1.7 Custom Metrics v3, v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
 ```
 
 v2 roadmap summary (requirements.md is authoritative; added 2026-10-23):
@@ -909,6 +910,12 @@ sample on purpose (hot-plug) — caching not needed.
 
 ## 9. Tests and validation
 
+2.1.5 (2026-10-23, groups): clean build in a fresh directory 0 warnings;
+ctest **54/54** (new suite `metricgroups`); `packaging-versions` 2.1.5;
+`git diff --check` clean (no shell script changed). Isolated runtime: real
+backend + the real Plasmoid popup offscreen with the dice example: one
+"Dice Metrics" row `D6 3  D20 9  D100 56`, bar only under D20.
+
 2.1.4 (2026-10-23, `display.showBar`): clean build in a fresh directory
 0 warnings; ctest **53/53**; `packaging-versions` 2.1.4; `git diff --check`
 clean (no shell script changed).
@@ -1613,6 +1620,48 @@ time" refers to the state when the feature was finished.
 ---
 
 ## 13b. v2 history (2.1.0 onwards)
+
+### v2F1.5 — Groups and JSON inheritance (2.1.5, 2026-10-23)
+
+- `src/custommetrics/metricgroup.{h,cpp}` (Qt Core): `readConfigObject`,
+  `isGroupObject`, `deepMerge` (objects merged, arrays/scalars replaced),
+  `Inheritance` (merged ancestors without id/enabled + `executableBase`/
+  `symbolBase` origins + `idPrefix` + effective enabled), `rootInheritance`,
+  `childInheritance`, `childId` (explicit or dir name), `effectiveChild`
+  (absolutizes executable and file-symbol value against their declaring
+  dir, sets id/enabled), `childConfigurations` (natural order, ≤256,
+  canonical visited list against symlink cycles). Limits `MaxGroupDepth` 4.
+- `CustomMetricsService::reload`: a candidate whose JSON is a group →
+  `appendGroup` (SourceType::Group, never a job, state Available or Error
+  for invalid id/title/symbol/enabled or non-metric.json file) +
+  `appendChildren` (recursive; child Source.id = canonical child path,
+  `parentId` = group id, `configuredId` = prefix/childId, duplicates →
+  Error, nested group → Group source, else `parseCommandJson(effective)` +
+  `applyCommand`). `applyCommand`/`previousFor` factored out of reload.
+  `registerFile` accepts a group metric.json. Numeric `arguments` accepted
+  (decimal text) in `parseCommandJson`.
+- `Source`: `SourceType::Group`, `configuredEnabled` (own flag),
+  `parentId`; `enabled` = effective. Child disabled by an ancestor:
+  message "Disabled by its group.".
+- API schema **5**: kind `group`, `data.groupId`, `data.configuredEnabled`.
+- Dashboard: top-level cards only; `customGroupCard` (FlowLayout cells
+  `customChild_<card>_<n>`, values `customChildValue_…`, small bars
+  `customChildProgress_…`, errors `customChildError_…`), `groupMembers`
+  (descendants, nested flattened); hidden without members; card key
+  includes members. `src/app/flowlayout.{h,cpp}` (new).
+- Metrics Bar: groups never items; `nameGroupChild` → label "Group — Child",
+  caption = child title and icon dropped unless the child's icon/symbol
+  differs from its group's (then kept). Dashboard cells
+  (`customChildIcon_…`) and Plasmoid cells (`icon`) show a child's own icon
+  only when it differs from the group's. Settings bar list: no groups,
+  children named with the group. Settings Custom Metrics list: tree
+  (checkbox = configuredEnabled, "Group"/"Disabled"/"Disabled by group").
+- Plasmoid: `Logic.groupIdOf`, `Logic.groupCells`; `metricRows` skips
+  children, emits group rows (`group: true`, items = cells) or nothing;
+  `MetricDelegate` role `group` + `Flow` of cells; config page indents by
+  `groupDepth` and binds checkboxes to `data.configuredEnabled`.
+- Fixed a clock-dependent assertion in tst_claudecodeintegration
+  ("Resets at" fails between 22:00 and midnight).
 
 ### v2F1.4 — `display.showBar` (2.1.4, 2026-10-23)
 

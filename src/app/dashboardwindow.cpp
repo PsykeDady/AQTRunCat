@@ -1,6 +1,7 @@
 #include "dashboardwindow.h"
 
 #include "customsymbol.h"
+#include "flowlayout.h"
 #include "metrics/metricsformat.h"
 #include "metrics/uptime.h"
 
@@ -615,11 +616,16 @@ void DashboardWindow::rebuildCustomMetrics()
     m_customDirty = false;
     // Integrations first, as in Settings; each keeps the service's order.
     // Card indexes run across both sections.
+    // v2F1.5: children are shown inside their group's card; a group without
+    // any enabled executable child is not shown.
     QList<const aqtruncat::custommetrics::Source *> ordered;
     for (const bool official : {true, false}) {
         for (const aqtruncat::custommetrics::Source &source : std::as_const(m_customSources)) {
-            if (source.integration.isEmpty() != official)
-                ordered.append(&source);
+            if (source.integration.isEmpty() == official || !source.parentId.isEmpty())
+                continue;
+            if (source.type == aqtruncat::custommetrics::SourceType::Group && groupMembers(source).isEmpty())
+                continue;
+            ordered.append(&source);
         }
     }
     bool sameList = ordered.size() == m_customCards.size();
@@ -637,7 +643,8 @@ void DashboardWindow::rebuildCustomMetrics()
             const QString key = customCardKey(*ordered.at(i));
             if (key == card.key)
                 continue;
-            QWidget *replacement = customCard(*ordered.at(i), i);
+            QWidget *replacement = ordered.at(i)->type == aqtruncat::custommetrics::SourceType::Group
+                ? customGroupCard(*ordered.at(i), i) : customCard(*ordered.at(i), i);
             QVBoxLayout *layout = card.official ? m_integrationsLayout : m_customLayout;
             delete layout->replaceWidget(card.widget, replacement);
             delete card.widget;
@@ -661,7 +668,9 @@ void DashboardWindow::rebuildCustomMetrics()
     int custom = 0;
     for (const aqtruncat::custommetrics::Source *source : std::as_const(ordered)) {
         const bool official = !source->integration.isEmpty();
-        QWidget *widget = customCard(*source, index++);
+        QWidget *widget = source->type == aqtruncat::custommetrics::SourceType::Group ? customGroupCard(*source, index)
+                                                                                       : customCard(*source, index);
+        ++index;
         (official ? m_integrationsLayout : m_customLayout)->addWidget(widget);
         m_customCards.append({settledKey(*source), official, customCardKey(*source), widget});
         ++(official ? integrations : custom);
@@ -800,6 +809,149 @@ QWidget *DashboardWindow::customCard(const aqtruncat::custommetrics::Source &sou
     return card;
 }
 
+QList<const aqtruncat::custommetrics::Source *> DashboardWindow::groupMembers(const aqtruncat::custommetrics::Source &group) const
+{
+    // Executable descendants, nested groups included, in the service's order.
+    QList<const aqtruncat::custommetrics::Source *> members;
+    QStringList groups{group.id};
+    for (const aqtruncat::custommetrics::Source &source : std::as_const(m_customSources)) {
+        if (!groups.contains(source.parentId))
+            continue;
+        if (source.type == aqtruncat::custommetrics::SourceType::Group)
+            groups.append(source.id);
+        else
+            members.append(&source);
+    }
+    return members;
+}
+
+QWidget *DashboardWindow::customGroupCard(const aqtruncat::custommetrics::Source &group, int index)
+{
+    auto *card = new QWidget(this);
+    card->setObjectName(QStringLiteral("customGroup_%1").arg(index));
+    auto *cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(0, 2, 0, 6);
+    cardLayout->setSpacing(3);
+
+    auto *headingRow = new QWidget(card);
+    auto *headingLayout = new QHBoxLayout(headingRow);
+    headingLayout->setContentsMargins(0, 0, 0, 0);
+    headingLayout->setSpacing(6);
+    const QIcon icon = group.snapshot ? customSymbolIcon(group.snapshot->icon) : QIcon();
+    QString heading = group.snapshot ? group.snapshot->title : QFileInfo(group.path).completeBaseName();
+    if (!icon.isNull()) {
+        auto *iconLabel = new QLabel(headingRow);
+        iconLabel->setObjectName(QStringLiteral("customIcon_%1").arg(index));
+        iconLabel->setPixmap(icon.pixmap(16, 16));
+        headingLayout->addWidget(iconLabel);
+    } else if (group.snapshot && !customSymbolText(group.snapshot->symbol).isEmpty()) {
+        heading = customSymbolText(group.snapshot->symbol) + QStringLiteral("  ") + heading;
+    }
+    auto *title = label(heading, headingRow);
+    title->setObjectName(QStringLiteral("customTitle_%1").arg(index));
+    QFont font = title->font();
+    font.setBold(true);
+    title->setFont(font);
+    headingLayout->addWidget(title);
+    headingLayout->addStretch();
+    cardLayout->addWidget(headingRow);
+
+    auto *cells = new QWidget(card);
+    cells->setObjectName(QStringLiteral("customGroupCells_%1").arg(index));
+    auto *flow = new FlowLayout(cells);
+    int number = 0;
+    for (const aqtruncat::custommetrics::Source *member : groupMembers(group)) {
+        QString message;
+        const aqtruncat::custommetrics::State state = presentedState(*member, &message);
+        const bool failed = state == aqtruncat::custommetrics::State::Error;
+        const auto &snapshot = member->snapshot;
+        QStringList values;
+        std::optional<double> normalized;
+        if (snapshot) {
+            for (const aqtruncat::custommetrics::Item &item : snapshot->metrics) {
+                values.append(item.formattedValue);
+                if (!normalized && item.normalizedValue)
+                    normalized = item.normalizedValue;
+            }
+        }
+        QString value = values.join(QStringLiteral(" · "));
+        if (failed || (value.isEmpty() && state != aqtruncat::custommetrics::State::Pending))
+            value = QStringLiteral("—");
+        else if (value.isEmpty())
+            value = QStringLiteral("…");
+
+        auto *cell = new QWidget(cells);
+        cell->setObjectName(QStringLiteral("customChild_%1_%2").arg(index).arg(number));
+        auto *cellLayout = new QVBoxLayout(cell);
+        cellLayout->setContentsMargins(0, 0, 0, 0);
+        cellLayout->setSpacing(1);
+        auto *row = new QHBoxLayout;
+        row->setSpacing(4);
+        if (failed) {
+            auto *error = new QLabel(cell);
+            error->setObjectName(QStringLiteral("customChildError_%1_%2").arg(index).arg(number));
+            error->setPixmap(QIcon::fromTheme(QStringLiteral("dialog-error"), style()->standardIcon(QStyle::SP_MessageBoxCritical))
+                                 .pixmap(14, 14));
+            error->setAccessibleName(tr("Error"));
+            row->addWidget(error);
+        }
+        const QString childTitle = snapshot && !snapshot->title.isEmpty() ? snapshot->title
+                                                                        : QFileInfo(QFileInfo(member->path).absolutePath()).fileName();
+        // A child's own icon (one that is not its group's) goes before its title.
+        const auto parent = std::find_if(m_customSources.cbegin(), m_customSources.cend(),
+                                         [&](const auto &s) { return s.id == member->parentId; });
+        const bool ownIcon = snapshot && parent != m_customSources.cend() && parent->snapshot
+            && (snapshot->icon != parent->snapshot->icon || snapshot->symbol != parent->snapshot->symbol);
+        if (ownIcon) {
+            const QIcon childIcon = customSymbolIcon(snapshot->icon);
+            const QString symbol = childIcon.isNull() ? customSymbolText(snapshot->symbol) : QString();
+            if (!childIcon.isNull() || !symbol.isEmpty()) {
+                auto *iconLabel = new QLabel(cell);
+                iconLabel->setObjectName(QStringLiteral("customChildIcon_%1_%2").arg(index).arg(number));
+                if (!childIcon.isNull())
+                    iconLabel->setPixmap(childIcon.pixmap(14, 14));
+                else
+                    iconLabel->setText(symbol);
+                row->addWidget(iconLabel);
+            }
+        }
+        row->addWidget(label(childTitle, cell));
+        auto *valueLabel = label(value, cell);
+        valueLabel->setObjectName(QStringLiteral("customChildValue_%1_%2").arg(index).arg(number));
+        QFont bold = valueLabel->font();
+        bold.setBold(!failed);
+        valueLabel->setFont(bold);
+        row->addWidget(valueLabel);
+        cellLayout->addLayout(row);
+        if (normalized && snapshot->showBar && !failed) {
+            auto *bar = new QProgressBar(cell);
+            bar->setObjectName(QStringLiteral("customChildProgress_%1_%2").arg(index).arg(number));
+            bar->setTextVisible(false);
+            bar->setMaximumHeight(6);
+            bar->setAccessibleName(childTitle);
+            setProgress(bar, std::clamp(*normalized, 0.0, 1.0) * 100.0);
+            cellLayout->addWidget(bar);
+        }
+        // The state and its reason, as on a single card's status line.
+        QString tip;
+        switch (state) {
+        case aqtruncat::custommetrics::State::Available:
+            tip = snapshot && snapshot->lastUpdatedDate.isValid()
+                ? tr("Last updated: %1").arg(QLocale().toString(snapshot->lastUpdatedDate.toLocalTime(), QLocale::ShortFormat))
+                : tr("Available");
+            break;
+        case aqtruncat::custommetrics::State::Pending: tip = tr("Waiting…"); break;
+        case aqtruncat::custommetrics::State::Unavailable: tip = message.isEmpty() ? tr("Unavailable") : tr("Unavailable: %1").arg(message); break;
+        case aqtruncat::custommetrics::State::Error: tip = message.isEmpty() ? tr("Error") : tr("Error: %1").arg(message); break;
+        }
+        cell->setToolTip(tip);
+        flow->addWidget(cell);
+        ++number;
+    }
+    cardLayout->addWidget(cells);
+    return card;
+}
+
 aqtruncat::custommetrics::State DashboardWindow::presentedState(const aqtruncat::custommetrics::Source &source,
                                                                 QString *message) const
 {
@@ -820,6 +972,11 @@ QString DashboardWindow::customCardKey(const aqtruncat::custommetrics::Source &s
     QString message;
     const aqtruncat::custommetrics::State state = presentedState(source, &message);
     QStringList parts{source.path, QString::number(int(state)), message};
+    if (source.type == aqtruncat::custommetrics::SourceType::Group) {
+        // A group card shows its members: any change of theirs changes it.
+        for (const aqtruncat::custommetrics::Source *member : groupMembers(source))
+            parts << customCardKey(*member);
+    }
     if (source.snapshot) {
         const aqtruncat::custommetrics::Snapshot &snapshot = *source.snapshot;
         parts << snapshot.title << QString::number(snapshot.showBar) << snapshot.symbol.value_or(QString())

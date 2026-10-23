@@ -457,7 +457,7 @@ private slots:
     // (older backend) = bars as before.
     void customMetricShowBar()
     {
-        QCOMPARE(api::SchemaVersion, 4);
+        QVERIFY(api::SchemaVersion >= 4); // "showBar" since schema 4
         custommetrics::Source source;
         source.id = source.path = QStringLiteral("/data/dice.json");
         source.state = custommetrics::State::Available;
@@ -476,6 +476,45 @@ private slots:
         QCOMPARE(api::customMetric(source).value(QStringLiteral("showBar")), QJsonValue(true));
         source.snapshot.reset();
         QCOMPARE(api::customMetric(source).value(QStringLiteral("showBar")), QJsonValue(true));
+    }
+
+    // Schema 5 (2.1.5): groups, both ways: kind "group", data.groupId on
+    // children, data.configuredEnabled next to the effective "enabled".
+    void customMetricGroups()
+    {
+        QCOMPARE(api::SchemaVersion, 5);
+        custommetrics::Source group;
+        group.id = group.path = QStringLiteral("/m/dice/metric.json");
+        group.type = custommetrics::SourceType::Group;
+        group.state = custommetrics::State::Available;
+        group.enabled = group.configuredEnabled = false;
+        custommetrics::Source child;
+        child.id = child.path = QStringLiteral("/m/dice/d6/metric.json");
+        child.type = custommetrics::SourceType::Command;
+        child.parentId = group.id;
+        child.configuredId = QStringLiteral("dice-metrics/d6");
+        child.enabled = false;           // under the disabled group
+        child.configuredEnabled = true;  // its own file says enabled
+        const QJsonObject g = api::customMetric(group);
+        const QJsonObject c = api::customMetric(child);
+        QCOMPARE(g.value(QStringLiteral("kind")).toString(), QStringLiteral("group"));
+        QCOMPARE(c.value(QStringLiteral("data")).toObject().value(QStringLiteral("groupId")).toString(), group.id);
+        QCOMPARE(c.value(QStringLiteral("data")).toObject().value(QStringLiteral("configuredId")).toString(), QStringLiteral("dice-metrics/d6"));
+        QCOMPARE(c.value(QStringLiteral("enabled")), QJsonValue(false));
+        QCOMPARE(c.value(QStringLiteral("data")).toObject().value(QStringLiteral("configuredEnabled")), QJsonValue(true));
+        const QList<custommetrics::Source> back = api::sourcesFromMetrics(QJsonArray{g, c});
+        QCOMPARE(back.at(0).type, custommetrics::SourceType::Group);
+        QCOMPARE(back.at(1).parentId, group.id);
+        QVERIFY(!back.at(1).enabled);
+        QVERIFY(back.at(1).configuredEnabled);
+        // An older payload: no group, own state = effective state.
+        QJsonObject old = c;
+        QJsonObject data = old.value(QStringLiteral("data")).toObject();
+        data.remove(QStringLiteral("groupId"));
+        data.remove(QStringLiteral("configuredEnabled"));
+        old.insert(QStringLiteral("data"), data);
+        QVERIFY(api::sourcesFromMetrics(QJsonArray{old}).first().parentId.isEmpty());
+        QVERIFY(!api::sourcesFromMetrics(QJsonArray{old}).first().configuredEnabled);
     }
 
     void settingsObjectHasEveryExposedKey()

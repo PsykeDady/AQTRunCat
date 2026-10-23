@@ -4,9 +4,13 @@
 #include "custommetricpaths.h"
 #include "processgroup.h"
 
+#include "custommetrics/metricgroup.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
+#include <QJsonDocument>
+#include <QRegularExpression>
 #include <QLoggingCategory>
 #include <QProcess>
 #include <QSet>
@@ -130,10 +134,17 @@ bool CustomMetricsService::registerFile(const QString &path, QString *error)
                 *error = tr("The selected path is not a regular file.");
             return false;
         }
-        const CommandParseResult command = parseCommandFile(absolute);
-        const ParseResult parsed = command.recognized ? ParseResult{} : parseFile(absolute);
-        if ((command.recognized && !command.definition)
-            || (!command.recognized && !parsed.snapshot)) {
+        const ConfigObject config = readConfigObject(absolute);
+        const bool group = config.object && isGroupObject(*config.object);
+        const CommandParseResult command = group ? CommandParseResult{} : parseCommandFile(absolute);
+        const ParseResult parsed = group || command.recognized ? ParseResult{} : parseFile(absolute);
+        if (group && info.fileName() != QLatin1String("metric.json")) {
+            if (error)
+                *error = tr("A group must be a package's metric.json (its children are the package's subdirectories).");
+            return false;
+        }
+        if (!group && ((command.recognized && !command.definition)
+                       || (!command.recognized && !parsed.snapshot))) {
             if (error)
                 *error = command.recognized ? command.error : parsed.error;
             return false;
@@ -290,11 +301,8 @@ void CustomMetricsService::reload(bool finalAttempt)
         source.explicitlyRegistered = candidate.explicitFile;
         source.discovered = candidate.discovered;
 
-        const auto previous = std::find_if(m_sources.cbegin(), m_sources.cend(), [&](const Source &old) {
-            return old.id == source.id || old.path == source.path
-                || (!source.explicitPath.isEmpty() && old.explicitPath == source.explicitPath);
-        });
-        if (previous != m_sources.cend())
+        const Source *previous = previousFor(source);
+        if (previous)
             source.snapshot = previous->snapshot;
 
         const QFileInfo info(candidate.path);
@@ -306,43 +314,20 @@ void CustomMetricsService::reload(bool finalAttempt)
             } else {
                 source.state = State::Unavailable;
             }
+        } else if (const ConfigObject config = readConfigObject(candidate.path);
+                   config.object && isGroupObject(*config.object)) {
+            // v2F1.5: a group and, recursively, its children.
+            appendGroup(std::move(source), *config.object, next, commandDefinitions);
+            continue;
         } else {
             const CommandParseResult command = parseCommandFile(candidate.path);
             if (command.recognized) {
-                source.type = SourceType::Command;
-                if (command.definition && !command.definition->enabled) {
-                    // Disabled: no job (a running one is stopped by
-                    // syncCommandJobs below), no values.
-                    source.configuredId = command.definition->id;
-                    source.integration = command.definition->integration;
-                    disable(source, command.definition->title, command.definition->legacySymbol,
-                            command.definition->icon);
-                } else if (command.definition) {
-                    source.configuredId = command.definition->id;
-                    source.integration = command.definition->integration;
-                    commandDefinitions.append(*command.definition);
-                    if (previous == m_sources.cend() || previous->type != SourceType::Command
-                        || !previous->enabled) {
-                        Snapshot skeleton;
-                        skeleton.title = command.definition->title;
-                        skeleton.symbol = command.definition->legacySymbol;
-                        skeleton.icon = command.definition->icon;
-                        skeleton.showBar = command.definition->showBar;
-                        source.snapshot = std::move(skeleton);
-                        source.state = State::Pending;
-                        source.message = tr("Waiting for the first command result.");
-                    } else {
-                        source.state = previous->state;
-                        source.message = previous->message;
-                    }
-                } else {
-                    source.state = State::Error;
-                    source.message = command.error;
-                }
+                applyCommand(source, command, previous, commandDefinitions);
             } else {
                 const ParseResult parsed = parseFile(candidate.path);
                 if (parsed.snapshot && !parsed.enabled) {
                     disable(source, parsed.snapshot->title, parsed.snapshot->symbol, parsed.snapshot->icon);
+                    source.configuredEnabled = false;
                 } else if (parsed.snapshot) {
                     source.snapshot = parsed.snapshot;
                     source.state = State::Available;
@@ -679,6 +664,177 @@ void CustomMetricsService::disable(Source &source, const QString &title, const s
     source.snapshot = std::move(skeleton);
     source.state = State::Unavailable;
     source.message = tr("Disabled.");
+}
+
+const Source *CustomMetricsService::previousFor(const Source &source) const
+{
+    const auto previous = std::find_if(m_sources.cbegin(), m_sources.cend(), [&](const Source &old) {
+        return old.id == source.id || old.path == source.path
+            || (!source.explicitPath.isEmpty() && old.explicitPath == source.explicitPath);
+    });
+    return previous == m_sources.cend() ? nullptr : &*previous;
+}
+
+void CustomMetricsService::applyCommand(Source &source, const CommandParseResult &command, const Source *previous,
+                                        QList<CommandDefinition> &definitions)
+{
+    source.type = SourceType::Command;
+    if (command.definition && !command.definition->enabled) {
+        // Disabled: no job (a running one is stopped by syncCommandJobs),
+        // no values.
+        if (source.configuredId.isEmpty())
+            source.configuredId = command.definition->id;
+        source.integration = command.definition->integration;
+        disable(source, command.definition->title, command.definition->legacySymbol, command.definition->icon);
+        if (source.parentId.isEmpty())
+            source.configuredEnabled = false;
+        else if (source.configuredEnabled)
+            source.message = tr("Disabled by its group.");
+    } else if (command.definition) {
+        if (source.configuredId.isEmpty())
+            source.configuredId = command.definition->id;
+        source.integration = command.definition->integration;
+        definitions.append(*command.definition);
+        if (!previous || previous->type != SourceType::Command || !previous->enabled) {
+            Snapshot skeleton;
+            skeleton.title = command.definition->title;
+            skeleton.symbol = command.definition->legacySymbol;
+            skeleton.icon = command.definition->icon;
+            skeleton.showBar = command.definition->showBar;
+            source.snapshot = std::move(skeleton);
+            source.state = State::Pending;
+            source.message = tr("Waiting for the first command result.");
+        } else {
+            source.state = previous->state;
+            source.message = previous->message;
+        }
+    } else {
+        source.state = State::Error;
+        source.message = command.error;
+    }
+}
+
+void CustomMetricsService::appendGroup(Source group, const QJsonObject &object, QList<Source> &next,
+                                       QList<CommandDefinition> &definitions)
+{
+    group.type = SourceType::Group;
+    group.state = State::Available;
+    group.message.clear();
+    // Its title and icon for the frontends; never values.
+    Snapshot presentation;
+    QString error;
+    const QString directory = QFileInfo(group.path).absolutePath();
+    const QJsonValue id = object.value(QStringLiteral("id"));
+    static const QRegularExpression validId(QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"));
+    bool ok = QFileInfo(group.path).fileName() == QLatin1String("metric.json");
+    if (!ok)
+        error = tr("A group must be a package's metric.json (its children are the package's subdirectories).");
+    if (ok && !(id.isString() && validId.match(id.toString()).hasMatch())) {
+        ok = false;
+        error = QStringLiteral("field \"id\" must match [A-Za-z0-9][A-Za-z0-9._-]{0,99}");
+    }
+    if (ok && !(object.value(QStringLiteral("title")).isString() && !object.value(QStringLiteral("title")).toString().isEmpty())) {
+        ok = false;
+        error = QStringLiteral("missing required field \"title\"");
+    }
+    ok = ok && parseEnabled(object, group.configuredEnabled, error)
+        && parseSymbol(object.value(QStringLiteral("symbol")), directory, presentation.symbol, presentation.icon, error);
+    if (!ok) {
+        group.state = State::Error;
+        group.message = error;
+        group.snapshot.reset();
+        next.append(std::move(group));
+        return; // an invalid group has no children
+    }
+    presentation.title = object.value(QStringLiteral("title")).toString();
+    group.configuredId = id.toString();
+    group.snapshot = presentation;
+    group.enabled = group.configuredEnabled;
+    if (!group.enabled)
+        group.message = tr("Disabled.");
+    const Inheritance inheritance = rootInheritance(object, directory, group.configuredId, group.enabled);
+    QStringList visited{QFileInfo(directory).canonicalFilePath()};
+    const QString groupId = group.id;
+    next.append(std::move(group));
+    appendChildren(groupId, directory, inheritance, 1, visited, next, definitions);
+}
+
+void CustomMetricsService::appendChildren(const QString &parentId, const QString &directory,
+                                          const Inheritance &inheritance, int depth, QStringList &visited,
+                                          QList<Source> &next, QList<CommandDefinition> &definitions)
+{
+    QStringList ids;
+    for (const QString &path : childConfigurations(directory, visited)) {
+        Source child;
+        child.id = identityFor(path);
+        child.path = path;
+        child.discovered = true;
+        child.parentId = parentId;
+        const Source *previous = previousFor(child);
+        if (previous)
+            child.snapshot = previous->snapshot;
+        const QString childDirectory = QFileInfo(path).absolutePath();
+        // Named after its directory until its own id is known (also when its
+        // file cannot be read).
+        child.configuredId = inheritance.idPrefix + u'/' + QFileInfo(childDirectory).fileName();
+
+        const ConfigObject config = readConfigObject(path);
+        QString id;
+        QString error;
+        bool own = true;
+        if (!config.object || !childId(*config.object, childDirectory, id, error)
+            || !parseEnabled(*config.object, own, error)) {
+            child.type = SourceType::Command;
+            child.state = State::Error;
+            child.message = config.object ? error : config.error;
+            child.snapshot.reset();
+            next.append(std::move(child));
+            continue;
+        }
+        child.configuredEnabled = own;
+        child.configuredId = inheritance.idPrefix + u'/' + id;
+        if (ids.contains(id)) {
+            child.type = SourceType::Command;
+            child.state = State::Error;
+            child.message = tr("Duplicate id \"%1\" in this group.").arg(child.configuredId);
+            child.snapshot.reset();
+            next.append(std::move(child));
+            continue;
+        }
+        ids.append(id);
+        const bool enabled = inheritance.enabled && own;
+        const QJsonObject effective = effectiveChild(inheritance, *config.object, childDirectory, id, enabled);
+
+        if (isGroupObject(effective)) {
+            // A nested group: a container again, its children one level down.
+            child.type = SourceType::Group;
+            child.state = depth < MaxGroupDepth ? State::Available : State::Error;
+            child.message = depth < MaxGroupDepth ? QString() : tr("Groups are nested too deeply.");
+            child.enabled = enabled;
+            Snapshot presentation;
+            presentation.title = effective.value(QStringLiteral("title")).toString(id);
+            parseSymbol(effective.value(QStringLiteral("symbol")), childDirectory, presentation.symbol, presentation.icon, error);
+            child.snapshot = presentation;
+            const QString nestedId = child.id;
+            next.append(std::move(child));
+            if (depth < MaxGroupDepth)
+                appendChildren(nestedId, childDirectory, childInheritance(inheritance, *config.object, childDirectory, id, enabled),
+                               depth + 1, visited, next, definitions);
+            continue;
+        }
+        const CommandParseResult command = parseCommandJson(QJsonDocument(effective).toJson(QJsonDocument::Compact), path);
+        if (!command.recognized) {
+            child.type = SourceType::Command;
+            child.state = State::Error;
+            child.message = tr("A group's child must be a command (\"source\": {\"type\": \"command\"}) or a group.");
+            child.snapshot.reset();
+        } else {
+            applyCommand(child, command, previous, definitions);
+            if (!command.definition)
+                child.snapshot.reset();
+        }
+        next.append(std::move(child));
+    }
 }
 
 Source *CustomMetricsService::sourceFor(const QString &id)

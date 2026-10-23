@@ -15,7 +15,7 @@ normative summaries of the 1.x features are in
 [docs/feature-reference.md](docs/feature-reference.md).
 
     2.0.0  Consolidation baseline (1.x complete)            COMPLETE
-    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       IN PROGRESS (2.1.4 done)
+    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       IN PROGRESS (2.1.5 done)
     v2F2   Independent Autostart + new runner   2.2.x       PLANNED
     v2F3   Standalone Settings + new runner     2.3.x       PLANNED
     v2F4   Dependency Advisor + new runner      2.4.x       PLANNED
@@ -113,8 +113,8 @@ Requirements for every v2 runner:
 
 ## v2F1 — Custom Metrics v3 + Rickroll
 
-Status: IN PROGRESS. Version family **2.1.x**; current version **2.1.4**
-(2.1.0–2.1.4 COMPLETE, 2.1.5–2.1.7 PLANNED).
+Status: IN PROGRESS. Version family **2.1.x**; current version **2.1.5**
+(2.1.0–2.1.5 COMPLETE, 2.1.6–2.1.7 PLANNED).
 
 Extends Custom Metrics v2 (command and snapshot sources,
 [docs/custom-metrics-commands.md](docs/custom-metrics-commands.md)) without
@@ -233,6 +233,9 @@ for display properties): set it in the file.
 
 ### 2.1.5 — Optional Metric Groups and JSON Inheritance
 
+Status: COMPLETE (2026-10-23). Record:
+[docs/custom-metrics-commands.md](docs/custom-metrics-commands.md) §11.
+
 Groups of Custom Metrics using the existing `metric.json` format. A parent
 `metric.json` declares `source.type: "group"`; its children live in
 subdirectories, each with its own `metric.json`.
@@ -319,6 +322,27 @@ Relative path resolution:
 Open point for the implementation: 2.0.0 accepts only strings in
 `source.arguments` (the child example above uses the number `20`); either
 accept numbers (converted to their decimal text) or document strings.
+Resolved in 2.1.5: numbers are accepted and passed as their decimal text.
+
+As implemented: groups are discovered from package `metric.json` files (and
+explicitly registered `metric.json` files), children are the package's
+subdirectories with a `metric.json` (natural order, at most 256, nesting
+bounded at 4 levels, symlink cycles skipped, unrelated subdirectories
+ignored). Effective child configuration = recursive merge (objects merged,
+arrays and scalars replaced; `id` and `enabled` never inherited), validated
+by the existing command parser; `source.executable` and a file `symbol` are
+resolved against the directory of the file that declared them. Child ids:
+explicit `id` or the directory name, hierarchical (`dice-metrics/d20`),
+duplicates in a group are errors; the source identity (Metrics Bar
+selection) stays the child file's canonical path. Effective enabled =
+ancestors' and own; Settings and the Plasmoid configuration write the
+group's or the child's own flag. Each child is an ordinary command job.
+API schema 5 (additive): kind `group`, `data.groupId`,
+`data.configuredEnabled`. Dashboard: one card per group, children as
+wrapping cells (`FlowLayout`), small bars only where `showBar` allows;
+Plasmoid: the same as a `Flow`; Metrics Bar: children are ordinary items
+("Group — Child", captioned with the child's title), groups are not items;
+groups without enabled children are hidden; Settings: a tree.
 
 ### 2.1.6 — Reload Custom Metrics
 

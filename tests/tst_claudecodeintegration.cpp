@@ -233,7 +233,11 @@ private slots:
             QCOMPARE(session->title, QStringLiteral("Current session (5h)"));
             QCOMPARE(session->formattedValue, QStringLiteral("3% used"));
             QCOMPARE(*session->normalizedValue, 0.03);
-            QVERIFY(session->detail.startsWith(QStringLiteral("Resets at ")));
+            // The reset is two hours from now: "Resets at HH:MM" today, with
+            // the date once it falls on the next day (after 22:00).
+            const bool sameDay = QDateTime::currentDateTime().addSecs(2 * 3600).date() == QDate::currentDate();
+            QVERIFY2(session->detail.startsWith(sameDay ? QStringLiteral("Resets at ") : QStringLiteral("Resets ")),
+                     qPrintable(session->detail));
             QCOMPARE(week->title, QStringLiteral("Current week (all models)"));
             QCOMPARE(week->formattedValue, QStringLiteral("7% used"));
             QVERIFY(week->detail.startsWith(QStringLiteral("Resets ")));

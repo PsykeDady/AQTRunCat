@@ -128,7 +128,8 @@ function metricRow(metric) {
         fraction: f === null ? 0 : f,
         warning: false,
         icon: iconSource(metric),
-        itemsJson: "[]"
+        itemsJson: "[]",
+        group: false
     };
     var items = itemRows(metric);
     if (items.length === 1 && row.state === "ok") {
@@ -197,14 +198,71 @@ function settleRefreshes(metrics, settled) {
     return { metrics: result, settled: next };
 }
 
+// v2F1.5 (schema 5): a group's child carries data.groupId.
+function groupIdOf(metric) {
+    return metric && metric.data && typeof metric.data.groupId === "string" ? metric.data.groupId : "";
+}
+
+// The compact cells of a group: its metric descendants (nested groups
+// flattened), enabled ones only, each with its own value, status and bar
+// (when its showBar allows it). The backend did all the inheritance.
+function groupCells(group, metrics) {
+    var groups = [group.data ? group.data.sourceId : ""];
+    var cells = [];
+    for (var i = 0; i < metrics.length; ++i) {
+        var metric = metrics[i];
+        if (!metric || groups.indexOf(groupIdOf(metric)) < 0)
+            continue;
+        if (metric.kind === "group") {
+            groups.push(metric.data ? metric.data.sourceId : "");
+            continue;
+        }
+        if (hiddenMetric(metric))
+            continue;
+        var state = stateOf(metric);
+        var items = itemRows(metric);
+        var values = items.map(function (item) { return item.value; }).filter(function (v) { return v !== "—"; });
+        var value = state === "error" ? "—" : values.length > 0 ? values.join(" · ") : state === "pending" ? "…" : "—";
+        var bar = null;
+        for (var k = 0; k < items.length && state !== "error"; ++k) {
+            if (items[k].fraction !== null) {
+                bar = items[k].fraction;
+                break;
+            }
+        }
+        // A child's own icon (not the group's) is shown in its cell.
+        var icon = iconSource(metric);
+        cells.push({
+            icon: icon !== iconSource(group) ? icon : "",
+            title: typeof metric.title === "string" ? metric.title : "",
+            value: value,
+            fraction: bar,
+            state: state,
+            detail: state === "ok" ? "" : detailText(metric)
+        });
+    }
+    return cells;
+}
+
 // Rows grouped by category (built-in, integrations, custom), API order kept
 // inside each group; hidden categories and hidden metrics are left out.
 function metricRows(metrics, shown) {
     var groups = { builtin: [], integration: [], custom: [] };
     for (var i = 0; i < metrics.length; ++i) {
-        if (hiddenMetric(metrics[i]))
-            continue;
+        if (hiddenMetric(metrics[i]) || groupIdOf(metrics[i]).length > 0)
+            continue; // a group's children are shown inside its row
         var row = metricRow(metrics[i]);
+        if (metrics[i].kind === "group") {
+            var cells = groupCells(metrics[i], metrics);
+            if (cells.length === 0)
+                continue; // no enabled child: nothing to show
+            row.group = true;
+            row.state = "ok";
+            row.value = "";
+            row.detail = "";
+            row.hasFraction = false;
+            row.itemsJson = JSON.stringify(cells);
+        }
         groups[row.category].push(row);
     }
     var rows = [];

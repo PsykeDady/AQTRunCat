@@ -1,7 +1,7 @@
 # Build: packaging/make-source-tarball.sh ~/rpmbuild/SOURCES
 #        rpmbuild -ba packaging/rpm/aqtruncat.spec
 Name:           aqtruncat
-Version:        2.1.4
+Version:        2.1.5
 Release:        1%{?dist}
 Summary:        A Cute Run Cat for Linux
 
@@ -66,6 +66,12 @@ export QT_QPA_PLATFORM=offscreen
 %{_docdir}/%{name}/
 
 %changelog
+* Fri Oct 23 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.1.5-1
+- 2.1.5 (v2F1): Custom Metric groups: a package's metric.json with
+  "source": {"type": "group"} whose subdirectories are child metrics that
+  inherit its configuration; shown as one compact card in the Dashboard and
+  the Plasma widget, managed as a tree in Settings.
+
 * Fri Oct 23 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.1.4-1
 - 2.1.4 (v2F1): optional display.showBar for Custom Metrics: false hides
   their progress bars in the Dashboard and the Plasma widget.

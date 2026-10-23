@@ -77,6 +77,10 @@ private:
     void updateUpdates(TextRow &row, const aqtruncat::metrics::UpdatesMetrics &updates);
     void rebuildCustomMetrics();
     QWidget *customCard(const aqtruncat::custommetrics::Source &source, int index);
+    // v2F1.5: a group card (title, icon, its executable descendants as
+    // compact cells that wrap), and those descendants in order.
+    QWidget *customGroupCard(const aqtruncat::custommetrics::Source &group, int index);
+    QList<const aqtruncat::custommetrics::Source *> groupMembers(const aqtruncat::custommetrics::Source &group) const;
     // What a card presents: the state (the settled one during a refresh) and
     // the text of its status line; and a key of everything the card shows,
     // so an unchanged card is left alone.

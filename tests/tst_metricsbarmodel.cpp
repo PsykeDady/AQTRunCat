@@ -75,6 +75,42 @@ const Item *find(const QList<Item> &items, const QString &id)
 
 } // namespace
 
+
+namespace groupfixture {
+// A dice group as the service publishes it: the container, then children.
+inline QList<aqtruncat::custommetrics::Source> dice()
+{
+    namespace cm = aqtruncat::custommetrics;
+    QList<cm::Source> sources;
+    cm::Source group;
+    group.id = group.path = QStringLiteral("/m/dice/metric.json");
+    group.type = cm::SourceType::Group;
+    group.state = cm::State::Available;
+    group.configuredId = QStringLiteral("dice-metrics");
+    cm::Snapshot title;
+    title.title = QStringLiteral("Dice Metrics");
+    group.snapshot = title;
+    sources.append(group);
+    for (const int sides : {6, 20, 100}) {
+        cm::Source child;
+        child.id = child.path = QStringLiteral("/m/dice/d%1/metric.json").arg(sides);
+        child.type = cm::SourceType::Command;
+        child.parentId = group.id;
+        child.configuredId = QStringLiteral("dice-metrics/d%1").arg(sides);
+        child.state = cm::State::Available;
+        cm::Snapshot snapshot;
+        snapshot.title = QStringLiteral("D%1").arg(sides);
+        snapshot.metricsBarValue = QString::number(sides / 2);
+        snapshot.metrics = {{QStringLiteral("D%1").arg(sides), QString::number(sides / 2), 0.5}};
+        snapshot.showBar = sides == 20;
+        snapshot.lastUpdatedDate = QDateTime::fromString(QStringLiteral("2026-10-23T10:00:00Z"), Qt::ISODate);
+        child.snapshot = snapshot;
+        sources.append(child);
+    }
+    return sources;
+}
+}
+
 class TestMetricsBarModel : public QObject
 {
     Q_OBJECT
@@ -480,6 +516,32 @@ private slots:
         QTRY_COMPARE(ids(model.items()), QStringList{"cpu"});
         model.updateCustom({source(path)});
         QTRY_COMPARE(ids(model.items()), (QStringList{customId(path), "cpu"}));
+    }
+
+    // v2F1.5: a group's children are ordinary bar items, named with their
+    // group and captioned with their own title (they share the group's
+    // icon); the group itself is never an item.
+    void groupChildrenAreItemsTheGroupIsNot()
+    {
+        MetricsBarModel model("/home/test");
+        const QList<cm::Source> sources = groupfixture::dice();
+        model.setConfiguration(true, {customId(sources[0].id), customId(sources[2].id), customId(sources[1].id)});
+        model.updateCustom(sources);
+        QTRY_COMPARE(model.items().size(), 2);
+        QCOMPARE(model.items().at(0).label, QStringLiteral("Dice Metrics — D20"));
+        QCOMPARE(model.items().at(0).shortLabel, QStringLiteral("D20"));
+        QVERIFY(!model.items().at(0).icon);
+        QCOMPARE(model.items().at(0).shortValue, QStringLiteral("10"));
+        QCOMPARE(model.items().at(1).shortLabel, QStringLiteral("D6"));
+
+        // A child with an icon of its own keeps it on its bar icon.
+        QList<cm::Source> own = sources;
+        own[2].snapshot->icon = cm::IconReference{cm::IconType::Theme, QStringLiteral("dialog-information"),
+                                                  QStringLiteral("dialog-information")};
+        model.updateCustom(own);
+        QTRY_VERIFY(model.items().at(0).icon.has_value());
+        QCOMPARE(model.items().at(0).icon->value, QStringLiteral("dialog-information"));
+        QCOMPARE(model.items().at(1).shortLabel, QStringLiteral("D6")); // the others unchanged
     }
 
     // v2F1.4: the Metrics Bar draws no bars: showBar changes nothing there.

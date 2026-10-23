@@ -108,7 +108,7 @@ endforeach()
 # utility participates in the test contract.
 add_executable(custommetric_test_helper custommetric_test_helper.cpp)
 target_compile_options(custommetric_test_helper PRIVATE -Wall -Wextra -Wpedantic)
-foreach(name commandmetric commandmetricsservice)
+foreach(name commandmetric commandmetricsservice metricgroups)
     qt_add_executable(tst_${name} tst_${name}.cpp)
     target_link_libraries(tst_${name} PRIVATE aqtruncat_desktop Qt6::Test)
     target_compile_options(tst_${name} PRIVATE -Wall -Wextra -Wpedantic)

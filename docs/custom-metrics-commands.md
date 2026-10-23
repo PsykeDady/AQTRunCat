@@ -516,3 +516,163 @@ Runtime isolato: backend reale su bus privato e il vero
 `FullRepresentation.qml` offscreen con due metriche uguali ("12 / 20",
 `normalizedRange` 1–20): quella con `showBar: false` occupa una sola riga
 (titolo e valore), quella predefinita ha la barra sotto.
+
+## 11. v2F1.5 — Gruppi ed ereditarietà JSON (2.1.5)
+
+Stato: **completata** il 2026-10-23, versione **2.1.5**. Branch
+`feature/v2/f4`.
+
+### Esempio completo
+
+```text
+~/.local/share/AQTRunCat/metrics/
+└── dice-metrics/
+    ├── metric.json          il gruppo
+    ├── dice.svg
+    ├── random-metric.sh
+    ├── d6/metric.json       i figli
+    ├── d20/metric.json
+    └── d100/metric.json
+```
+
+`random-metric.sh` (eseguibile):
+
+```sh
+#!/bin/sh
+# un lancio di un dado con $1 facce
+shuf -i "1-$1" -n 1
+```
+
+`dice-metrics/metric.json`:
+
+```json
+{
+  "id": "dice-metrics",
+  "title": "Dice Metrics",
+  "symbol": { "type": "file", "value": "./dice.svg" },
+  "source": {
+    "type": "group",
+    "executable": "./random-metric.sh",
+    "arguments": [],
+    "intervalSeconds": 5,
+    "timeoutSeconds": 3
+  },
+  "display": { "showBar": false }
+}
+```
+
+`dice-metrics/d20/metric.json` (d6 e d100 uguali con 6 e 100):
+
+```json
+{
+  "title": "D20",
+  "source": { "type": "command", "arguments": [20] },
+  "display": {
+    "normalizedRange": { "minimum": 1, "maximum": 20 },
+    "showBar": true
+  }
+}
+```
+
+Risultato: Dashboard e Plasmoid mostrano una card "Dice Metrics" con
+`D6 4  D20 17  D100 73` (la barra solo per D20); Settings un albero con il
+gruppo e i tre figli.
+
+### Regole
+
+- **Gruppo**: un `metric.json` di package (scoperto, o registrato
+  esplicitamente) con `"source": {"type": "group"}`. Richiede `id` e
+  `title`; `symbol` ed `enabled` facoltativi; il resto di `source`, `display`
+  ecc. vale solo come configurazione ereditata. Non viene mai eseguito. Un
+  gruppo in un file che non si chiama `metric.json` è rifiutato (i suoi figli
+  sono le sottocartelle del package).
+- **Figli**: le sottocartelle del gruppo che contengono un `metric.json`, in
+  ordine naturale (d6, d20, d100), al massimo 256 per gruppo; le altre
+  sottocartelle sono ignorate. Un figlio il cui tipo effettivo resta `group`
+  è un gruppo annidato (al massimo 4 livelli; oltre: errore "Groups are
+  nested too deeply."); un collegamento simbolico verso un antenato non viene
+  seguito.
+- **Ereditarietà**: configurazione effettiva = merge ricorsivo
+  (`metricgroup.cpp`, `deepMerge`): oggetti fusi chiave per chiave, array e
+  scalari sostituiti interi (gli `arguments` non si concatenano). `id` ed
+  `enabled` non si ereditano. Il risultato passa dal validatore Command
+  esistente: un figlio senza programma (né suo né ereditato) è un errore come
+  una metrica singola. Un figlio di tipo diverso da `command`/`group` è un
+  errore.
+- **Percorsi**: `source.executable` e il `value` di un `symbol` di tipo
+  `file` si risolvono rispetto alla cartella del file che li ha dichiarati:
+  ereditati → cartella del gruppo, ridefiniti → cartella del figlio (anche
+  `../`); mai la cartella di lavoro del processo; i file non vengono
+  riscritti. La cartella di lavoro di un figlio è la sua cartella. Le regole
+  di esecuzione restano quelle di F1 (eseguibile diretto, nessuna shell,
+  nessuna elevazione).
+- **Argomenti numerici**: da 2.1.5 `arguments` accetta numeri (`[20]` →
+  `"20"`), per ogni metrica Command.
+- **Identità**: id del figlio = il suo `id` esplicito o il nome della
+  cartella (stesse regole di formato); `configuredId` gerarchico
+  `dice-metrics/d20`; due figli con lo stesso id nello stesso gruppo: il
+  secondo è un errore "Duplicate id". L'identità della sorgente (e quindi
+  la selezione nella Metrics Bar) resta il percorso canonico del
+  `metric.json` del figlio: stabile ai riavvii, distinta dalle metriche
+  singole (i cui id non possono contenere `/`).
+- **enabled**: stato effettivo = gruppi antenati abilitati **e** il proprio
+  flag. Un gruppo disabilitato disabilita tutti i discendenti (anche con
+  `"enabled": true`, "Disabled by its group."); riabilitarlo non tocca i file
+  dei figli, quindi un figlio spento resta spento.
+- **Esecuzione**: ogni figlio è un job Command come gli altri (proprio
+  intervallo, timeout, processo, stato, avvisi 2.1.3, exit 69); nessun
+  timer in più.
+
+### API (schema 5)
+
+`kind: "group"` per il contenitore; `data.groupId` sui figli;
+`data.configuredEnabled` (flag del file) accanto a `enabled` (effettivo);
+`data.configuredId` gerarchico. Vedi `docs/backend-dbus-api-cli.md` §5.3.
+Nessun frontend legge i `metric.json`.
+
+### Presentazione
+
+- Dashboard: una card per gruppo (icona e titolo), i figli abilitati come
+  celle compatte "titolo valore" disposte da un `FlowLayout` che va a capo
+  secondo la larghezza; barra piccola solo per i figli con `showBar` e un
+  valore normalizzato; in errore icona e "—" con il motivo nel tooltip; un
+  gruppo senza figli abilitati non compare.
+- Plasmoid: lo stesso con un `Flow` (`Logic.groupCells`), barra larga quanto
+  il testo della cella.
+- Metrics Bar: i figli sono voci normali, selezionabili come prima; etichetta
+  "Gruppo — Figlio"; con l'icona del gruppo (ereditata) la didascalia è il
+  titolo del figlio, con un'icona propria (`symbol` nel suo `metric.json`)
+  resta quella; i gruppi non sono voci.
+- Icona propria di un figlio: nella Dashboard e nel Plasmoid compare nella
+  sua cella, prima del titolo, solo se diversa da quella del gruppo (quella
+  ereditata non viene ripetuta in ogni cella).
+- Settings (tray): la lista Custom Metrics è un albero (gruppo, figli sotto);
+  ogni casella è il flag del proprio file; sotto un gruppo spento un figlio
+  acceso appare in grigio con "Disabled by group". Configurazione del
+  Plasmoid: stesse caselle, figli rientrati.
+- Applicazione senza riavvio: le modifiche ai file (anche nuove
+  sottocartelle) passano dal file watcher; la rilettura manuale completa è
+  la 2.1.6.
+
+### Test
+
+`metricgroups` (nuova): merge ricorsivo e array, id dei figli, origine dei
+percorsi (ereditati, ridefiniti con `../`, icona, gruppi annidati), gruppo di
+dadi via servizio (contenitore mai eseguito, argomenti numerici, valori
+distinti, icona e `showBar` ereditati o ridefiniti), `enabled` ereditato e
+riabilitazione senza toccare i figli, figli con errore/timeout/69
+indipendenti e figlio senza programma, JSON non validi (gruppo, figlio),
+duplicati, gruppo vuoto, profondità e ciclo di symlink, regole di
+registrazione. Inoltre `dashboard` (card compatta, `FlowLayout` che va a
+capo, errore di un figlio, gruppo vuoto nascosto), `metricsbarmodel`,
+`apischema` (schema 5), `plasmoidlogic` (riga di gruppo), `settingswindow`
+(albero, "Disabled by group", file dei figli intatti), `backendipc` (gruppo
+e figli via `GetMetrics`).
+
+Runtime isolato: backend reale e il vero popup del Plasmoid offscreen con
+l'esempio sopra: "Dice Metrics" con `D6 3  D20 9  D100 56`, barra solo sotto
+D20.
+
+Correzione collaterale: `tst_claudecodeintegration` assumeva che "fra due
+ore" fosse lo stesso giorno (falliva tra le 22 e mezzanotte); ora si aspetta
+il formato con la data quando il reset cade il giorno dopo.

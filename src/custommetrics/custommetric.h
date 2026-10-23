@@ -82,6 +82,7 @@ bool parseShowBar(const QJsonObject &object, bool &showBar, QString &error);
 enum class SourceType {
     Snapshot,
     Command,
+    Group,    // v2F1.5: a container of child sources; never runs
 };
 
 struct Source {
@@ -101,6 +102,11 @@ struct Source {
     // with only its title and icon), state Unavailable; presentation
     // surfaces leave it out, Settings still lists it to enable it again.
     bool enabled = true;
+    // v2F1.5: the configuration's own "enabled" (enabled above is the
+    // effective state: false also under a disabled group), and the source
+    // id of the group this child belongs to (empty at the top level).
+    bool configuredEnabled = true;
+    QString parentId;
     State state = State::Pending;
     QString message;
     std::optional<Snapshot> snapshot; // last known good snapshot, retained on failure

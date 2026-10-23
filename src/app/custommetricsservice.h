@@ -3,6 +3,7 @@
 #include "custommetricsmodel.h"
 #include "custommetrics/commandmetric.h"
 #include "custommetrics/custommetric.h"
+#include "custommetrics/metricgroup.h"
 
 #include <QFileSystemWatcher>
 #include <QElapsedTimer>
@@ -53,6 +54,18 @@ private:
     void failCommand(const QString &id, aqtruncat::custommetrics::State state,
                      const QString &message);
     aqtruncat::custommetrics::Source *sourceFor(const QString &id);
+    const aqtruncat::custommetrics::Source *previousFor(const aqtruncat::custommetrics::Source &source) const;
+    void applyCommand(aqtruncat::custommetrics::Source &source, const aqtruncat::custommetrics::CommandParseResult &command,
+                      const aqtruncat::custommetrics::Source *previous,
+                      QList<aqtruncat::custommetrics::CommandDefinition> &definitions);
+    // v2F1.5: a group's source and, recursively, its children's.
+    void appendGroup(aqtruncat::custommetrics::Source group, const QJsonObject &object,
+                     QList<aqtruncat::custommetrics::Source> &next,
+                     QList<aqtruncat::custommetrics::CommandDefinition> &definitions);
+    void appendChildren(const QString &parentId, const QString &directory,
+                        const aqtruncat::custommetrics::Inheritance &inheritance, int depth, QStringList &visited,
+                        QList<aqtruncat::custommetrics::Source> &next,
+                        QList<aqtruncat::custommetrics::CommandDefinition> &definitions);
     void setOutcome(aqtruncat::custommetrics::Source &source, aqtruncat::custommetrics::State state,
                     const QString &message);
     void disable(aqtruncat::custommetrics::Source &source, const QString &title,

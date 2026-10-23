@@ -321,8 +321,8 @@ std::optional<Item> MetricsBarModel::custom(const QString &id) const
                                      [&](const auto &s) { return s.id == sourceId; });
     // A source that is gone (discovered file deleted, registration removed)
     // has no entry; the selection stays persisted for when it comes back.
-    if (source == m_sources.cend())
-        return std::nullopt;
+    if (source == m_sources.cend() || source->type == aqtruncat::custommetrics::SourceType::Group)
+        return std::nullopt; // v2F1.5: a group is a container, never a bar item
     const auto &snapshot = source->snapshot;
     // The producer decides what the bar shows. Without a metricsBarValue the
     // source is not eligible: no value is derived from formattedValue.
@@ -351,7 +351,28 @@ std::optional<Item> MetricsBarModel::custom(const QString &id) const
         item.shortValue.clear();
         item.detail.clear();
     }
+    nameGroupChild(*source, item);
     return item;
+}
+
+void MetricsBarModel::nameGroupChild(const aqtruncat::custommetrics::Source &source, Item &item) const
+{
+    // v2F1.5: a group's children usually share its icon: then the child's
+    // own title is the caption that tells them apart; a child with an icon
+    // of its own keeps it. The label names the group.
+    if (source.parentId.isEmpty())
+        return;
+    const auto group = std::find_if(m_sources.cbegin(), m_sources.cend(),
+                                    [&](const auto &s) { return s.id == source.parentId; });
+    const QString childTitle = source.snapshot ? source.snapshot->title : item.label;
+    const bool ownIcon = source.snapshot && group != m_sources.cend() && group->snapshot
+        && (source.snapshot->icon != group->snapshot->icon || source.snapshot->symbol != group->snapshot->symbol);
+    if (group != m_sources.cend() && group->snapshot)
+        item.label = group->snapshot->title + QStringLiteral(" — ") + item.label;
+    if (!ownIcon && (item.shortLabel.isEmpty() || item.icon)) {
+        item.shortLabel = childTitle;
+        item.icon.reset();
+    }
 }
 
 std::optional<Item> MetricsBarModel::customItem(const QString &id) const
@@ -399,6 +420,7 @@ std::optional<Item> MetricsBarModel::customItem(const QString &id) const
     }
     item.detail = metric->detail.isEmpty() ? metric->formattedValue
                                            : metric->formattedValue + QStringLiteral(" — ") + metric->detail;
+    nameGroupChild(*source, item);
     if (isSelectableItem(*metric)) {
         item.shortValue = *metric->metricsBarValue;
     } else if (item.status == Status::Available || item.status == Status::Pending) {
