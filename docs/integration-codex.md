@@ -228,10 +228,10 @@ accessibilità attiva, `run --fps 10`) accanto a quella dell'utente, che non
   davano correttamente valori non correnti (finestre del 13/10 già resettate).
 - **Dashboard**: Claude Code e Codex sotto Integrations, nessuna sezione
   Custom Metrics, nessun duplicato
-  ([F3-codex-metric/dashboard-integrations.png](F3-codex-metric/dashboard-integrations.png)).
+  ([integration-codex/dashboard-integrations.png](integration-codex/dashboard-integrations.png)).
 - **Metrics Bar**: pixmap SNI `cx5h 0%`, `cx7d 1%`, `5h —` (Claude
   sconosciuto) accanto al runner
-  ([F3-codex-metric/metrics-bar.png](F3-codex-metric/metrics-bar.png));
+  ([integration-codex/metrics-bar.png](integration-codex/metrics-bar.png));
   tooltip `Codex — 5h limit: 0% used — 100% left · Resets at 23:21`.
 - **Nessuno sfarfallio**: 163 letture AT-SPI delle etichette della Dashboard
   in 45 s (≥ 3 refresh Codex, ≥ 4 Claude): valori delle quote sempre
@@ -262,7 +262,7 @@ che Codex dicono *Unknown*, che non è intuitivo”):
 - Claude Code: l'adattatore sa se i suoi live updates sono attivi leggendo
   lo stato della status line (`bridgeStatus`) a ogni snapshot.
 - Plasma: verificato con Codex senza live updates
-  ([F3-codex-metric/dashboard-warning.png](F3-codex-metric/dashboard-warning.png)).
+  ([integration-codex/dashboard-warning.png](integration-codex/dashboard-warning.png)).
 - Test: `tst_custommetric` (campo e tipo), `tst_dashboard` (icona solo sulle
   voci con avviso, tooltip), `tst_claudeusage` e `tst_codexusage` (testi,
   `warning`, avviso solo a live spenti, nessun avviso con tutto corrente).

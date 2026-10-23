@@ -434,7 +434,7 @@ riscrive il JSON custom con atomic replace ogni 2 s; a metà il file
   stato quello configurato. Coerente con la registrazione asincrona per
   connessione (§1.1): best effort.
 
-### 11.5 Evidenze visive (`docs/M7-metrics-bar/`)
+### 11.5 Evidenze visive (`docs/metrics-bar/`)
 
 Ritagli della sola area AQTRunCat, eDP-1 a 125 %, BreezeLight salvo dove
 indicato:
@@ -487,7 +487,7 @@ M7: 26 / 385):
 File nuovi: `src/metrics/compactformat.*`, `src/app/metricsbarmodel.*`,
 `src/app/metricsbarrenderer.*`, `src/app/metricsbarpresenter.*`,
 `src/app/customsymbol.*`, i quattro `tests/tst_*` sopra, questo documento e
-`docs/M7-metrics-bar/*.png`.
+`docs/metrics-bar/*.png`.
 
 File modificati: `src/CMakeLists.txt`, `tests/CMakeLists.txt`,
 `src/app/appsettings.*`, `src/app/settingswindow.*`, `src/app/trayapp.cpp`,

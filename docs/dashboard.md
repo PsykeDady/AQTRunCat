@@ -140,8 +140,8 @@ Validazione effettuata nella sessione reale:
 
 Evidenza visiva ritagliata alla sola finestra:
 
-- [Dashboard idle](M4-dashboard/dashboard-idle.png)
-- [Dashboard sotto carico](M4-dashboard/dashboard-load.png)
+- [Dashboard idle](dashboard/dashboard-idle.png)
+- [Dashboard sotto carico](dashboard/dashboard-load.png)
 
 Non è stato forzato un cambio del tema globale durante la sessione. Il codice
 usa esclusivamente palette, font e stile Qt; il tema corrente e lo scaling 125%

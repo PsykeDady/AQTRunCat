@@ -1,3 +1,10 @@
+aqtruncat (2.0.0-1) unstable; urgency=medium
+
+  * 2.0.0: consolidation release of the complete 1.x application (1.7.4);
+    documentation reorganised by topic, v2 roadmap. No functional changes.
+
+ -- AQTRunCat maintainers <maintainers@aqtruncat.invalid>  Thu, 22 Oct 2026 23:00:00 +0200
+
 aqtruncat (1.7.4-1) unstable; urgency=medium
 
   * F7: Walking Goose, Party Parrot and Engine built-in runners.

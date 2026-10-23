@@ -1,4 +1,4 @@
-# M1.0 tray spike. Throwaway code: see docs/M1-tray-spike.md.
+# M1.0 tray spike. Throwaway code: see docs/tray-spike.md.
 
 qt_add_executable(aqtruncat-tray-spike main.cpp)
 

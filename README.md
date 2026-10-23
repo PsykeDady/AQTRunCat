@@ -12,9 +12,9 @@ affiliated with RunCat Neo. It uses the
 standard StatusNotifierItem tray, so it needs no desktop-specific components;
 the primary target is KDE Plasma 6 on Wayland.
 
-![Runner and Metrics Bar in the Plasma tray](docs/M7-metrics-bar/metrics-bar-basic.png)
+![Runner and Metrics Bar in the Plasma tray](docs/metrics-bar/metrics-bar-basic.png)
 
-![Settings and Dashboard](docs/M8-desktop-compatibility/windows-100.png)
+![Settings and Dashboard](docs/desktop-compatibility/windows-100.png)
 
 ## Features
 
@@ -149,7 +149,7 @@ Recipes for native packages are in [`packaging/`](packaging/):
 | Debian/Ubuntu (`.deb`) | extract the source tarball, copy `packaging/debian` to `debian/`, run `dpkg-buildpackage -us -uc -b` |
 
 Flatpak and AppImage are not provided yet; the reasons are in
-[docs/M9-packaging-installation.md](docs/M9-packaging-installation.md).
+[docs/installation-and-packaging.md](docs/installation-and-packaging.md).
 
 ### Build manually
 
@@ -225,7 +225,7 @@ Exit status: 0 success, 1 backend failure, 2 invalid command line, 3 backend
 unavailable, 4 request rejected. The D-Bus API
 (`io.github.psykedady.AQTRunCat1` on the session bus), its JSON schema and a
 small Python client are documented in
-[docs/F4.1-headless-backend-ipc-cli.md](docs/F4.1-headless-backend-ipc-cli.md).
+[docs/backend-dbus-api-cli.md](docs/backend-dbus-api-cli.md).
 
 ### KDE Plasma widget
 
@@ -257,7 +257,7 @@ the widget's own options. With **Detail lines** off (Appearance), hovering a met
 in the popup shows its details. The widget is a client of the same backend: it
 works without the tray, next to it, or in several copies, and nothing is
 sampled twice. Details:
-[docs/F4.2-plasma-plasmoid.md](docs/F4.2-plasma-plasmoid.md).
+[docs/plasma-widget.md](docs/plasma-widget.md).
 
 ### Runners
 
@@ -330,7 +330,7 @@ Put this at, for example,
 `~/.local/share/AQTRunCat/metrics/temperature/metric.json`; the relative
 executable and icon are resolved from that package directory. Commands run as
 the AQTRunCat user, without privilege escalation. See
-[docs/F1-custom-metrics-v2.md](docs/F1-custom-metrics-v2.md) for the complete
+[docs/custom-metrics-commands.md](docs/custom-metrics-commands.md) for the complete
 schema, limits, states and security model. A command may also print a whole
 snapshot object (`"output": "snapshot"`) to show several values in one card,
 and exit with status 69 to report that its data source is absent
@@ -387,7 +387,7 @@ aqtruncat-claude-metric upgrade      # done by install.sh after an update
 
 Claude Code is not required to install or run AQTRunCat. Details, sources,
 exact semantics and limitations:
-[docs/F2-claude-code-metric.md](docs/F2-claude-code-metric.md).
+[docs/integration-claude-code.md](docs/integration-claude-code.md).
 
 ### Codex usage (Integrations)
 
@@ -421,7 +421,7 @@ aqtruncat-codex-metric upgrade      # done by install.sh after an update
 ```
 
 Codex is not required to install or run AQTRunCat. Details:
-[docs/F3-codex-metric.md](docs/F3-codex-metric.md).
+[docs/integration-codex.md](docs/integration-codex.md).
 
 ### Built-in system metrics
 
@@ -451,7 +451,7 @@ Besides CPU, memory, network and storage, AQTRunCat shows:
 - **Kernel** and **distribution** (from `uname` and `/etc/os-release`, read
   as data).
 
-Details: [docs/F5-additional-built-in-metrics.md](docs/F5-additional-built-in-metrics.md).
+Details: [docs/additional-built-in-metrics.md](docs/additional-built-in-metrics.md).
 
 ### Metrics Bar
 
@@ -489,7 +489,7 @@ The runner itself is always there and is not counted.
   cannot open the tray's Settings window (start at login, Metrics Bar and
   Dashboard refresh are set there or with `aqtruncatctl`).
 
-Details: [docs/M8-desktop-compatibility.md](docs/M8-desktop-compatibility.md).
+Details: [docs/desktop-compatibility.md](docs/desktop-compatibility.md).
 
 ## License and attribution
 
@@ -501,11 +501,11 @@ AQTRunCat icon is original artwork.
 
 ## Documentation
 
-- [requirements.md](requirements.md): specification and roadmap
-- [docs/](docs/): design and validation reports per milestone (runners,
-  metrics, Dashboard, Settings, Custom Metrics, Metrics Bar, desktop
-  compatibility, packaging, executable Custom Metrics, Claude Code and Codex
-  integrations, backend/D-Bus API/`aqtruncatctl`, KDE Plasma widget,
-  additional built-in metrics, hover information, additional built-in
-  runners)
+- [docs/README.md](docs/README.md): technical documentation by topic
+  (architecture, backend and D-Bus API, runners, metrics, Custom Metrics,
+  integrations, Dashboard, Settings, Metrics Bar, hover information, Plasma
+  widget, desktop compatibility, installation and packaging) and the
+  normative feature reference
+- [requirements.md](requirements.md): the v2 roadmap (Custom Metrics v3,
+  independent autostart, standalone Settings)
 - [`tools/`](tools/): diagnostic scripts for developers (not needed by users)

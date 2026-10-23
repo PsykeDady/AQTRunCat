@@ -3,7 +3,7 @@
 F4 è diviso in due parti:
 
 - **F4.1**: il backend headless `aqtruncatd`, l'API D-Bus e la CLI
-  `aqtruncatctl` (`docs/F4.1-headless-backend-ipc-cli.md`);
+  `aqtruncatctl` (`docs/backend-dbus-api-cli.md`);
 - **F4.2** (questo documento): il widget nativo per KDE Plasma 6, un
   **frontend** di quel backend, accanto al frontend Qt/SNI e mai al suo
   posto.
@@ -198,7 +198,7 @@ successiva apertura della configurazione.
   "AQTRunCat", la descrizione è il tooltip (runner o stato del backend).
   Il tooltip non contiene metriche (F6 non è in questo scope).
   *Nota successiva (F6, 1.6.3):* il tooltip ora riporta anche CPU, RAM e
-  swap; vedi `docs/F6-hover-information.md`.
+  swap; vedi `docs/hover-information.md`.
 
 Nota tecnica: `Kirigami.Icon` non colora i PNG da file e arrotonda le
 dimensioni alle misure delle icone, e `MultiEffect` non viene reso senza
@@ -206,8 +206,8 @@ GPU (rendering software, offscreen): per questo il `Canvas`.
 
 ## 6. Popup (rappresentazione estesa)
 
-![Popup e runner, tema chiaro](F4.2-plasma-plasmoid/plasmoid-light.png)
-![Popup e runner, tema scuro](F4.2-plasma-plasmoid/plasmoid-dark.png)
+![Popup e runner, tema chiaro](plasma-widget/plasmoid-light.png)
+![Popup e runner, tema scuro](plasma-widget/plasmoid-dark.png)
 
 (Anteprime offscreen generate con `tools/plasmoid-preview.sh`, dati
 dimostrativi: le integrazioni Claude Code e Codex sono finte, il secondo
@@ -319,7 +319,7 @@ quella installazione, `--no-build` con la domanda sulla versione):
   un widget già installato, con Plasma in esecuzione, l'installer ora
   **chiede** su terminale se riavviare Plasma (default N; opzioni
   `--restart-plasma` / `--no-restart-plasma`). Pannelli e layout restano
-  intatti. Dettagli: `docs/F5-additional-built-in-metrics.md` §5.5.
+  intatti. Dettagli: `docs/additional-built-in-metrics.md` §5.5.
 - Disinstallazione: rimuove solo i file del manifest (widget compreso) e le
   cartelle di AQTRunCat rimaste vuote; un widget non correlato nella stessa
   cartella e la disposizione dei pannelli non vengono toccati. Un widget

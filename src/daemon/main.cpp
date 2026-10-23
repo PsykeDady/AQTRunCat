@@ -1,7 +1,7 @@
 // aqtruncatd: the AQTRunCat backend (F4.1). One instance per user session,
 // owner of io.github.psykedady.AQTRunCat on the D-Bus session bus. It needs
 // no display, no tray and no Qt Widgets/Gui: QtCore + QtDBus only.
-// Contract: docs/F4.1-headless-backend-ipc-cli.md.
+// Contract: docs/backend-dbus-api-cli.md.
 
 #include "api/apischema.h"
 #include "api/backendservice.h"

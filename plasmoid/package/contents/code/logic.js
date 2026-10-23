@@ -1,5 +1,5 @@
 // AQTRunCat Plasmoid (F4.2): pure functions over the backend API payloads
-// (docs/F4.1-headless-backend-ipc-cli.md). No Plasma, no D-Bus, no I/O:
+// (docs/backend-dbus-api-cli.md). No Plasma, no D-Bus, no I/O:
 // the QML files call these, and tests/plasmoid/tst_logic.qml tests them.
 .pragma library
 

@@ -237,4 +237,4 @@ Nota successiva (F2): il caso d'uso concreto per l'output multi-valore è
 arrivato con la metrica Claude Code. F2 ha aggiunto `source.output:
 "snapshot"` e l'exit status 69 → Unavailable come estensioni generiche e
 retrocompatibili; il resto di questo documento descrive F1 così come è stato
-chiuso. Vedi `docs/F2-claude-code-metric.md` §6.
+chiuso. Vedi `docs/integration-claude-code.md` §6.

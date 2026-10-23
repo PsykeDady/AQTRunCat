@@ -11,7 +11,7 @@ stesso campionatore di sistema e dallo stesso backend (`aqtruncatd`) di CPU,
 memoria e rete, e raggiungono con la stessa API la tray Qt/SNI, la CLI e il
 Plasmoid.
 
-Immagini di validazione: `docs/F5-additional-built-in-metrics/`
+Immagini di validazione: `docs/additional-built-in-metrics/`
 (`dashboard.png`, `plasmoid-light.png`, `plasmoid-dark.png`).
 
 ## 1. Indagine sull'architettura (prima di scrivere codice)
@@ -544,5 +544,5 @@ Modificati: `src/metrics/{systemmetrics,textparse,compactformat,metricsformat}.*
 `tests/{CMakeLists.txt,plasmoid/tst_logic.qml,tst_apischema,tst_appsettings,tst_backendipc,tst_dashboard,tst_metricsbarmodel,tst_plasmoidclient,tst_settingswindow,tst_systemmetrics}.cpp`,
 `tools/plasmoid-preview.sh`, `CMakeLists.txt`, `data/aqtruncat.1`,
 `packaging/{arch/PKGBUILD,rpm/aqtruncat.spec,debian/changelog,debian/control}`,
-`README.md`, `docs/F4.1-headless-backend-ipc-cli.md`, `requirements.md`,
+`README.md`, `docs/backend-dbus-api-cli.md`, `requirements.md`,
 `MEMORY.md`.

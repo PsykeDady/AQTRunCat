@@ -16,4 +16,4 @@ __pycache__/
 *.pyc
 
 # M1.0 screenshots: they can show other icons from the real desktop tray
-docs/M1-tray-spike/*.png
+docs/tray-spike/*.png

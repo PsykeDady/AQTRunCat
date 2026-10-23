@@ -1,160 +1,70 @@
-# MEMORY.md — AQTRunCat handoff for an AI agent
+# MEMORY.md — AQTRunCat maintainer notes (2.0.0)
 
-> Audience: an AI agent continuing development with no access to earlier
-> conversations. M0–M9 implementation state was verified against the
-> repository on 2026-10-10; the post-project roadmap was revised and F1 was
-> implemented on 2026-10-13, then audited, hardened and runtime-validated on
-> 2026-10-16 (branch `feature/f1`). F2 was investigated, implemented and
-> runtime-validated on 2026-10-16 on branch `feature/f2`; the user committed
-> F1 and F2 ("f2 terminato", 3115c56). On 2026-10-20 F2 was **revised** on
-> `feature/f2` (uncommitted at that time; the user owns all Git writes):
-> official Integrations section in Settings, Claude plan usage quotas
-> (5-hour + weekly, as in `/usage`) as primary values, optional live updates
-> via the Claude Code status line, and `install.sh` closing a running
-> instance before replacing it (§13).
-> Precedence when sources disagree: **actual code/tests > this MEMORY (frozen
-> decisions §5) > docs/M*.md > historical prompts**. `requirements.md` is now
-> the **Post-Project Features** document (F1–F7), the current source for
-> future work; the former M0–M9 normative spec it contained was replaced by
-> the user on 2026-10-10 (see §0 and §13).
+> Audience: an AI agent or developer maintaining AQTRunCat without access to
+> earlier conversations. Precedence when sources disagree: **actual
+> code/tests > this file (frozen decisions §5) > docs/ > commit messages**.
 >
-> First instruction you will likely receive: *"Read MEMORY.md and continue
-> AQTRunCat."* → **the initial roadmap M0–M9 is COMPLETE; M9 concluded it.**
-> AQTRunCat is in post-project development. The roadmap features are F1–F7 in
-> requirements.md (§13 here). **F1, F2, F3 and F4 (F4.1 headless backend +
-> D-Bus API + CLI; F4.2 native KDE Plasma 6 Plasmoid) are COMPLETE; the user
-> officially closed F4 on 2026-10-21. Commits by the user: F4.1 c9a7b87, F4.2
-> 51dd48e (branch `feature/f4`). The user then moved to branch `feature/f5`
-> to start **F5 (Additional Built-in Metrics)**. **F5 is COMPLETE
-> (2026-10-22, uncommitted on `feature/f5`; the user owns every Git write):
-> uptime, GPU, FPS (MangoHud log), package and Flatpak updates, kernel and
-> distribution as Built-in Metrics (§13 F5, §5 F5 block,
-> `docs/F5-additional-built-in-metrics.md`).** The user committed F5
-> (a48206c, "F5, versione 1.5.6 …") and moved to branch `feature/f6`.
-> **F6 (Hover Information) is COMPLETE (2026-10-22, uncommitted on
-> `feature/f6`; the user owns every Git write): CPU/RAM/swap summary in the
-> tray tooltip and in the Plasmoid's native tooltip, metric details in the
-> Metrics Bar tooltips and in the popup rows (§13 F6, §5 F6 block,
-> `docs/F6-hover-information.md`).** The user committed F6 (c84b3f7).
-> **F7 (Additional Built-in Animated Runners) is COMPLETE (2026-10-22,
-> uncommitted; the user owns every Git write): Walking Goose
-> (`walkinggoose`), Party Parrot (`partyparrot`) and Engine (`engine`, F7.4,
-> added by the user after 1.7.3) are built-in runners (§13 F7,
-> `docs/F7-additional-built-in-runners.md`).** Version **1.7.4**
-> (F7.1–F7.4). 2.0.0 is a separate milestone after the user's acceptance:
-> do not start it without an explicit instruction.
+> **State (2026-10-22): AQTRunCat 2.0.0**, the consolidation release of the
+> complete 1.x application (M0–M9 → 1.0.0, then F1–F7 → 1.7.4) on branch
+> `feature/main`; no functional change from 1.7.4. All 1.x features are
+> complete (summary §2, history §4 and §13, normative summaries in
+> `docs/feature-reference.md`, topic documents indexed by `docs/README.md`).
+> `requirements.md` is the **v2 roadmap**: v2F1 Custom Metrics v3 (2.1.x),
+> v2F2 Independent Autostart (2.2.0), v2F3 Standalone Settings (2.3.0) — all
+> PLANNED; start one only on the user's explicit instruction, one
+> sub-feature at a time.
 >
-> Handoff state at the end of F6 (2026-10-22):
-> - Last verified: clean build (fresh dir) 0 warnings, ctest **52/52**
->   (new `hoversummary`), `packaging-versions` 1.6.3, `loadsInPlasma` 3/3
->   not skipped, shellcheck clean, `git diff --check` clean.
-> - Runtime (isolated): build tray + build backend on a private bus with a
->   fake SNI watcher/host (Python dbus, scratch only, not in the repo),
->   real Wayland platform + KDE platform theme but no window mapped (the
->   offscreen QPA has no SNI tray; the xdgdesktopportal theme under
->   offscreen falls back to XEmbed): ToolTip property read every second,
->   disconnection → "Backend not running" after 3 s, recovery. Plasmoid:
->   `tools/plasmoid-preview.sh` now also draws the tooltip text.
->   WAYLAND_DISPLAY must be an absolute path when XDG_RUNTIME_DIR is
->   isolated (else "socket path exceeds 108 bytes"/relative lookup fails
->   and Qt aborts with no platform plugin: one SIGABRT core of build
->   aqtruncat, PID 517267, is in systemd-coredump from that attempt).
-> - Measured: the KDE platform theme already emits NewToolTip with every
->   frame (158 NewIcon / 171 NewToolTip in 16 s); F6 adds ≈ 1/s, sent
->   together with a frame.
-> - Version choice 1.6.3 = the three functional sub-features F6.1–F6.3
->   (F6.4 formatting, F6.5 architecture, F6.6 tests are cross-cutting
->   requirements of the prompt, not sub-features). Tell the user; easy to
->   change if they count six.
-> - Manual checks left to the user: real Plasma tray tooltip (multi-line
->   title rendering, live update while open), Plasmoid tooltip after a
->   plasmashell restart (horizontal/vertical panel, desktop), popup row
->   tooltips with "Detail lines" off, Metrics Bar details, non-KDE trays.
+> The user owns every Git write (branches, commits, merges, tags); read-only
+> Git only. Reports to the user in Italian; code, comments and
+> requirements in English; `docs/*.md` topic records in Italian.
 >
-> Handoff state at the end of F5 (2026-10-22):
-> - Last verified: clean build (fresh dir) 0 warnings, ctest **51/51**,
->   `packaging-versions` 1.5.6, shellcheck clean, `git diff --check` clean.
-> - Runtime (private bus `build/tests/backendipc-bus.conf`, isolated XDG;
->   the user's session and /usr/local 1.4.2 backend untouched): real Intel
->   i915 GPU, real read-only pacman/Flatpak checks (strace: no non-Unix
->   connect; pacman/Flatpak databases fingerprint unchanged), FPS with a
->   simulated real-time MangoHud log (MangoHud is not installed here),
->   Dashboard and Plasmoid offscreen with the real backend.
-> - Manual checks left to the user: tray Dashboard/Metrics Bar and the
->   Plasmoid in the real session with F5 data, a real game with MangoHud,
->   AMD/NVIDIA/hybrid hardware, apt/dnf on real desktops (only containers).
-> - F5 fix (2026-10-22, user prompt "Hide FPS When Provider Is OFF", still
->   1.5.6, uncommitted): FPS source OFF hides FPS in Dashboard (and the
->   Gaming section), Metrics Bar and Plasmoid; every other condition stays
->   visible; API unchanged (`disabled`). Record:
->   `docs/F5-additional-built-in-metrics.md` §5.4. ctest 51/51, clean build
->   0 warnings.
->   Verified by the user in the real session (2026-10-22): tray Dashboard/
->   Metrics Bar OK; Plasmoid OK after plasmashell was restarted.
-> - install.sh opt-in Plasma restart (2026-10-22, user request after the
->   Plasmoid kept the old QML: plasmashell started before the install).
->   `--restart-plasma`/`--no-restart-plasma`, question default N; §5.5 of the
->   F5 doc; installer 314 checks. Never restart the user's plasmashell
->   yourself: the user's own restart took about a minute (probably the unit
->   TimeoutSec=40 s to stop + start); suggest the command instead.
-> - Lesson (2026-10-22): a Bash `-c` script containing `rm -rf "$VAR"` is
->   blocked by the harness safety check: use fresh scratch directories
->   instead of removing; bash `printf %.3f` follows the Italian locale
->   (comma) — use `LC_ALL=C` in generated fixtures.
+> Operational lessons (still valid):
+> - Private-bus experiments: always `dbus-run-session
+>   --config-file=build/tests/backendipc-bus.conf` (no service dirs). The
+>   default config activates the machine's portals, gvfs, ksecretd, a11y.
+>   Offscreen runs: unset WAYLAND_DISPLAY/DISPLAY. The offscreen QPA has no
+>   SNI tray: to validate the tray, use the real Wayland platform (no window
+>   is mapped) with a fake StatusNotifierWatcher on the private bus, and pass
+>   WAYLAND_DISPLAY as an absolute path when XDG_RUNTIME_DIR is isolated
+>   (otherwise Qt aborts without a platform plugin).
+> - The user has an installed AQTRunCat in `/usr/local` (its `aqtruncatd`
+>   runs on the real session bus): never touch it; tests must not depend
+>   on it.
+> - Never restart the user's plasmashell (it takes about a minute here);
+>   suggest `install.sh --restart-plasma` or the systemctl command. A
+>   running plasmashell keeps the widget QML it loaded first.
+> - A Bash `-c` command containing `rm -rf "$VAR"` is blocked by the
+>   harness: use fresh scratch directories. Bash `printf %.3f` follows the
+>   Italian locale (comma): use `LC_ALL=C` in generated fixtures.
+> - The shell sandbox cannot reach the user's AT-SPI bus.
 >
-> Handoff state at the end of F4 (2026-10-21):
-> - Plasmoid record: `docs/F4.2-plasma-plasmoid.md`; summary in §13 (F4.2)
->   and frozen decisions in §5 (F4.2 block).
-> - Manual check by the user (2026-10-21): they started the Plasmoid in
->   their real Plasma session and found it OK ("mi sembra ok"); no defects
->   reported. No detailed per-item report (vertical/auto-hide panel, CPU in
->   plasmashell) was given.
-> - Decisions confirmed by the user (2026-10-21): versioning "after the 7th
->   feature → 2.0.0" with F1–F7 is correct (F5 → 1.5.x, F5.1 → 1.5.1, …);
->   the `--no-build` version question stays in English like the rest of
->   install.sh. No open questions left from F4.
-> - The user installed F4.1 system-wide in `/usr/local` on 2026-10-21 10:28
->   (1.4.1 era); its `aqtruncatd` runs on the real session bus. Never touch
->   it; tests must not depend on it (the test buses have no service
->   directories, or only the build's wrapper).
-> - Lesson (2026-10-21): never use `dbus-run-session` with its DEFAULT
->   config for experiments — it activates the machine's portals, gvfs,
->   ksecretd, a11y in the private bus (orphans had to be stopped by PID).
->   Always `--config-file=build/tests/backendipc-bus.conf` (no service dirs)
->   and unset WAYLAND_DISPLAY/DISPLAY for offscreen runs. The shell sandbox
->   cannot reach the user's AT-SPI bus (connection refused): AT-SPI driving
->   of test windows is not available here.
-> - Last verified at the end of F4 (superseded by the F5 handoff above):
->   clean build 0 warnings, ctest 45/45, `packaging-versions` 1.4.2.
+> Last verified (2.0.0, 2026-10-22): see §9 (clean build, ctest, checks).
 
 ---
 
 ## 0. Working rules (user-imposed, apply to every task)
 
-- **Git: no commit/push/history rewrite unless explicitly authorised.** Since
-  2026-10-10 the user has a Git repository again (`main`, remote
-  `origin git@psdadygithub:PsykeDady/AQTRunCat.git`, first commits by the
-  user; `MEMORY.md` and `requirements.md` were untracked at that time). Read-only
-  `git status`/`git log`/`git diff --check` are fine for verification. No git
+- **Git: no commit/push/branch/merge/tag/history rewrite** — the user does
+  every Git write. Remote `origin git@psdadygithub:PsykeDady/AQTRunCat.git`.
+  Read-only `git status`/`git log`/`git diff --check` are fine. No git
   config changes.
-- Work **only on the requested milestone**; stop at its end and report. Do not
-  implement later milestones because they "look easy".
-- `requirements.md` is the user's **Post-Project Features** document (F1–F7):
-  do not modify it unless asked. M0–M9 normative decisions now live in §5 of
-  this file and in `docs/M*.md` (historical reports: do not rewrite their
-  observed results; add pointers/notes instead).
+- Work **only on the requested feature/sub-feature**; stop at its end and
+  report. Do not implement later roadmap items because they "look easy".
+- `requirements.md` is the user's **v2 roadmap**: update a feature's status
+  and its record when it is implemented; otherwise change it only when
+  asked. Normative 1.x decisions live in §5 here and in
+  `docs/feature-reference.md`; `docs/*.md` are historical records: do not
+  rewrite their observed results, add notes instead.
 - **Stop conditions**: if a choice with significant user-visible semantics has
   several equally reasonable options, stop and report *Option A / Option B /
   trade-offs / recommendation* instead of picking arbitrarily. If it is
   clearly standard Linux practice, implement and document it. If a new
   significant dependency is needed, stop and ask first.
-- Post-project Git model: `feature/base` is the dedicated common baseline;
-  feature branches are created from it as `feature/f1`, `feature/f2`,
-  `feature/f3`, … . (Observed 2026-10-20: the repository has `main`,
-  `feature/main`, `feature/f1`, `feature/f2` and **no** `feature/base`; ask
-  the user which baseline to use before F3.) The slash is only part of the branch name and implies no
-  Git hierarchy. Do not create, switch, merge, commit or push branches unless
-  explicitly requested.
+- Branches (observed 2026-10-22): the 1.x work was done on `feature/f1` …
+  `feature/f7` (pushed to origin) and consolidated on `feature/main` (2.0.0);
+  local `main` is still at an old commit (27e6d2d) and `feature/base`, once
+  planned as the common baseline, never existed. Ask the user which branch
+  a v2 feature starts from; never create or switch branches yourself.
 - No shelling out for routine work (no `top`, `free`, `df`, `iostat`, `unzip`,
   `bsdtar` …). External tools are allowed **only for manual validation**.
 - Tools/scripts: precise PID handling, cleanup on Ctrl+C (verify with a
@@ -166,31 +76,35 @@
   `~/.local/share/AQTRunCat/metrics/` at startup, so running `tools/*.sh` on
   the real profile creates it — `rmdir` it afterwards if it did not exist.
 - Screenshots must be cropped to AQTRunCat UI and exclude unrelated desktop or
-  personal data. M4 evidence explicitly lives in `docs/M4-dashboard/*.png`;
+  personal data. M4 evidence explicitly lives in `docs/dashboard/*.png`;
   the older M1 spike captures remain ignored historical artifacts.
-- End-of-milestone checklist the user always asks for: clean build, 0
-  avoidable warnings, all tests, real Plasma/Wayland run, earlier tools still
-  work, no leftover processes/temp files, no personal paths, docs
-  (`docs/M<n>-*.md`) + requirements update, list of created/modified files,
+- End-of-feature checklist the user always asks for: clean build in a fresh
+  directory, 0 avoidable warnings, all tests, isolated runtime validation
+  (real-session checks are listed for the user, never claimed), earlier
+  tools still work, no leftover processes/temp files, no personal paths, a
+  topic doc in `docs/` (indexed in `docs/README.md`) + requirements/MEMORY
+  update, version bump per `requirements.md`, list of created/modified files,
   test counts, runtime results, open decisions. Report in Italian (the user
   writes Italian; `docs/*.md` are in Italian; code/comments/requirements in
   English).
 - Licensing: AQTRunCat is Apache-2.0. Do not use RunCat branding/icon as
   AQTRunCat identity. Do not import `runcat-tray` assets (unclear/GPL
   provenance). Record any copied upstream asset in `THIRD_PARTY_NOTICES.md`
-  (repo, commit, original path, license).
+  (repo, commit, original path, license); an asset whose licence cannot be
+  verified only by the user's explicit decision, stated as such (the
+  Walking Goose and Party Parrot frames).
 
 ---
 
 ## 1. Project identity
 
 - Name **AQTRunCat**, tagline **"A Cute Run Cat for Linux"**, executable
-  **`aqtruncat`**, version **1.7.4** (CMake `PROJECT_VERSION`; was 0.0.1 until
-  F4.1; 1.4.2 = F4.2; 1.5.6 = F5 with its six sub-features F5.1–F5.6;
-  1.6.3 = F6 with F6.1–F6.3; 1.7.4 = F7 with F7.1–F7.4). Versioning rule (user, 2026-10-21; requirements.md "Versioning"):
-  1.0.0 = M0–M9; each completed feature F<n> raises the minor (F4 → 1.4.x),
-  each completed sub-feature the patch (F4.1 → 1.4.1, F4.2 → 1.4.2); after
-  the 7th feature → 2.0.0. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
+  **`aqtruncat`**, version **2.0.0** (CMake `PROJECT_VERSION`). History:
+  1.0.0 = M0–M9; F<n> raised the minor and its sub-features the patch (1.4.2
+  = F4.2, 1.5.6 = F5.1–F5.6, 1.6.3 = F6.1–F6.3, 1.7.4 = F7.1–F7.4); 2.0.0 =
+  consolidation of 1.7.4. v2 rule (requirements.md "Versioning"): v2F<n>
+  raises the minor (v2F1 → 2.1.x), its sub-features the patch. The D-Bus
+  api (1) and payload schema (2) change only with their contract. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
   debian/changelog, the man page and `plasmoid/package/metadata.json`
   (KPlugin.Version) together (`packaging-versions` test).
   All executables accept `-v`/`--version`; the tray menus show "AQTRunCat
@@ -237,9 +151,10 @@ F3 COMPLETE   Codex integration: usage limits per window (local sessions + opt-i
 F4.1 COMPLETE Headless backend aqtruncatd (QtCore+QtDBus), D-Bus API io.github.psykedady.AQTRunCat1 (api 1, schema 1), CLI aqtruncatctl; tray = client
 F4.2 COMPLETE Native KDE Plasma 6 Plasmoid io.github.psykedady.aqtruncat (QML package, client of the API), GetRunners/"runners", install.sh --plasmoid/--no-plasmoid
 F5 COMPLETE   Additional Built-in Metrics: uptime, GPU (per device), FPS (MangoHud log), package/Flatpak updates (read-only, local metadata by default), kernel, distribution; API schema 2
-F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (partyparrot), Engine (engine) (1.7.4)
 F6 COMPLETE   Hover Information: CPU/RAM/swap summary in the tray tooltip and the Plasmoid's native tooltip; Metrics Bar/popup details (1.6.3)
-NEXT          2.0.0 release milestone, only on the user's instruction (after accepting F7)
+F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (partyparrot), Engine (engine) (1.7.4)
+2.0.0         Consolidation release: version 2.0.0, docs by topic (docs/README.md), v2 roadmap in requirements.md; no functional change
+NEXT          v2F1 Custom Metrics v3 (2.1.x), v2F2 Independent Autostart (2.2.0), v2F3 Standalone Settings (2.3.0): PLANNED, only on instruction
 ```
 
 - Build: `cmake -S . -B build && cmake --build build && ctest --test-dir build`.
@@ -273,7 +188,8 @@ NEXT          2.0.0 release milestone, only on the user's instruction (after acc
   without sudo; autostart ON by default; manifest-based uninstall keeping user
   data); native packages in `packaging/` (Arch PKGBUILD, Fedora RPM, Debian);
   Flatpak/AppImage deferred. License Apache-2.0 (`LICENSE`); original icon.
-- Runner system: generic runners, bundled `cat` (default) + `coffee`, user
+- Runner system: generic runners, bundled `cat` (default), `coffee`,
+  `walkinggoose`, `partyparrot`, `engine` (F7), user
   runners in XDG data dir, Gallery-compatible, safe ZIP import, removal.
 - Metrics: CPU, RAM, swap, network, storage capacity, disk I/O via a Qt-free
   layer; consumed by CLI and by the app-owned desktop sampler/Dashboard.
@@ -285,7 +201,7 @@ NEXT          2.0.0 release milestone, only on the user's instruction (after acc
   bounded direct `QProcess`, scalar output, per-source intervals, a shared
   scheduler, package discovery and structured theme/file icons. Both produce
   the same Snapshot/Source model for Dashboard and Metrics Bar (§13 and
-  `docs/F1-custom-metrics-v2.md`). F2 adds `source.output: "snapshot"`
+  `docs/custom-metrics-commands.md`). F2 adds `source.output: "snapshot"`
   (multi-value command output) and exit 69 → Unavailable.
 - Claude Code integration (F2, revised 2026-10-20): separate QtCore
   executable `aqtruncat-claude-metric` (lib `aqtruncat_claude`, not linked by
@@ -293,7 +209,7 @@ NEXT          2.0.0 release milestone, only on the user's instruction (after acc
   (Current session 5h, Current week all models) with reset times; managed
   from Settings › Integrations or its CLI (`enable`/`disable`/`status`/
   `live-updates`), which share one configuration owned by the adapter
-  (`docs/F2-claude-code-metric.md`). Snapshot items may carry `id`/`detail`/
+  (`docs/integration-claude-code.md`). Snapshot items may carry `id`/`detail`/
   `metricsBarValue`/`metricsBarLabel`; Metrics Bar ids
   `custom-item:<item>:<source>` select one item.
 - Installer closes this installation's running AQTRunCat (SIGTERM, ≤10 s,
@@ -324,7 +240,7 @@ crash loop on this machine, keeping ~1 core busy → idle CPU reads ~19–30 %.
 the one MetricSampler, CustomMetricsService (F1 + F2/F3 adapters),
 CpuMonitor → RunnerSpeedController (fps), AutostartManager and both
 ProviderIntegrations, exported on the session bus (contract:
-`docs/F4.1-headless-backend-ipc-cli.md`, schema in `src/api/apischema.*`).
+`docs/backend-dbus-api-cli.md`, schema in `src/api/apischema.*`).
 `aqtruncat run` (trayapp) is a client through `BackendClient`
 (`src/api/backendclient.*`, implements `CustomMetricsModel`): it rebuilds
 the system snapshot / sources from JSON for the unchanged Dashboard,
@@ -477,7 +393,7 @@ Key components:
 
 ## 4. Milestone history (operative summary)
 
-### M0 — Upstream analysis (docs/M0-upstream-analysis.md)
+### M0 — Upstream analysis (docs/upstream-runcat-neo-analysis.md)
 - Upstreams analysed from source: RunCat Neo `b3b1543` (Swift/SwiftUI, macOS 26,
   Apache-2.0), SystemInfoKit 7.2.2 `56bfde2` (its metrics), Runner Gallery
   `b979658` (43 runners, Apache-2.0), runcat-tray `9fe316b` (C/GTK3
@@ -495,7 +411,7 @@ Key components:
   (reusable with attribution); RunCat name/icon are trademarks (not usable).
 
 ### M1 — Cat Lives
-- **M1.0 tray spike** (docs/M1-tray-spike.md): result **B — Qt tray is
+- **M1.0 tray spike** (docs/tray-spike.md): result **B — Qt tray is
   sufficient with compromises**. Findings:
   - On Plasma, `QSystemTrayIcon` → plasma-integration `KDEPlatformSystemTrayIcon`
     → `KStatusNotifierItem`: each `setIcon` emits `NewIcon` + `NewToolTip`
@@ -510,7 +426,7 @@ Key components:
     20 fps ≈ 8.3 %; plasmashell RSS +~30 MB at 40 fps then plateau.
 - **Manual visual test (user)**: <10 FPS unsatisfying, 10 good minimum, up to 40
   very good but costly → approved curve below; linear upstream curve rejected.
-- **M1.1 CPU runner** (docs/M1-cpu-runner.md): `/proc/stat`, 1 s sampling,
+- **M1.1 CPU runner** (docs/cpu-and-runner-speed.md): `/proc/stat`, 1 s sampling,
   EMA α 0.4, FpsStabilizer (immediate ≥3 FPS, smaller changes need 3
   consecutive samples) chosen by replaying recorded data (step 2 → 7 flips in
   24 s at half load; step 3 → 1 flip). Runtime: idle 11 fps, half 26–27, full
@@ -520,7 +436,7 @@ Key components:
   stay in `spike/m1-tray/tools/`.
 - Curve: `fps = round(10 + 30·(cpu/100)²)`, cpu clamped [0,100] → 10–40 FPS.
 
-### M2 — Runner system (docs/M2-runner-system.md, docs/M2.1-runner-lifecycle-cli.md)
+### M2 — Runner system (docs/runners.md, docs/runner-import-and-cli.md)
 - Generic `Runner` model; nothing in code knows "cat" (default id only in CMake).
 - Bundled `cat` + `coffee` (RunCat Neo frames, `third_party/`, + own metadata).
 - Loader with fatal/warning split, natural ordering, Gallery layouts, metadata,
@@ -531,7 +447,7 @@ Key components:
 - Verified: all 43 Gallery ZIPs import/list/run; frame order verified end-to-end
   through D-Bus on 7 runners incl. a 24-frame one.
 
-### M3 — Core metrics (docs/M3-core-metrics.md)
+### M3 — Core metrics (docs/system-metrics.md)
 - Qt-free metrics layer, typed snapshot, explicit status (unavailable ≠ 0),
   one CPU implementation shared with the runner, real-elapsed-time rates,
   hardware-only network aggregation, whole-physical-disk I/O aggregation, df
@@ -540,7 +456,7 @@ Key components:
 - Validated against `free`, `df`, independent `/proc` counters; ~108 µs per
   snapshot, `metrics --watch` ≈0.05 % CPU.
 
-### M4 — Dashboard (docs/M4-dashboard.md)
+### M4 — Dashboard (docs/dashboard.md)
 - Compact Qt Widgets Dashboard with CPU, memory, swap, aggregate network,
   Root/Home capacity and aggregate physical-disk I/O; explicit N/A/waiting.
 - One desktop MetricSampler feeds both Dashboard and runner. CpuMonitor now
@@ -549,9 +465,9 @@ Key components:
   supplies Show/Hide fallback and Quit. Closing the window only hides it.
 - Root is always sampled; Home only when `stat(2).st_dev` differs. Plasma 6
   Wayland, fractional scale, runtime tools and hidden/visible performance were
-  validated; screenshots are under `docs/M4-dashboard/`.
+  validated; screenshots are under `docs/dashboard/`.
 
-### M5 — Settings and Desktop Integration (docs/M5-settings-desktop.md)
+### M5 — Settings and Desktop Integration (docs/settings-and-desktop-integration.md)
 - `AppSettings` provides typed immediate persistence through QSettings INI in
   XDG config. Precedence is explicit CLI > persistent setting > default.
 - One reusable Settings window selects runners via RunnerService, previews
@@ -564,7 +480,7 @@ Key components:
 - Plasma 6 Wayland lifecycle, persistence, fallback, performance and prior
   diagnostic tools were validated. Final result: 24 suites / 359 cases.
 
-### M9 — Packaging, Installation & Release Readiness (docs/M9-packaging-installation.md)
+### M9 — Packaging, Installation & Release Readiness (docs/installation-and-packaging.md)
 - Added: `LICENSE` (Apache-2.0, canonical text with generic appendix), original
   icon `data/icons/hicolor/{16..256,scalable}/apps/aqtruncat.*` (SVG source +
   PNGs rendered with rsvg-convert), `data/aqtruncat.desktop` (Exec=aqtruncat,
@@ -600,7 +516,7 @@ Key components:
   sudo, `sudo ./install.sh`, --local) in all four containers; --local install
   launched in the real Plasma session (runner + bar registered).
 
-### M8 — Desktop Compatibility & Polish (docs/M8-desktop-compatibility.md)
+### M8 — Desktop Compatibility & Polish (docs/desktop-compatibility.md)
 - Distros (docker containers, source mounted read-only): Fedora 44 (Qt 6.11),
   Ubuntu 26.04 LTS (Qt 6.10), Debian 13 (Qt 6.8): build 0 warnings, 30/30
   suites, 3 expected skips (locale ×2, root perms). Ubuntu 24.04 (Qt 6.4.2)
@@ -629,7 +545,7 @@ Key components:
   +2.1–2.3 NewIcon/s, plasmashell +0.15 pt; Dashboard visible +0.1 pt and
   +5 MiB; Settings open costs ~2.5 pt (20 fps preview, by design M5).
 
-### M7 — Metrics Bar (docs/M7-metrics-bar.md)
+### M7 — Metrics Bar (docs/metrics-bar.md)
 - Spike (Plasma 6.7.5): square ~22 px SNI cells, no text label
   (`XAyatanaLabel` unused, `Title` not shown in panel), bigger icons are
   rescaled; a wide label is illegible, `23%` legible. All items of one
@@ -653,10 +569,10 @@ Key components:
 - Acceptance gate (runner animated in Normal mode + 3 metrics, 4 SNI): bar
   +2.2–2.9 NewIcon/s, app 0.47 % core, RSS 60.2 MiB; runner unchanged
   (~11 fps idle). Stress 11 SNI ×600 s: 0 warnings, 0 orphans, exit 0.
-  Details: docs/M7-metrics-bar.md §10–§11. Final: 30 suites / 472 cases.
+  Details: docs/metrics-bar.md §10–§11. Final: 30 suites / 472 cases.
 - M7 fixed `tools/test-cpu-runtime.sh` to count the runner item's NewIcon.
 
-### M6 — Custom Metrics (docs/M6-custom-metrics.md)
+### M6 — Custom Metrics (docs/custom-metrics.md)
 - AQTRunCat consumes the documented RunCat Neo JSON snapshot schema; producers
   own `formattedValue`, timestamps and update cadence. No source providers,
   QProcess, commands, HTTP, per-metric timers or internal scheduler exist.
@@ -951,6 +867,13 @@ sample on purpose (hot-plug) — caching not needed.
 
 ## 9. Tests and validation
 
+2.0.0 (2026-10-22): clean build in a fresh directory 0 warnings; ctest
+**53/53** (installer included, `loadsInPlasma` 3/3 not skipped);
+`packaging-versions` 2.0.0; every executable prints 2.0.0
+(`aqtruncatctl` "(API 1)"); `aqtruncat runner list` shows the five bundled
+runners; shellcheck and `git diff --check` clean; Markdown links checked
+(all resolve). No source behaviour changed from 1.7.4.
+
 F4.1 (2026-10-21): 42 ctest suites (new `apischema` and `backendipc`, the
 latter under `dbus-run-session` with isolated XDG: registration/version/single
 instance, deltas, classification, settings both ways, shared backend,
@@ -1174,8 +1097,8 @@ SIGTERM handler (`SigCgt` bit 15). Never clean leftovers with `pkill -f`
 
 ## 12. Deferred decisions
 
-M8 and M9 are complete (docs/M8-desktop-compatibility.md,
-docs/M9-packaging-installation.md). Items deferred there and not covered by
+M8 and M9 are complete (docs/desktop-compatibility.md,
+docs/installation-and-packaging.md). Items deferred there and not covered by
 F1–F6 (backlog notes, not scheduled): Flatpak and AppImage *application
 packaging* (distinct from the F5 Flatpak-updates metric; portal-based
 autostart, sandbox paths for Custom Metrics/storage, bundled-Qt theme
@@ -1186,19 +1109,13 @@ RunCat Neo custom runner names (§11).
 
 ---
 
-## 13. Post-project features F1–F7 (requirements.md)
+## 13. Feature history F1–F7 (1.1.0 – 1.7.4, shipped in 2.0.0)
 
-M0–M9 are complete; M9 concluded the initial roadmap. `requirements.md`
-("AQTRunCat — Post-Project Features") is the current source for future work
-and supersedes the earlier F1–F4 post-project ordering. **F1, F2, F3, F4
-(F4.1, F4.2), F5 and F6 are COMPLETE. F7 is NOT STARTED (assets approved on
-2026-10-22, no longer blocked); do not start it without an explicit user
-instruction.**
-
-Development baseline: future post-project work starts from `feature/base`.
-Each feature branch (`feature/f1`, `feature/f2`, `feature/f3`, …) is created
-from that common history. The slash is naming only, not Git hierarchy. Do not
-create or switch branches, commit or push without explicit permission.
+All complete and committed by the user (F7 = 869743a on `feature/f7`, then
+`feature/main`). Normative summaries: `docs/feature-reference.md`; records:
+the topic documents in `docs/README.md`. The notes below keep the
+implementation decisions and lessons of each feature; "uncommitted at that
+time" refers to the state when the feature was finished.
 
 - **F1 — Custom Metrics v2 / Executable Custom Metrics — COMPLETE
   (2026-10-13)**: extends, and does not replace, M6 with two source types:
@@ -1225,7 +1142,7 @@ create or switch branches, commit or push without explicit permission.
   structured theme/file icons with fallback, and preserves standalone M6
   discovery, registration, watcher/retry/last-good and legacy symbol JSON.
   No structured multi-value command output or GUI editor: the snapshot format
-  remains the multi-value path. Full contract: `docs/F1-custom-metrics-v2.md`.
+  remains the multi-value path. Full contract: `docs/custom-metrics-commands.md`.
   **2026-10-16 audit/hardening** (against the original F1 prompt): fixed a
   zero-delay wake spin after a timeout kill; commands now run in their own
   process group so timeout/overflow/stop also kill script helpers; package
@@ -1248,9 +1165,9 @@ create or switch branches, commit or push without explicit permission.
   while hidden. Metrics Bar unchanged (it already shows the retained custom
   value while Pending).
 - **F2 — Claude Code Metric — COMPLETE (2026-10-16, `feature/f2`), REVISED
-  2026-10-20**. Full record: `docs/F2-claude-code-metric.md` (Part A =
+  2026-10-20**. Full record: `docs/integration-claude-code.md` (Part A =
   revision/current behaviour, Part B = first implementation, kept as
-  history); normative summary in requirements.md. The M6 Claude JSON example
+  history); normative summary in docs/feature-reference.md. The M6 Claude JSON example
   is still only an example snapshot, not how F2 works.
   - Architecture (unchanged): `src/providers/claude/` → static lib
     `aqtruncat_claude` (QtCore only: `claudecode.*` context + collect,
@@ -1294,7 +1211,7 @@ create or switch branches, commit or push without explicit permission.
     file watches; GUI live-updates asks for confirmation; `disable` also
     turns live updates off.
   - Installer: §5 row "Installer running instance"; `--help`, README and
-    `docs/M9` note updated.
+    `docs/installation-and-packaging.md` note updated.
   - Validation 2026-10-20 (Plasma 6 Wayland, isolated XDG, `--fps 10`, real
     Claude data read-only): `/usage` at 11:44 = 31% / 11% (resets 1:30pm
     Rome) ↔ adapter 11:45 = 31% "Resets at 13:30" / 11% "Resets Oct 23,
@@ -1307,7 +1224,7 @@ create or switch branches, commit or push without explicit permission.
   - Dashboard refinement (2026-10-20, F2 doc §A.13): provenance field and
     Integrations/Custom Metrics sections (§5 row "Integration provenance");
     validated on Plasma with a provider card, a same-titled legacy M6
-    snapshot and a user command (`docs/F2-claude-code-metric/
+    snapshot and a user command (`docs/integration-claude-code/
     dashboard-sections.png`). The user's real
     `~/.local/share/AQTRunCat/metrics/claude-code/` was written by the old
     adapter (no marker): it showed under Custom Metrics after the user's
@@ -1319,8 +1236,8 @@ create or switch branches, commit or push without explicit permission.
     integration and orphan a live status line).
   - Limitations: see §11 item 22 and the F2 doc §A.10.
 - **F3 — Codex Integration — COMPLETE (2026-10-20, branch managed by the
-  user; uncommitted at that time)**. Full record: `docs/F3-codex-metric.md`;
-  normative summary in requirements.md (F3 "Implemented Behaviour").
+  user; uncommitted at that time)**. Full record: `docs/integration-codex.md`;
+  normative summary in docs/feature-reference.md (F3 "Implemented Behaviour").
   - Investigation (Codex CLI 0.163.0, ChatGPT Plus): `~/.codex/sessions/
     YYYY/MM/DD/rollout-*.jsonl` `event_msg`/`token_count` carry
     `rate_limits` {limit_id ("codex"; also "premium" with null windows;
@@ -1377,9 +1294,9 @@ create or switch branches, commit or push without explicit permission.
     account); no Codex context-window option.
 - **F4.1 — Headless Backend, Local API & CLI — COMPLETE (2026-10-21,
   uncommitted at that time)**. Full record and API contract:
-  `docs/F4.1-headless-backend-ipc-cli.md` (+ Python Gio client example in
-  `docs/F4.1-headless-backend-ipc-cli/aqtruncat-client.py`); normative
-  summary in requirements.md (F4.1 "Implemented Behaviour").
+  `docs/backend-dbus-api-cli.md` (+ Python Gio client example in
+  `docs/backend-dbus-api-cli/aqtruncat-client.py`); normative
+  summary in docs/feature-reference.md (F4.1 "Implemented Behaviour").
   - Decision: option B (dedicated `aqtruncatd`) over A (`aqtruncat
     --headless`): backend links only Qt6Core/Qt6DBus (~17 MB RSS vs ~60 MB
     with the GUI stack), clean activation `Exec`, clear ownership.
@@ -1431,9 +1348,9 @@ create or switch branches, commit or push without explicit permission.
     updatedAt null for system metrics; native packages not rebuilt in
     containers.
 - **F4.2 — Native KDE Plasma 6 Plasmoid — COMPLETE (2026-10-21,
-  uncommitted at that time)**. Full record: `docs/F4.2-plasma-plasmoid.md`
-  (screenshots `docs/F4.2-plasma-plasmoid/*.png`, offscreen previews);
-  normative summary in requirements.md (F4.2 "Implemented Behaviour").
+  uncommitted at that time)**. Full record: `docs/plasma-widget.md`
+  (screenshots `docs/plasma-widget/*.png`, offscreen previews);
+  normative summary in docs/feature-reference.md (F4.2 "Implemented Behaviour").
   Original intent kept: additive, parallel to the Qt/SNI frontend, a
   client of the F4.1 API, no duplicated business logic.
   - Decision: **QML-only Plasma package** (`plasmoid/package`, id
@@ -1500,9 +1417,9 @@ create or switch branches, commit or push without explicit permission.
     panels keep animating; `org.kde.plasma.workspace.dbus` is a
     plasma-workspace (not Frameworks) module.
 - **F5 — Additional Built-in Metrics — COMPLETE (2026-10-22, 1.5.6,
-  uncommitted on `feature/f5`)**. Full record: `docs/F5-additional-built-in-metrics.md`
-  (+ `docs/F5-additional-built-in-metrics/{dashboard,plasmoid-light,plasmoid-dark}.png`);
-  normative summary in requirements.md (F5 "Implemented Behaviour").
+  then uncommitted on `feature/f5`)**. Full record: `docs/additional-built-in-metrics.md`
+  (+ `docs/additional-built-in-metrics/{dashboard,plasmoid-light,plasmoid-dark}.png`);
+  normative summary in docs/feature-reference.md (F5 "Implemented Behaviour").
   - User prompt (2026-10-22): seven metrics as Built-in Metrics in the
     existing architecture, one backend, explicit states, no invented
     values, no root, no installs, no silent network, optional FPS only from
@@ -1531,8 +1448,8 @@ create or switch branches, commit or push without explicit permission.
     -Qu with gpg ≈ 0.7 s, 4 flatpak calls ≈ 1 s) → ≈ 0.05 % hourly.
   - Limitations: see §11 items 23–26 and the F5 doc §17.
 - **F7 — Additional Built-in Animated Runners — COMPLETE (2026-10-22,
-  1.7.4, uncommitted; the user committed F6 as c84b3f7)**: record
-  `docs/F7-additional-built-in-runners.md`.
+  1.7.4; committed by the user)**: record
+  `docs/built-in-runners.md`.
   - F7.1 Walking Goose (`walkinggoose`, 6 frames 24×36) → 1.7.1, F7.2 Party
     Parrot (`partyparrot`, 10 frames 50×36) → 1.7.2, F7.3 shared
     integration/packaging/validation → 1.7.3 (the user's F7 brief; it
@@ -1586,8 +1503,8 @@ create or switch branches, commit or push without explicit permission.
     Plasmoid only needs the 1.7.4 backend installed; its QML is unchanged).
   - Next: 2.0.0 is a separate milestone after the user accepts F7; do not
     start it without an instruction.
-- **F6 — Hover Information — COMPLETE (2026-10-22, 1.6.3, uncommitted on
-  `feature/f6`)**: record `docs/F6-hover-information.md`.
+- **F6 — Hover Information — COMPLETE (2026-10-22, 1.6.3, then uncommitted on
+  `feature/f6`)**: record `docs/hover-information.md`.
   - F6.1 tray: `hover::summaryLines`/`runnerToolTip` (`src/app/
     hoversummary.*`, engine lib, QtCore) from the snapshot `BackendClient`
     already emits + `connectionChanged`; `TrayPresenter::setSummary`.
@@ -1618,59 +1535,35 @@ create or switch branches, commit or push without explicit permission.
   and safe on uninstall/upgrade; never sacrifice the generic app for a
   desktop-specific frontend.
 
-## (historical) M9 brief
-Install target, `.desktop`, own icon, Arch PKGBUILD, Flatpak/AppImage
-evaluation; completed in docs/M9-packaging-installation.md.
-
-## (historical) M8 brief
-Plasma X11, other SNI hosts, suspend/resume, tray restart, performance,
-error handling; completed in docs/M8-desktop-compatibility.md.
-
-## (historical) M7 — Metrics Bar brief
-
-Goal (requirements §12 and M7): investigate and implement the best reliable
-Linux equivalent of RunCat Neo's textual Metrics Bar without compromising the
-runner or performance.
-
-Preserve during M7:
-
-- the M6 `CustomMetricSnapshot` model, including opaque `metricsBarValue`;
-- CustomMetricsService ownership, watching and error isolation;
-- the single M3 MetricSampler and typed SystemMetricsSnapshot;
-- M1–M6 tray, Dashboard, Settings and CLI contracts.
-
-SNI on Plasma has no native text label. M0/M1 indicate that a separate or
-combined rendered pixmap is likely, but square tray slots, D-Bus traffic and
-runner readability require a measured design decision before implementation.
-
 ---
 
 ## 14. Important files map
 
 ```text
-requirements.md                Post-Project Features F1–F7 and feature/base → feature/fN branch model (user document, current source for future work; replaced the M0–M9 spec on 2026-10-10 and was reorganized on 2026-10-13). Former §-references below (e.g. §5.4, §8, §12) point to that M0–M9 spec, whose decisions are kept in §5 here and docs/M*.md:
-                               §9 metrics, §13a CLI, §20 tools, §24 milestones (status), §26 source control
-THIRD_PARTY_NOTICES.md         RunCat Neo frame provenance (Apache-2.0)
-docs/M0-upstream-analysis.md   upstream behaviour (runners, metrics, Custom Metrics schema §6, Linux risks)
-docs/M1-tray-spike.md          SNI/Plasma findings, cost measurements (B classification)
-docs/M1-cpu-runner.md          CPU semantics, sampling/smoothing/stabiliser tuning, runtime test
-docs/M2-runner-system.md       runner model, loader, discovery, Gallery compatibility
-docs/M2.1-runner-lifecycle-cli.md  ZIP security, install/remove, CLI grammar, exit codes
-docs/M3-core-metrics.md        metrics semantics, policies, validation, performance
-docs/M4-dashboard.md           Dashboard/shared sampler architecture, UI/runtime/performance evidence
-docs/M5-settings-desktop.md    typed settings, preview, speed/network policy, XDG autostart, validation
-docs/M6-custom-metrics.md      historical M6 snapshot schema, registry/watch/retry, Dashboard/Settings, validation
-docs/F1-custom-metrics-v2.md   F1 command schema/output/security, scheduler/lifecycle, packages/icons, validation
-docs/F2-claude-code-metric.md  F2: Part A revision 2026-10-20 (quota sources, semantics, live updates, Integrations, installer stop, tests, validation); Part B first implementation (context window)
-docs/M7-metrics-bar.md         Plasma SNI spike, model/renderer/presenter, formatting, statuses, settings, ordering, cost
-docs/M8-desktop-compatibility.md  distro/desktop matrix, suspend, tray restart, fixes, perf, soak
+requirements.md                v2 roadmap (2.0.0 baseline, v2F1 Custom Metrics v3 2.1.x, v2F2 Independent Autostart 2.2.0, v2F3 Standalone Settings 2.3.0), versioning, general principles. Older "requirements §n" references in docs point to the former M0–M9 spec (decisions kept in §5 here)
+docs/README.md                 documentation index: architecture overview, topic documents, milestone → document map
+docs/feature-reference.md      normative summaries of F1–F7 (formerly the body of requirements.md)
+THIRD_PARTY_NOTICES.md         runner frame provenance: RunCat Neo (Apache-2.0); Walking Goose / Party Parrot (Tenor GIFs, licence unknown, user's decision)
+docs/upstream-runcat-neo-analysis.md   upstream behaviour (runners, metrics, Custom Metrics schema §6, Linux risks)
+docs/tray-spike.md          SNI/Plasma findings, cost measurements (B classification)
+docs/cpu-and-runner-speed.md          CPU semantics, sampling/smoothing/stabiliser tuning, runtime test
+docs/runners.md       runner model, loader, discovery, Gallery compatibility
+docs/runner-import-and-cli.md  ZIP security, install/remove, CLI grammar, exit codes
+docs/system-metrics.md        metrics semantics, policies, validation, performance
+docs/dashboard.md           Dashboard/shared sampler architecture, UI/runtime/performance evidence
+docs/settings-and-desktop-integration.md    typed settings, preview, speed/network policy, XDG autostart, validation
+docs/custom-metrics.md      historical M6 snapshot schema, registry/watch/retry, Dashboard/Settings, validation
+docs/custom-metrics-commands.md   F1 command schema/output/security, scheduler/lifecycle, packages/icons, validation
+docs/integration-claude-code.md  F2: Part A revision 2026-10-20 (quota sources, semantics, live updates, Integrations, installer stop, tests, validation); Part B first implementation (context window)
+docs/metrics-bar.md         Plasma SNI spike, model/renderer/presenter, formatting, statuses, settings, ordering, cost
+docs/desktop-compatibility.md  distro/desktop matrix, suspend, tray restart, fixes, perf, soak
 README.md                      user-facing: features, supported systems, install/uninstall, packages, usage, limitations
 LICENSE                        Apache-2.0
 install.sh                     user installer (system / --local, autostart, uninstall); `--help`
 packaging/                     make-source-tarball.sh, arch/PKGBUILD, rpm/aqtruncat.spec, debian/
 data/aqtruncat.desktop, data/aqtruncat.1, data/icons/   desktop entry, man page, original icon
 tests/installer/test_install.sh, tests/packaging/check_versions.sh   bash tests registered in ctest
-docs/M9-packaging-installation.md  layout, installer, deps, packages, Flatpak/AppImage evaluation
+docs/installation-and-packaging.md  layout, installer, deps, packages, Flatpak/AppImage evaluation
 CMakeLists.txt                 Qt/libarchive detection, tests, AQTRUNCAT_BUILD_SPIKES
 src/CMakeLists.txt             libraries, bundled runner qrc, AQTRUNCAT_BUNDLED_RUNNERS / _DEFAULT_RUNNER
 src/core/                      Qt-free CPU math (cpustat), Ema, speed curve + stabiliser, FramePlayback
@@ -1682,25 +1575,25 @@ src/app/                       runtime/UI: AppSettings, MetricSampler, CustomMet
 src/providers/claude/          F2 Claude Code adapter (aqtruncat_claude lib: claudecode context/collect, claudeusage quotas, statuslinebridge settings.json edit; aqtruncat-claude-metric exe + icon); not linked by the core
 src/providers/common/          shared provider code (aqtruncat_provider_common: quota judgement/item format, package helpers)
 src/providers/codex/           F3 Codex adapter (aqtruncat_codex lib: codexusage local/live/state/collect; aqtruncat-codex-metric exe + icon); not linked by the core
-docs/F3-codex-metric.md        F3 investigation/sources, semantics, freshness, accounts, architecture, Settings, tests, Plasma validation
+docs/integration-codex.md        F3 investigation/sources, semantics, freshness, accounts, architecture, Settings, tests, Plasma validation
 src/app/providerintegration.*  Settings-side driver of an official integration's adapter CLI (status --json, enable, disable, live-updates)
 src/api/                       F4.1 public API: apischema (identity, versions, JSON schema both ways), backendservice (D-Bus object), backendclient (Qt client, CustomMetricsModel)
 src/daemon/main.cpp, src/ctl/main.cpp   F4.1 aqtruncatd backend and aqtruncatctl CLI
 data/io.github.psykedady.AQTRunCat.service.in   D-Bus activation file template (Exec=@AQTRUNCAT_DBUS_EXEC@)
-docs/F4.1-headless-backend-ipc-cli.md   F4.1 architecture, lifecycle, complete API contract, CLI, security, performance, limits (+ Python client example dir)
+docs/backend-dbus-api-cli.md   F4.1 architecture, lifecycle, complete API contract, CLI, security, performance, limits (+ Python client example dir)
 plasmoid/package/              F4.2 KDE Plasma 6 widget (QML only): metadata.json, contents/code/logic.js (pure, tested), contents/config/{main.xml,config.qml}, contents/ui/{main,BackendClient,CompactRepresentation,RunnerView,FullRepresentation,MetricDelegate,configGeneral,configAppearance}.qml
 src/api/runnercatalog.*        F4.2 GetRunners payload (lib aqtruncat_runner_catalog with app/runnerselection.*; QtGui; linked by aqtruncatd and the tray only)
-docs/F4.2-plasma-plasmoid.md   F4.2 strategy, package, IPC, compact/popup, settings, coexistence, install/packaging, security, perf, tests, runtime validation, limits (+ screenshots dir)
+docs/plasma-widget.md   F4.2 strategy, package, IPC, compact/popup, settings, coexistence, install/packaging, security, perf, tests, runtime validation, limits (+ screenshots dir)
 tests/tst_plasmoidclient.cpp, tests/tst_plasmoidpackage.cpp, tests/plasmoid/tst_logic.qml   F4.2 tests (client on a private bus with activation wrapper; package/plasmoidviewer; qmltestrunner)
 tools/plasmoid-preview.{sh,qml}   offscreen popup/runner previews with demo data (light/dark PNG), private bus, isolated XDG (F5: update checks off)
 src/metrics/{uptime,systeminfo,gpu,fps,packageupdates}.*   F5 Qt-free sources: /proc/uptime, uname + os-release, DRM/sysfs/NVML GPUs, MangoHud log reader, update-check parsers/commands
 src/app/updatesservice.*, boundedprocess.*, processgroup.h   F5 backend update checks (two non-overlapping jobs), bounded subprocess (shared process-group rules with F1)
-docs/F7-additional-built-in-runners.md   F7 assets, CMake integration/cache migration, selection, packaging, tests, isolated runtime, deferred Engine, manual checks
+docs/built-in-runners.md   F7 assets, CMake integration/cache migration, selection, packaging, tests, isolated runtime, deferred Engine, manual checks
 third_party/{walkinggoose,partyparrot}/   F7 runner frames (derived from Tenor GIFs, licence unknown, user's decision) + README provenance
 tests/tst_bundledrunners.cpp   F7 real bundled runners: files, list, selection, persistence, fallbacks
 src/app/hoversummary.*   F6 hover summary (CPU/RAM/swap lines, backend states, whenText), QtCore only
-docs/F6-hover-information.md   F6 existing tooltips, shared format, tray/Plasmoid/details, API unchanged, performance, tests, isolated runtime validation, manual checks
-docs/F5-additional-built-in-metrics.md   F5 investigation, ids/sources/units, GPU/FPS/updates semantics, API/CLI/UI, settings, performance, security, tests, runtime validation, limits (+ images dir)
+docs/hover-information.md   F6 existing tooltips, shared format, tray/Plasmoid/details, API unchanged, performance, tests, isolated runtime validation, manual checks
+docs/additional-built-in-metrics.md   F5 investigation, ids/sources/units, GPU/FPS/updates semantics, API/CLI/UI, settings, performance, security, tests, runtime validation, limits (+ images dir)
 data/runners/<id>/metadata.json   AQTRunCat-authored metadata for bundled runners
 third_party/runcatneo/         upstream LICENSE + frames (cat, coffee bundled; engine spike-only)
 tests/                         Qt Test suites (tst_*.cpp), including F1 deterministic command helper/service cases and F2 Claude fixtures (synthetic registry/transcripts/fake /proc)
@@ -1709,234 +1602,3 @@ spike/m1-tray/                 throwaway M1.0 prototype + its measurement tools 
 ```
 
 ---
-
-## Historical task prompts (condensed; original intent and acceptance criteria)
-
-<details>
-<summary>M0 — Upstream Analysis</summary>
-
-Goal: before implementing anything, understand from **source code** (not
-READMEs) what RunCat Neo really does and how much `runcat-tray` covers.
-Questions: Neo features; runcat-tray features; gaps; Neo internals relevant
-to AQTRunCat; macOS-specific parts and Linux/Qt equivalents; compatible
-formats; legally reusable assets; KDE Plasma 6 + Wayland problems; minimal
-clean path to M1. Runners: format, assets, frames, animation, speed, CPU→FPS,
-orientation, custom runners, Gallery, install/remove; can AQTRunCat load Neo
-runners directly? Metrics: for each — what it measures, macOS source, update
-frequency, transforms, display, Linux equivalent; don't assume semantics.
-Custom Metrics: exact JSON schema, watched paths, naming, update/watching,
-error handling, formatting, icons/colours/units, producer samples, Claude
-Code/Codex integrations. Do not implement.
-</details>
-
-<details>
-<summary>M1.0 — Tray Spike</summary>
-
-Question: is Qt 6 / QSystemTrayIcon good enough on Plasma 6 + Wayland?
-Minimal sacrificial Qt app: tray icon, licensed Neo runner, correct frame
-animation, clean exit; fixed FPS via CLI (2/10/20/40). Measure rendering
-(real size in tray, aspect, scaling, interpolation, sharpness, legibility,
-clipping, wide runners, light/dark) and performance per FPS (effective FPS,
-smoothness, app CPU/RAM, plasmashell impact, warnings, frame drops/coalescing,
-tray update cost, D-Bus traffic) using external tools only. Investigate
-QSystemTrayIcon → SNI/D-Bus → Plasma, separating observed / documented /
-hypothesis. No CPU-driven animation, no Plasma workarounds, no
-settings/dashboard/plasmoid/KF. Deliver docs/M1-tray-spike.md with
-environment, implementation, rendering, performance table, findings and a
-classification A (sufficient) / B (with compromises) / C (investigate Plasma
-integration) with evidence. Result: B.
-</details>
-
-<details>
-<summary>M1.1 — CPU-driven runner</summary>
-
-Approved post-spike decision: curve `fps = round(10 + 30·(cpu/100)²)`
-(not the linear upstream curve, not a plain 20 FPS cap); keep separate
-CPU measurement → smoothing → mapping → animation timer → runner. Tasks: git
-init + .gitignore without commit (later superseded: git removed); `/proc/stat`
-delta with user/nice/system/idle/iowait/irq/softirq/steal, nice active, no
-99.9 cap, clear active/idle/total, iowait attention, public 0–100; sampling
-not tied to FPS; simple smoothing (EMA or small average) against 18↔19 flicker
-with documented parameters; mapping as independent tested function (min 10,
-max 40, monotonic, clamp); animation continues from current frame, no
-flicker, no per-tick resource rebuild; only the M1.0 cat; optional `--fps N`
-diagnostic override; tests for parsing, deltas (idle/full/partial/nice/iowait/
-first/zero/regression), mapping table, smoothing; real idle/load/recovery test
-with documented load command and no leftover processes; debug output of raw
-CPU / smoothed / target FPS without spam; docs/M1-cpu-runner.md; update
-requirements only for the curve.
-</details>
-
-<details>
-<summary>M1.2 — Cleanup & Freeze</summary>
-
-Not a feature milestone. Confirm iowait = idle (CPU-work indicator; disk/
-network pressure belongs to other metrics). Keep normal curve. Record future
-slow-down = mirrored curve `round(10 + 30·(1 − cpu/100)²)` in requirements
-without implementing. Separate spike-only tools from permanent `tools/`;
-create `tools/test-cpu-fps-curve.sh` (uses real app `--fps`, 0→100→0 without
-repeating 100, default 5 s/step, `--duration`, finds binary without personal
-paths, precise PID, cleanup on interruption, no pkill, clear error if binary
-missing, plain Bash). Don't compensate the external crash-loop noise. Don't
-rewrite historical reports. Verify normal build excludes spike and spike
-builds with AQTRUNCAT_BUILD_SPIKES=ON. First commit (done then; repo later
-deleted by the user).
-</details>
-
-<details>
-<summary>M2 — Runner System</summary>
-
-Goal: the core knows only "Runner"; the cat is just the bundled default.
-At M2 time: don't break M1 (CPU, curve, timers; slow-down was not implemented). Generic
-minimal Runner model (id, name, frames, order, dimensions, metadata, source,
-monochrome/colour if useful) without deep OOP; separation Runner → Loader →
-Animation → Tray; remove every cat assumption; Neo/Gallery-compatible PNG
-format; deterministic natural ordering (not runcat-tray's bug); robust
-validation distinguishing fatal from harmless extras; no width==height
-assumption, preserve aspect, don't fix very wide runners; generic bundled
-default mechanism; licensing/provenance for copied assets; bundled + XDG user
-discovery testable without the real home; simple deterministic precedence
-(user > bundled) with a collision test; diagnostic `--runner` (prefer no
-silent fallback) and optional `--list-runners`; Gallery structural
-compatibility only (no network/HTTP/download); ZIP import only after the
-directory loader, separated extraction/validation/installation, no path
-traversal, stop and ask before adding a significant dependency (→ led to
-libarchive decision in M2.1); XDG separation; frames prepared once; runner
-switch without restarting the engine; tests for loader/discovery/animation/
-CLI; manual Plasma tests (default, forced runner, --fps, tools) and
-multi-runner visual test; optional cycle tool; docs/M2-runner-system.md.
-Screenshots must not include personal tray info.
-</details>
-
-<details>
-<summary>M2.1 — Runner Lifecycle + CLI Foundation</summary>
-
-Complete safe ZIP import, user runner lifecycle, and make the CLI an official
-structured interface; GUI and CLI must share the same services (RunnerCatalog/
-Loader/Importer/Installer/Remover), no business logic in CLI parsing. Grammar
-`aqtruncat` = `aqtruncat run`, `run [--runner] [--fps]`, `runner list|import
-FILE.zip|remove ID`; prefer sub-commands over `--x-runner` options; keep M1/M2
-forms as documented aliases; per-command help explaining purpose, short;
-simple documented exit codes (usage / not found / invalid / filesystem),
-errors to stderr. **libarchive mandatory** (no Qt private ZIP, custom parser,
-unzip/bsdtar, KArchive), clean CMake detection with a clear error. Untrusted
-archive: reject traversal, absolute paths, symlinks/hardlinks, special files;
-entry/total/per-file limits not ridiculously low vs Gallery; temp extraction,
-no partial installs, cleanup. Support the real Gallery layout, fail on
-ambiguous/multi-runner archives. Installer service (validated runner, XDG
-destination, no partial installs, collisions): bundled collision = explicit
-override; user collision = fail, optional safe `--force`. Remover: user only,
-bundled protected, unknown error, ambiguous not guessed, override removal
-restores bundled (tested). `runner list` structured (not concatenation in
-main.cpp). No preview, no extra bundled runners. Tests for archives (valid,
-malformed, security, limits, nothing written outside temp), lifecycle,
-CLI parsing/dispatch; manual Plasma tests incl. real Gallery import → run →
-remove; import performance; docs; requirements (CLI, sub-commands, lifecycle,
-libarchive, safe extraction, removal, shared services). M2 complete criteria
-met. No git.
-</details>
-
-<details>
-<summary>M3 — Core Metrics + CLI</summary>
-
-Linux-native metrics layer (CPU, memory, network, disk/storage) reusable by
-runner, Dashboard, Metrics Bar, CLI. Don't rewrite or duplicate the M1 CPU
-pipeline (no two diverging CPU implementations). Typed snapshots (not a single
-generic type), explicit units, raw values separate from formatting, no CLI
-logic in the model. CPU usage % with approved semantics (logical count /
-per-core optional; per-core must share semantics). Memory from /proc/meminfo,
-used = total − available, documented fallback without MemAvailable, swap
-separate. Network from /proc/net/dev (+ /sys), rate = Δbytes / actual elapsed;
-no hard-coded names; sensible interface policy (exclude lo, document
-inclusion/exclusion and double-counting risk, keep per-interface stats);
-handle first sample, zero Δ, resets, appearing/disappearing interfaces, zero/
-invalid elapsed. Storage usage (statvfs, documented free vs available, at
-least `/`, extensible to more mounts) distinct from disk activity (/proc,/sys,
-rates, documented device policy for physical/partition/NVMe/dm/loop/zram, stop
-before fragile heuristics). Common sampling layer without per-number timers,
-~1 s, real elapsed time, no UI coupling. Error model: available / temporarily
-unavailable / parse error / unsupported; 0 ≠ unknown. Formatter separate,
-binary units. CLI `aqtruncat metrics` (compact report) and optional `--watch`
-(Ctrl+C), no JSON. No Dashboard/Metrics Bar/Custom Metrics. Tests: memory,
-network, storage, disk activity, formatting boundaries, integration fixtures
-→ providers → snapshot → CLI formatter; keep all earlier tests. Runtime
-validation vs free/df/ip//proc with controlled activity; measure sampling
-cost; optional `tools/test-metrics-runtime.sh`; Linux portability; docs/
-M3-core-metrics.md; requirements for normative decisions; stop conditions for
-network aggregation, disk aggregation and filesystem semantics (handled as
-standard Linux choices: hardware NICs, whole physical disks, df semantics).
-</details>
-
-<details>
-<summary>F2 revision (2026-10-20) — GUI Integration, Usage Quotas, Installer Lifecycle</summary>
-
-Read requirements/MEMORY/F2 first; keep F1 and the adapter. (1) Claude Code
-as an official integration in a Settings **Integrations** section distinct
-from Custom Metrics: enable/disable, availability/error, short description,
-project/session option only where relevant; no need for the CLI `enable`, CLI
-kept; GUI and CLI share one configuration; still F1-based, no second engine;
-never overwrite/remove user metrics. (2) Primary values = `/usage` quotas:
-Current session (5-hour rolling window) and Current week (all models), %
-used (remaining derivable), reset date/time, two Dashboard progress bars;
-never confuse with context window, token consumption, session duration; no
-quotas from context tokens; context window may stay optional/secondary.
-(3) Reinvestigate read-only sources (documented interfaces, status line,
-local caches, CLI, others); no invented values, no fragile screen scraping,
-no token-consuming polling, no unnecessary secrets; status-line integration
-only explicit/opt-in, never silently modify `~/.claude/settings.json` or
-overwrite an existing status line, document restoring; if no reliable
-source, report and ask before invasive changes. (4) Use F1 `output:
-"snapshot"`, separate normalized ranges, independent bars, local-time
-resets, missing resets not invented; compact Metrics Bar with per-quota
-selection via the smallest generic extension, no Claude code in generic
-Dashboard/Metrics Bar. (5) States: available, temporarily unavailable, no
-Claude, no session, missing/expired cache, partial, source/auth failure,
-reset changes, 100%; never 0% for unavailable, no indefinitely stale values,
-show age; keep F1 no-flicker. (6) install.sh stops the running AQTRunCat of
-the installation/user before replacing: SIGTERM, bounded wait, verify exit,
-never kill unrelated processes or by broad name, never Claude Code/Codex,
-fail clearly if it does not exit, preflight before shutdown, `--dry-run`
-shows only, `--uninstall` lifecycle, system and `--local`, no restart unless
-specified, no hidden privilege escalation, other users not silently
-terminated, documented. (7) Tests for all of it with synthetic fixtures;
-clean build, full suite; Plasma/Wayland runtime with isolated config;
-compare with `/usage` at about the same moment, no unverified claims.
-(8) Update requirements, MEMORY, F2 doc, README, installer docs. (9) No Git
-writes. (10) Report the 9 points, then STOP; do not start F3.
-</details>
-
-<details>
-<summary>F4.1 (2026-10-21) — Headless Backend, Frontend Independence, Local API & CLI</summary>
-
-F4 split into F4.1 (backend independence, local IPC API, reference CLI) and
-F4.2 (native Plasmoid, not to be started). Goal: AQTRunCat as a reusable
-Linux metric service for multiple independent frontends (Qt/SNI, Plasma,
-GTK, terminal, third parties). (0) Read-only Git only. (1) Inspect the
-architecture first, find the smallest viable migration, document the
-approach. (2–3) One authoritative backend; evaluate A (headless mode of the
-existing executable) vs B (dedicated daemon); no duplicated sampling or
-adapter execution, no competing config stores. (4) Backend without
-QSystemTrayIcon, windows, Widgets, Plasma or a graphical session (QtCore
-allowed), keeping all built-in, custom, Claude, Codex metrics, runner state,
-settings. (5–7) Prefer D-Bus session bus; language-neutral serializable
-types, stable identity, explicit versioning/capabilities; health, metrics
-(built-in/custom/integration, states), runner, settings, integrations,
-change notifications, controlled setters; no arbitrary execution, no
-credentials; provider-neutral metric schema with multi-value support, no
-invented zeros; efficient deltas with recovery, no per-client sampler.
-(8) `aqtruncatctl`: human + JSON output, predictable exit codes, real API
-client. (9–10) Qt/SNI frontend becomes a client, everything preserved,
-independent lifecycle, meaningful unavailable state, no flicker, no
-duplicates; frontend coexistence matrix. (11) Single-instance lifecycle,
-activation strategy without mandatory systemd. (12) One configuration,
-consistent across clients. (13) Local only, no privilege escalation, no
-secrets. (14) Measure performance (alone, + frontend, + CLI, multiple
-clients, with/without integrations; CPU, memory, IPC, processes, latency).
-(15) All installers/packages; installer stops backend too; dry-run;
-autostart compatibility. (16) Backward compatibility. (17) Tests with
-isolated buses/XDG, no real credentials, no flaky timing. (18) Runtime
-validation on Plasma/Wayland without touching the user's running
-AQTRunCat. (19) docs/F4.1-headless-backend-ipc-cli.md with a non-Qt client
-example. (20) requirements + MEMORY. (21) No F4.2/F5/F6, no GTK deps, no
-HTTP/cloud. (22) Final validation. (23) Report 17 points, then STOP.
-</details>

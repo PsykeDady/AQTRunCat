@@ -18,7 +18,7 @@ TESTED**, **NOT APPLICABLE**. Evidenze: **[OSS]** eseguito/misurato,
 > `default-dbus-session-bus | dbus-session-bus`, RPM `Requires: dbus`). Il test
 > `backendipc` è registrato solo se c'è `dbus-run-session`. I pacchetti non
 > sono stati ricostruiti nei container dopo F4.1. Dettagli:
-> [F4.1-headless-backend-ipc-cli.md](F4.1-headless-backend-ipc-cli.md) §10.
+> [backend-dbus-api-cli.md](backend-dbus-api-cli.md) §10.
 
 > **Nota F4.2 (2026-10-21).** Da F4.2 c'è anche il widget KDE Plasma 6
 > (`share/plasma/plasmoids/io.github.psykedady.aqtruncat/`, solo QML) e i
@@ -28,7 +28,7 @@ TESTED**, **NOT APPLICABLE**. Evidenze: **[OSS]** eseguito/misurato,
 > rimuove anche le cartelle vuote del widget e dei runner. I pacchetti lo
 > includono con una dipendenza debole da `plasma-workspace` (optdepends /
 > Suggests). Nessuna dipendenza KDE è stata aggiunta al resto di AQTRunCat.
-> Dettagli: [F4.2-plasma-plasmoid.md](F4.2-plasma-plasmoid.md) §9–10.
+> Dettagli: [plasma-widget.md](plasma-widget.md) §9–10.
 
 ## 1. Riepilogo
 
@@ -124,7 +124,7 @@ degli argomenti non conta. Fallimenti → exit 1.
    > `--uninstall`) l'installer ora chiude con SIGTERM l'AQTRunCat in
    > esecuzione di questa installazione e dell'utente reale, con attesa
    > limitata, senza SIGKILL e senza riavvio; se non esce, si ferma senza
-   > modificare nulla. Dettagli in `docs/F2-claude-code-metric.md` §A.8.
+   > modificare nulla. Dettagli in `docs/integration-claude-code.md` §A.8.
 6. Manifest con l'elenco dei file; su reinstallazione i file del vecchio
    manifest non più installati vengono rimossi (aggiornamento idempotente).
 7. Autostart tramite `aqtruncat autostart enable|disable`, eseguito come

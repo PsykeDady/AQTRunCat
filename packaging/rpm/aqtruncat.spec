@@ -1,7 +1,7 @@
 # Build: packaging/make-source-tarball.sh ~/rpmbuild/SOURCES
 #        rpmbuild -ba packaging/rpm/aqtruncat.spec
 Name:           aqtruncat
-Version:        1.7.4
+Version:        2.0.0
 Release:        1%{?dist}
 Summary:        A Cute Run Cat for Linux
 
@@ -66,6 +66,10 @@ export QT_QPA_PLATFORM=offscreen
 %{_docdir}/%{name}/
 
 %changelog
+* Thu Oct 22 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.0.0-1
+- 2.0.0: consolidation release of the complete 1.x application (1.7.4);
+  documentation reorganised by topic, v2 roadmap. No functional changes.
+
 * Thu Oct 22 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 1.7.4-1
 - F7: Walking Goose, Party Parrot and Engine built-in runners.
 

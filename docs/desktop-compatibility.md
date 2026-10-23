@@ -66,7 +66,7 @@ installati. Nessun pacchetto è stato installato sull'host.
 | GNOME (con/senza AppIndicator) | | | | | | | | | | | **NOT TESTED** (non installato); comportamento Qt GNOME-theme verificato in §3.3 |
 | XFCE / LXQt / altri | | | | | | | | | | | **NOT TESTED** (non installati) |
 
-Evidenze visive in `docs/M8-desktop-compatibility/`: `waybar-tray.png`,
+Evidenze visive in `docs/desktop-compatibility/`: `waybar-tray.png`,
 `xembed-stalonetray.png`, `windows-100.png`, `windows-200.png`.
 
 ## 3. Comportamento della tray
@@ -275,7 +275,7 @@ Con la barra attiva lo strumento sceglie l'item del runner; rieseguito in M8.
 
 ### 8.1 Baseline finale (host, Plasma 6 Wayland, runner Normal)
 
-Metodo come M7 (§10 di `docs/M7-metrics-bar.md`): 10 s warm-up, 40 s di
+Metodo come M7 (§10 di `docs/metrics-bar.md`): 10 s warm-up, 40 s di
 misura, segnali D-Bus su 30 s, due passate (valori min–max). Baseline senza
 AQTRunCat in questa sessione molto silenziosa: plasmashell 0,15 %, kwin
 0,65–1,00 %.
@@ -367,7 +367,7 @@ minuto (tempo reale).
 ## 11. File nuovi e modificati in M8
 
 - Nuovi: `README.md`, `src/app/applicationquit.{h,cpp}`, questo documento,
-  `docs/M8-desktop-compatibility/{waybar-tray,xembed-stalonetray,windows-100,windows-200}.png`.
+  `docs/desktop-compatibility/{waybar-tray,xembed-stalonetray,windows-100,windows-200}.png`.
 - Modificati: `src/CMakeLists.txt`, `src/app/runnerpresentation.{h,cpp}`,
   `src/app/traypresenter.cpp`, `src/app/metricsbarpresenter.cpp`,
   `src/app/trayapp.cpp`, `src/app/custommetricsservice.cpp`,

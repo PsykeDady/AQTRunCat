@@ -3,7 +3,7 @@
 // "status"/"live-updates" manage the integration (the AQTRunCat Settings
 // window runs exactly these commands, so CLI and GUI share one
 // configuration); "statusline" is what Claude Code runs when live updates are
-// on. See docs/F2-claude-code-metric.md.
+// on. See docs/integration-claude-code.md.
 
 #include "claudecode.h"
 #include "claudeicon.h"

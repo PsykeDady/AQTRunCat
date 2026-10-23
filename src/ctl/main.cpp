@@ -1,6 +1,6 @@
 // aqtruncatctl: reference command-line client of the AQTRunCat backend API
 // (F4.1). It talks to aqtruncatd over D-Bus only — it never reads /proc or
-// any provider file itself. Contract: docs/F4.1-headless-backend-ipc-cli.md.
+// any provider file itself. Contract: docs/backend-dbus-api-cli.md.
 
 #include "api/apischema.h"
 

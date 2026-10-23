@@ -33,7 +33,7 @@ class UpdatesService;
 // engine (system sampler, Custom Metrics with the F2/F3 adapters, runner
 // speed from CPU load, autostart, official-integration management) and
 // publishes them on the D-Bus session bus as io.github.psykedady.AQTRunCat1
-// (docs/F4.1-headless-backend-ipc-cli.md). QtCore + QtDBus only.
+// (docs/backend-dbus-api-cli.md). QtCore + QtDBus only.
 class BackendService : public QObject, protected QDBusContext
 {
     Q_OBJECT

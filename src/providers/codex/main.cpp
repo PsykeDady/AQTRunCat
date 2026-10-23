@@ -3,7 +3,7 @@
 // "status"/"live-updates" manage the integration (the AQTRunCat Settings
 // window runs exactly these commands, so CLI and GUI share one
 // configuration: the metric package). Codex configuration is never touched.
-// See docs/F3-codex-metric.md.
+// See docs/integration-codex.md.
 
 #include "codexicon.h"
 #include "codexusage.h"

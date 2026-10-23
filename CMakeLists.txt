@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(AQTRunCat
-    VERSION 1.7.4
+    VERSION 2.0.0
     DESCRIPTION "A Cute Run Cat for Linux"
     LANGUAGES CXX)
 
@@ -68,7 +68,7 @@ endif()
 install(FILES README.md LICENSE THIRD_PARTY_NOTICES.md DESTINATION ${CMAKE_INSTALL_DOCDIR})
 install(FILES third_party/runcatneo/LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR} RENAME LICENSE.RunCatNeo)
 
-# M1.0 tray spike: throwaway prototype kept for reference (docs/M1-tray-spike.md).
+# M1.0 tray spike: throwaway prototype kept for reference (docs/tray-spike.md).
 option(AQTRUNCAT_BUILD_SPIKES "Build the M1.0 tray spike" OFF)
 if(AQTRUNCAT_BUILD_SPIKES)
     add_subdirectory(spike/m1-tray)

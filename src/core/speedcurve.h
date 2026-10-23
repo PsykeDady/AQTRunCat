@@ -28,7 +28,7 @@ int cpuToFps(double cpuPercent, SpeedMode mode);
 // `immediateStep` FPS is applied at once (real load changes); a smaller change
 // is applied only after the same target has been requested `confirmSamples`
 // times in a row. Defaults chosen by replaying a recorded runtime test, see
-// docs/M1-cpu-runner.md.
+// docs/cpu-and-runner-speed.md.
 class FpsStabilizer
 {
 public:

@@ -152,7 +152,7 @@ scaling 125% è risultata leggibile e stabile. Menu tray e lifecycle verificati:
 - la preview è animata; l'apply immediato Cat/Coffee è coperto dal test Widgets
   e dalla stessa connessione runtime `AppSettings -> RunnerService`.
 
-Evidenza ritagliata alla sola finestra: [Settings](M5-settings/settings.png).
+Evidenza ritagliata alla sola finestra: [Settings](settings-and-desktop-integration/settings.png).
 Il posizionamento e il trattamento nel task switcher restano decisioni di KWin,
 come per la Dashboard: non sono stati aggiunti hack X11.
 

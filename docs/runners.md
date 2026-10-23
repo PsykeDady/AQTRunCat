@@ -1,7 +1,7 @@
 # AQTRunCat — M2 Runner System
 
 > **Aggiornamento post-M2.** Le decisioni aperte del §12 sono state risolte
-> in M2.1 (`docs/M2.1-runner-lifecycle-cli.md`): import ZIP con libarchive,
+> in M2.1 (`docs/runner-import-and-cli.md`): import ZIP con libarchive,
 > rimozione dei runner e CLI a sottocomandi. Selezione persistente e
 > anteprima sono passate a M5. Le forme CLI `--runner` e `--list-runners`
 > descritte qui restano valide come alias. Il resto del documento descrive lo
@@ -340,7 +340,7 @@ directory utente funziona (§3, §9).
 
 ### 12.3 Nota
 
-`.gitignore` ora contiene soltanto `docs/M1-tray-spike/*.png`: `build/` non è
+`.gitignore` ora contiene soltanto `docs/tray-spike/*.png`: `build/` non è
 più escluso. Non l'ho toccato; quando reinizializzerai Git conviene
 aggiungerlo di nuovo.
 

@@ -123,7 +123,7 @@ a ⅓: la parte ancora "piena" misura solo 15×10.
 
 ### 3.3 Leggibilità
 
-Ritagli in `docs/M1-tray-spike/` (`*-1x.png` dimensione reale, `*-4x.png`
+Ritagli in `docs/tray-spike/` (`*-1x.png` dimensione reale, `*-4x.png`
 ingranditi nearest-neighbour; contengono anche le icone adiacenti per scala):
 
 | Runner | Giudizio |

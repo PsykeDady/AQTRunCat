@@ -320,9 +320,9 @@ Metrics Bar con le due quote:
   concreto del limite senza live updates.
 - **Dashboard**: card Claude Code con le due barre distinte, i reset e *as
   of 10:28* (screenshot della sola finestra:
-  [F2-claude-code-metric/dashboard-usage.png](F2-claude-code-metric/dashboard-usage.png)).
+  [integration-claude-code/dashboard-usage.png](integration-claude-code/dashboard-usage.png)).
 - **Metrics Bar**: due icone accanto al runner, pixmap SNI letti via D-Bus
-  ([F2-claude-code-metric/metrics-bar-usage.png](F2-claude-code-metric/metrics-bar-usage.png)):
+  ([integration-claude-code/metrics-bar-usage.png](integration-claude-code/metrics-bar-usage.png)):
   `5h` sopra `3%`, `7d` sopra `7%`; tooltip `Claude Code — Current session
   (5h): 3% used — Resets at 13:30 · as of 10:28` e analogo per la settimana.
 - **Settings**: sezione Integrations con *On — available.*; dopo
@@ -389,13 +389,13 @@ fuorviante: è un'integrazione ufficiale, non una metrica dell'utente.
 - Plasma 6 Wayland (istanza isolata): Integrations con la sola card Claude
   Code (36% / 12% *as of 12:34*), Custom Metrics con lo snapshot M6
   “Claude Code” di esempio e un comando “Temperature”
-  ([F2-claude-code-metric/dashboard-sections.png](F2-claude-code-metric/dashboard-sections.png));
+  ([integration-claude-code/dashboard-sections.png](integration-claude-code/dashboard-sections.png));
   dopo `disable` dalla CLI il titolo Integrations scompare. Suite completa
   38/38, build pulita senza warning.
 
 ## A.14 Modulo condiviso con F3 (2026-10-20)
 
-Con l'integrazione Codex (F3, `docs/F3-codex-metric.md`) il giudizio di
+Con l'integrazione Codex (F3, `docs/integration-codex.md`) il giudizio di
 freschezza/reset e il formato delle voci quota sono stati spostati in
 `src/providers/common/quota.*` e gli helper del package in
 `src/providers/common/package.*` (libreria `aqtruncat_provider_common`).

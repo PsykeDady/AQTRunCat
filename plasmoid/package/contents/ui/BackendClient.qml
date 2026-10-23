@@ -1,6 +1,6 @@
 /*
  * AQTRunCat Plasmoid (F4.2): client of the AQTRunCat backend (aqtruncatd)
- * through its public D-Bus API only (docs/F4.1-headless-backend-ipc-cli.md).
+ * through its public D-Bus API only (docs/backend-dbus-api-cli.md).
  * Every call is asynchronous: plasmashell never waits for the backend.
  *
  * - First call (GetState) with D-Bus activation: the bus starts aqtruncatd

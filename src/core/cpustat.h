@@ -2,7 +2,7 @@
 
 // Linux CPU utilisation from the aggregate "cpu" line of /proc/stat.
 //
-// Semantics (see docs/M1-cpu-runner.md):
+// Semantics (see docs/cpu-and-runner-speed.md):
 //   active = user + nice + system + irq + softirq + steal
 //   idle   = idle + iowait
 //   total  = active + idle

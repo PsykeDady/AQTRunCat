@@ -5,7 +5,7 @@ F4 è diviso in due parti:
 - **F4.1** (questo documento): un backend indipendente da qualsiasi frontend,
   un'API IPC locale documentata e una CLI di riferimento;
 - **F4.2**: il Plasmoid nativo per KDE Plasma (completato il 2026-10-21,
-  `docs/F4.2-plasma-plasmoid.md`). F4.1 è il suo prerequisito.
+  `docs/plasma-widget.md`). F4.1 è il suo prerequisito.
 
 Dopo F4.1 AQTRunCat è un servizio di metriche per la sessione utente. Il
 frontend Qt/SNI, la CLI e, in futuro, il Plasmoid o client GTK, TUI e Waybar
@@ -107,7 +107,7 @@ Plasmoid e altri client fino al logout.
 
 **Combinazioni di frontend:**
 
-(Verificato in F4.2, `docs/F4.2-plasma-plasmoid.md` §8 e §14.)
+(Verificato in F4.2, `docs/plasma-widget.md` §8 e §14.)
 
 | Qt/SNI | Plasmoid (F4.2) | Comportamento |
 |---|---|---|
@@ -157,7 +157,7 @@ backend.
 - `schema` è la versione dei payload JSON: 1 fino a F4.2, **2 da F5**
   (2026-10-22: metriche built-in uptime, GPU, FPS, aggiornamenti, kernel e
   distribuzione, unità `seconds`/`fps`/`count`, quattro impostazioni; vedi
-  `docs/F5-additional-built-in-metrics.md`). Le aggiunte compatibili (nuovi
+  `docs/additional-built-in-metrics.md`). Le aggiunte compatibili (nuovi
   campi, nuove capability, nuovi id di metrica) non cambiano `api`.
 - I client **devono ignorare i campi sconosciuti** e trattare un valore
   sconosciuto di `state` come `error`.
@@ -294,7 +294,7 @@ Ogni voce di `items` ha: `id` (string|null), `title`, `formattedValue`,
     `kernel` `sysname`, `release`, `version`, `machine`; `distribution`
     `name`, `prettyName`, `id`, `idLike[]`, `versionId`, `version`,
     `codename`, `buildId`, `variant`, `source`. Dettagli e semantica:
-    `docs/F5-additional-built-in-metrics.md` §2.
+    `docs/additional-built-in-metrics.md` §2.
 - Integrazioni e Custom Metrics: `sourceId`, `path`, `explicitPath`,
   `explicit`, `discovered`, `configuredId`, `hasSnapshot`. Sono percorsi dei
   file di metrica di AQTRunCat, che l'utente ha registrato o che stanno nella
@@ -334,7 +334,7 @@ defaultRunnerId, runners[]}`, dove ogni runner ha `id`, `displayName`,
 `frameWidth`, `frameHeight`, `frames` (percorsi assoluti dei PNG) e
 `sequence` (ordine di riproduzione, indici in `frames`). `selected` è il
 runner da mostrare per il `runnerId` salvato, con lo stesso ripiego del
-tray. Dettagli: `docs/F4.2-plasma-plasmoid.md` §4.2.
+tray. Dettagli: `docs/plasma-widget.md` §4.2.
 
 Integrazione:
 `{id, title, adapterInstalled, statusKnown, enabled, userPackage, providerFound, liveUpdates:"off"|"on"|…, lastLiveReport, liveError, metricId}`.
@@ -522,7 +522,7 @@ dbus-monitor --session "type='signal',interface='io.github.psykedady.AQTRunCat1'
 ```
 
 Esempio completo senza Qt, in Python con Gio (PyGObject):
-[`F4.1-headless-backend-ipc-cli/aqtruncat-client.py`](F4.1-headless-backend-ipc-cli/aqtruncat-client.py).
+[`backend-dbus-api-cli/aqtruncat-client.py`](backend-dbus-api-cli/aqtruncat-client.py).
 Il client:
 
 1. legge `GetState` e controlla `api`;

@@ -15,7 +15,7 @@ namespace aqtruncat { class AppSettings; }
 
 // F4.1 public API of the AQTRunCat backend (aqtruncatd): identity on the
 // D-Bus session bus and the versioned JSON schema of every payload. The
-// complete contract is docs/F4.1-headless-backend-ipc-cli.md; this file is
+// complete contract is docs/backend-dbus-api-cli.md; this file is
 // its single implementation, shared by the backend (to JSON) and the Qt
 // frontend (from JSON back to its own types).
 namespace aqtruncat::api {

@@ -21,7 +21,7 @@ tar --create --gzip --file "$out/$name.tar.gz" \
     --exclude=./.git --exclude=./.cache --exclude=./.idea --exclude=./.vscode \
     --exclude='CMakeLists.txt.user*' --exclude=CMakeUserPresets.json \
     --exclude=__pycache__ --exclude='*.pyc' \
-    --exclude='./docs/M1-tray-spike/*.png' \
+    --exclude='./docs/tray-spike/*.png' \
     --exclude=./packaging/arch/src --exclude=./packaging/arch/pkg \
     --exclude='./packaging/arch/*.tar.*' \
     .
