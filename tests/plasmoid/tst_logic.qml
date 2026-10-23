@@ -257,7 +257,10 @@ TestCase {
                 { id: "walkinggoose", displayName: "Walking Goose", source: "bundled", valid: true, monochrome: true,
                   frameWidth: 24, frameHeight: 36, frames: frames("walkinggoose", "goose", 6), sequence: [0, 1, 2, 3, 4, 5] },
                 { id: "partyparrot", displayName: "Party Parrot", source: "bundled", valid: true, monochrome: true,
-                  frameWidth: 50, frameHeight: 36, frames: frames("partyparrot", "parrot", 10), sequence: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] }
+                  frameWidth: 50, frameHeight: 36, frames: frames("partyparrot", "parrot", 10), sequence: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] },
+                { id: "rickroll", displayName: "Rickroll", source: "bundled", valid: true, monochrome: true,
+                  frameWidth: 33, frameHeight: 36, frames: frames("rickroll", "rickroll", 31),
+                  sequence: Array.from({ length: 31 }, (_, i) => i) }
             ]
         };
         const goose = Logic.runnerToShow(catalog);
@@ -271,6 +274,14 @@ TestCase {
         compare(parrot.aspect, 50 / 36);
         compare(parrot.frames.length, 10);
         compare(parrot.sequence[9], 9);
+        // v2F1 (2.1.1): Rickroll, 31 frames, a little taller than wide.
+        const rick = Logic.runnerToShow(Object.assign({}, catalog, { selected: "rickroll" }));
+        compare(rick.displayName, "Rickroll");
+        compare(rick.monochrome, true);
+        compare(rick.aspect, 33 / 36);
+        compare(rick.frames.length, 31);
+        compare(rick.sequence[30], 30);
+        compare(rick.frames[30], "file:///usr/share/aqtruncat/runners/rickroll/rickroll-frame-30.png");
     }
 
     function test_frameInterval() {

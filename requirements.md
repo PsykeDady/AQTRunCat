@@ -15,7 +15,7 @@ normative summaries of the 1.x features are in
 [docs/feature-reference.md](docs/feature-reference.md).
 
     2.0.0  Consolidation baseline (1.x complete)            COMPLETE
-    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       PLANNED
+    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       IN PROGRESS (2.1.1 done)
     v2F2   Independent Autostart + new runner   2.2.x       PLANNED
     v2F3   Standalone Settings + new runner     2.3.x       PLANNED
     v2F4   Dependency Advisor + new runner      2.4.x       PLANNED
@@ -113,7 +113,8 @@ Requirements for every v2 runner:
 
 ## v2F1 — Custom Metrics v3 + Rickroll
 
-Status: PLANNED. Version family **2.1.x**.
+Status: IN PROGRESS. Version family **2.1.x**; current version **2.1.1**
+(2.1.0 and 2.1.1 COMPLETE, 2.1.2–2.1.7 PLANNED).
 
 Extends Custom Metrics v2 (command and snapshot sources,
 [docs/custom-metrics-commands.md](docs/custom-metrics-commands.md)) without
@@ -131,18 +132,32 @@ absence keeps the 2.0.0 behaviour. Opens with the Rickroll runner.
 
 ### 2.1.0 — v2F1 Baseline
 
-Documentation and roadmap baseline for v2F1. No new functionality compared
-with 2.0.0 apart from version metadata and documentation.
+Status: COMPLETE (2026-10-23). Documentation and roadmap baseline for v2F1.
+No new functionality compared with 2.0.0 apart from version metadata and
+documentation.
+
+The baseline was documented in the roadmap (this section) and the version
+went from 2.0.0 directly to 2.1.1 together with the Rickroll runner: no
+separate 2.1.0 build or package was produced.
 
 ### 2.1.1 — Rickroll Runner
 
-- The official built-in runner **Rickroll**, proposed id `rickroll`,
+Status: COMPLETE (2026-10-23). Record:
+[docs/built-in-runners.md](docs/built-in-runners.md) §10.
+
+- The official built-in runner **Rickroll**, id `rickroll`,
   following every requirement of the
   [v2 Runner Convention](#v2-runner-convention).
 - Frames are supplied or approved by the user before implementation; their
   provenance and licence (or the user's explicit decision, as for Walking
   Goose and Party Parrot) are recorded in `THIRD_PARTY_NOTICES.md`.
 - No change to Custom Metrics in this step.
+
+As implemented: 31 frames, 33×36, monochrome stencil of Rick Astley in
+"Never Gonna Give You Up" (the Rickroll meme), in
+`third_party/rickroll/runners/rickroll/` with a reproducible
+`make-frames.py`; registered in `AQTRUNCAT_BUNDLED_RUNNERS` (six built-in
+runners), metadata in `data/runners/rickroll/`; Cat stays the default.
 
 ### 2.1.2 — Optional `enabled` Flag
 

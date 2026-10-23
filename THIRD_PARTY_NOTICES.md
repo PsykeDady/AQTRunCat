@@ -54,3 +54,17 @@ of this grant (Apache-2.0 §6) and are not used as AQTRunCat branding.
 - Use: built-in runner `walkinggoose` ("Walking Goose", since 1.7.3),
   compiled into `aqtruncat` and installed as
   `share/aqtruncat/runners/walkinggoose/`.
+
+## Rickroll runner frames
+
+- Subject: Rick Astley in the music video of "Never Gonna Give You Up"
+  (1987), as used by the "Rickroll" internet meme.
+- Source: a GIF excerpt of the video circulating as the Rickroll meme.
+- License: none claimed. Included by the explicit decision of the AQTRunCat
+  maintainer (2026-10-23).
+- Files: `third_party/rickroll/runners/rickroll/*.png`.
+- Modifications: figure separated from the background, face and shirt cut
+  out as a monochrome stencil, scaled to 33×36 (details in
+  `third_party/rickroll/README.md`).
+- Use: built-in runner `rickroll` ("Rickroll", since 2.1.1), compiled
+  into `aqtruncat` and installed as `share/aqtruncat/runners/rickroll/`.

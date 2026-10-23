@@ -1,6 +1,8 @@
-# F7 — Additional Built-in Animated Runners
+# Built-in Animated Runners (F7, v2 runners)
 
-Stato: **completata** il 2026-10-22, versione **1.7.4** (F7.1 Walking Goose
+F7 (§1–§9, 1.7.4) e i runner delle feature v2 (§10 Rickroll, 2.1.1).
+
+Stato F7: **completata** il 2026-10-22, versione **1.7.4** (F7.1 Walking Goose
 → 1.7.1, F7.2 Party Parrot → 1.7.2, F7.3 integrazione condivisa, packaging
 e validazione → 1.7.3, F7.4 Engine → 1.7.4, aggiunto su richiesta
 dell'utente dopo la 1.7.3). Branch `feature/f7` (nessuna operazione Git
@@ -149,3 +151,101 @@ verticale da 34 px; nei pannelli orizzontali resta leggibile.
    sia 1.7.4): selettore nella configurazione, pannello orizzontale e
    verticale.
 3. Dopo l'installazione: chiudere e riaprire, il runner scelto resta.
+
+## 10. v2F1.1 Rickroll (2.1.1)
+
+Stato: **completata** il 2026-10-23, versione **2.1.1** (comprende la
+baseline 2.1.0, solo documentale: la versione è passata da 2.0.0 a 2.1.1
+senza una build 2.1.0 separata). Branch `feature/v2/main`, nessuna
+operazione Git eseguita. Primo runner della convenzione v2 "un runner per
+feature" (`requirements.md`, *v2 Runner Convention*).
+
+### Asset
+
+| Runner | id | Cartella sorgente | Frame | Dimensione | Formato |
+|---|---|---|---|---|---|
+| Rickroll | `rickroll` | `third_party/rickroll/runners/rickroll/` | 31 (`rickroll-frame-0…30.png`) | 33×36 | PNG RGBA, sfondo trasparente (~50 % dei pixel), figura nera nell'alfa (monocromatico) |
+
+- Soggetto: Rick Astley nel video di "Never Gonna Give You Up" (1987), il
+  meme Rickroll. Sorgente: un GIF estratto dal video (498×427, 32 frame,
+  0,05 s, sfondo opaco; SHA-256 nel `README.md` della cartella). Nessuna
+  licenza dichiarata, incluso per decisione esplicita dell'utente
+  (`THIRD_PARTY_NOTICES.md`, `packaging/debian/copyright`).
+- Lavorazione: il contorno a linee usato per Walking Goose e Party Parrot
+  non funziona su una foto; la figura è separata dallo sfondo chiaro e
+  viso, colletto e camicia sono ritagliati come stencil (variante scelta
+  dall'utente fra tre). Il frame 1 del GIF, identico al frame 0, è stato
+  tolto (31 frame unici, ordine originale). Parametri nel `README.md`.
+- Riproducibile: `third_party/rickroll/make-frames.py SOURCE.gif OUT`
+  (ImageMagick, Pillow, NumPy; non usato dalla build) rigenera i 31 file
+  byte per byte dal GIF, verificato. Il GIF non è nel repository.
+
+### Integrazione
+
+Come F7, nessuna modifica al codice:
+
+- `AQTRUNCAT_BUNDLED_RUNNERS` = `cat;coffee;walkinggoose;partyparrot;engine;rickroll`
+  (unico elenco), `runner_frames_rickroll` → cartella sopra; Cat resta il
+  predefinito.
+- `data/runners/rickroll/metadata.json`: `displayName` "Rickroll",
+  `author` "Unknown (Rickroll meme: Rick Astley, "Never Gonna Give You
+  Up")", `type` `monochrome`.
+- Risorsa Qt `:/runners/rickroll/` nell'eseguibile, file installati in
+  `share/aqtruncat/runners/rickroll/` (31 frame + metadata) per backend e
+  Plasmoid; `GetRunners`, Settings, `aqtruncat runner list`, configurazione
+  del Plasmoid lo elencano senza modifiche. API D-Bus invariata.
+- Cache CMake: la migrazione F7 funziona da sola. Provato con i sorgenti
+  2.0.0 (estratti da HEAD) configurati e poi aggiornati sul posto:
+  elenco predefinito F7 → aggiunge `rickroll`; elenco personalizzato
+  `cat;engine` → conservato.
+- Tempi: la velocità segue la CPU (10–40 FPS) come per ogni runner; i
+  0,05 s per frame del GIF non sono riprodotti (scelta architetturale,
+  come in F7). Con 31 frame un giro dura 3,1 s a riposo e 0,8 s a pieno
+  carico.
+
+### Test
+
+| Suite | Nuovo |
+|---|---|
+| `bundledrunners` | riga `rickroll` (caricamento, nome, monocromatico, 31 frame, 33×36, ordine e sequenza, byte uguali ai sorgenti, trasparenza); `aqtruncat runner list` con sei runner; `RunnerService` elenca i sei id; selezione all'avvio e `--runner` |
+| `backendipc` | `GetRunners` del backend reale: `rickroll` bundled, valido, 31 frame 33×36 sotto `share/aqtruncat/runners/rickroll/` |
+| `plasmoidclient` | selezione via `aqtruncatctl` → il client QML segue anche con `rickroll` |
+| `plasmoidlogic` | `runnerToShow` con Rickroll (aspetto 33/36, 31 frame) |
+| installer | frame, metadata e manifest di Rickroll nell'installazione `--local` (la disinstallazione toglie già tutto `share/aqtruncat`) |
+
+Risultati: build pulita in directory nuova **0 warning**; ctest **53/53**
+(`loadsInPlasma` 3/3 non saltato); `packaging-versions` 2.1.1; tutti gli
+eseguibili stampano 2.1.1; shellcheck e `git diff --check` puliti. Nessuna
+regressione sugli altri cinque runner e sui tooltip F6.
+
+### Validazione runtime (isolata)
+
+- Tray: `aqtruncat run` della build con `runner/id=rickroll` nell'INI,
+  bus privato (`build/tests/backendipc-bus.conf`), XDG temporanei, host
+  SNI finto, piattaforma Wayland reale senza finestre: icona 33×36, 79
+  `NewIcon` in ~8 s (~10 fps a CPU bassa), tooltip F6 "AQTRunCat —
+  Rickroll" con il riepilogo CPU/RAM/swap, impostazione invariata, uscita
+  0, nessun processo residuo.
+- Plasmoid: `tools/plasmoid-preview.sh --runner rickroll` (offscreen,
+  backend reale): runner nei pannelli orizzontali e verticali, tema chiaro e
+  scuro, proporzioni corrette, tooltip e popup con "Rickroll".
+- Installazione di prova (`DESTDIR`, prefisso `/usr`): 31 frame + metadata in
+  `usr/share/aqtruncat/runners/rickroll/`. I pacchetti nativi non sono
+  stati costruiti: RPM elenca tutto `%{_datadir}/aqtruncat/`, Arch e
+  Debian usano `cmake --install`.
+
+### Prestazioni
+
+Costo SNI per frame proporzionale ai pixel: 33×36 costa meno di Cat
+(56×36). Nessun timer, processo o campionamento in più; i frame si
+decodificano una volta.
+
+### Verifiche manuali per l'utente
+
+1. Tray nella sessione Plasma reale: scegliere Rickroll in Settings,
+   leggibilità alla dimensione del pannello, temi chiaro e scuro, velocità
+   con carico.
+2. Plasmoid dopo aver installato la 2.1.1 (l'elenco arriva dal backend;
+   il QML non è cambiato): selettore nella configurazione, pannello
+   orizzontale e verticale.
+3. Dopo l'installazione: chiudere e riaprire, Rickroll resta selezionato.

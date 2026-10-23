@@ -1,6 +1,6 @@
 # AQTRunCat Documentation
 
-Technical documentation of AQTRunCat **2.0.0**, by topic. Users start with
+Technical documentation of AQTRunCat **2.1.1**, by topic. Users start with
 the main [README](../README.md); the v2 roadmap is
 [requirements.md](../requirements.md). The topic documents are design and
 validation records written in Italian; [feature-reference.md](feature-reference.md)
@@ -38,7 +38,7 @@ service, client), `aqtruncat_desktop` (Widgets UI). Details: `MEMORY.md` §3.
 | CPU measurement, smoothing and runner speed curve | [cpu-and-runner-speed.md](cpu-and-runner-speed.md) |
 | Runner format, discovery, precedence | [runners.md](runners.md) |
 | Runner ZIP import/removal and the `aqtruncat` command line | [runner-import-and-cli.md](runner-import-and-cli.md) |
-| Built-in runners Walking Goose, Party Parrot, Engine (assets, build integration) | [built-in-runners.md](built-in-runners.md) |
+| Built-in runners Walking Goose, Party Parrot, Engine, Rickroll (assets, build integration) | [built-in-runners.md](built-in-runners.md) |
 | System metrics (CPU, memory, swap, network, storage, disk I/O) | [system-metrics.md](system-metrics.md) |
 | Uptime, GPU, FPS, package/Flatpak updates, kernel, distribution | [additional-built-in-metrics.md](additional-built-in-metrics.md) |
 | Dashboard | [dashboard.md](dashboard.md) |
@@ -86,3 +86,7 @@ Commit messages, code comments and the documents themselves refer to the
 | F7 built-in runners | 1.7.4 | built-in-runners.md |
 
 2.0.0 consolidated 1.7.4 without functional changes.
+
+| v2 milestone | Version | Document |
+|---|---|---|
+| v2F1.1 Rickroll runner (with the 2.1.0 baseline) | 2.1.1 | built-in-runners.md §10 |

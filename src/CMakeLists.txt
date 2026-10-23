@@ -189,8 +189,9 @@ install(TARGETS aqtruncat RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # Bundled runners, compiled in as :/runners/<id>/…: frames from third_party
 # (see THIRD_PARTY_NOTICES.md) and AQTRunCat's own metadata.json from
-# data/runners/<id>/. F7 added Walking Goose, Party Parrot and Engine.
-set(aqtruncat_default_runners "cat;coffee;walkinggoose;partyparrot;engine")
+# data/runners/<id>/. F7 added Walking Goose, Party Parrot and Engine, v2F1
+# (2.1.1) Rickroll.
+set(aqtruncat_default_runners "cat;coffee;walkinggoose;partyparrot;engine;rickroll")
 # A build tree configured before a runner was added keeps a cached list:
 # follow the new default unless the cached list was customised (the cached
 # default it was set from; "cat;coffee" before F7 recorded it).
@@ -213,10 +214,11 @@ target_compile_definitions(aqtruncat PRIVATE
     AQTRUNCAT_DEFAULT_RUNNER="${AQTRUNCAT_DEFAULT_RUNNER}")
 
 # Where the frames of each runner are: RunCat Neo's runners by id, the F7
-# runners in their own third_party folders (the runner id is the installed
+# and v2 runners in their own third_party folders (the runner id is the installed
 # directory name, whatever the source folder is called).
 set(runner_frames_walkinggoose "${PROJECT_SOURCE_DIR}/third_party/walkinggoose/runners/goose")
 set(runner_frames_partyparrot "${PROJECT_SOURCE_DIR}/third_party/partyparrot/runners/parrot")
+set(runner_frames_rickroll "${PROJECT_SOURCE_DIR}/third_party/rickroll/runners/rickroll")
 set(metadata_root "${PROJECT_SOURCE_DIR}/data/runners")
 set(bundled_metadata "")
 foreach(runner IN LISTS AQTRUNCAT_BUNDLED_RUNNERS)

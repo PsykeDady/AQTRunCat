@@ -665,10 +665,11 @@ private slots:
         for (const QJsonValue &value : catalog.value(QStringLiteral("runners")).toArray())
             byId.insert(value[QStringLiteral("id")].toString(), value.toObject());
         QVERIFY(byId.contains(QStringLiteral("cat")) && byId.contains(QStringLiteral("coffee")));
-        // F7: the new built-in runners, listed like Cat and Coffee.
+        // F7 and v2F1: the new built-in runners, listed like Cat and Coffee.
         for (const auto &[id, name, frames, width] : {std::tuple{QStringLiteral("walkinggoose"), QStringLiteral("Walking Goose"), 6, 24},
                                                       std::tuple{QStringLiteral("partyparrot"), QStringLiteral("Party Parrot"), 10, 50},
-                                                      std::tuple{QStringLiteral("engine"), QStringLiteral("Engine"), 10, 83}}) {
+                                                      std::tuple{QStringLiteral("engine"), QStringLiteral("Engine"), 10, 83},
+                                                      std::tuple{QStringLiteral("rickroll"), QStringLiteral("Rickroll"), 31, 33}}) {
             const QJsonObject runner = byId.value(id);
             QCOMPARE(runner.value(QStringLiteral("source")).toString(), QStringLiteral("bundled"));
             QCOMPARE(runner.value(QStringLiteral("displayName")).toString(), name);

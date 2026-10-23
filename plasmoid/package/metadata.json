@@ -13,7 +13,7 @@
         "Id": "io.github.psykedady.aqtruncat",
         "License": "Apache-2.0",
         "Name": "AQTRunCat",
-        "Version": "2.0.0",
+        "Version": "2.1.1",
         "Website": "https://github.com/PsykeDady/AQTRunCat"
     },
     "X-Plasma-API-Minimum-Version": "6.0"

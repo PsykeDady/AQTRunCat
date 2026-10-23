@@ -20,6 +20,16 @@ Comment: Walking Goose and Party Parrot runner frames, derived from GIFs
  decision of the AQTRunCat maintainer, and no license is claimed for them.
  See THIRD_PARTY_NOTICES.md and third_party/*/README.md.
 
+Files: third_party/rickroll/runners/*
+Copyright: unknown (a GIF excerpt of the music video of "Never Gonna Give You
+ Up" by Rick Astley, circulating as the "Rickroll" internet meme)
+License: unknown
+Comment: Rickroll runner frames, derived from that GIF (figure separated
+ from the background, decoloured to a monochrome stencil, scaled). No license
+ is claimed for them; they are included by the explicit decision of the
+ AQTRunCat maintainer. See THIRD_PARTY_NOTICES.md and
+ third_party/rickroll/README.md.
+
 License: Apache-2.0
  Licensed under the Apache License, Version 2.0 (the "License"); you may not
  use this file except in compliance with the License. You may obtain a copy of

@@ -1,7 +1,7 @@
 // F7: the bundled runners as shipped — the real frames and metadata that the
 // build installs (share/aqtruncat/runners in the build tree) and compiles into
 // aqtruncat: Cat and Coffee unchanged, Walking Goose, Party Parrot and Engine
-// added.
+// added, then Rickroll (v2F1, 2.1.1).
 // Discovery, frames, order, names, selection, persistence, and what happens
 // when an installation lacks a runner or ships a broken one.
 #include "app/appsettings.h"
@@ -65,6 +65,8 @@ private slots:
         QTest::newRow("partyparrot") << "partyparrot" << "Party Parrot" << "third_party/partyparrot/runners/parrot"
                                      << "parrot" << 10 << QSize(50, 36);
         QTest::newRow("engine") << "engine" << "Engine" << "third_party/runcatneo/runners/engine" << "engine" << 10 << QSize(83, 36);
+        QTest::newRow("rickroll") << "rickroll" << "Rickroll" << "third_party/rickroll/runners/rickroll" << "rickroll" << 31
+                                  << QSize(33, 36);
     }
 
     void shipsTheFrames()
@@ -139,6 +141,8 @@ private slots:
                                                 QRegularExpression::MultilineOption)));
         QVERIFY(out.contains(QRegularExpression(QStringLiteral("^engine\\s+Engine\\s+bundled\\s+10\\s+83x36\\s+monochrome"),
                                                 QRegularExpression::MultilineOption)));
+        QVERIFY(out.contains(QRegularExpression(QStringLiteral("^rickroll\\s+Rickroll\\s+bundled\\s+31\\s+33x36\\s+monochrome"),
+                                                QRegularExpression::MultilineOption)));
 
         QTemporaryDir user;
         const aqtruncat::RunnerService runners({installedRoot(), user.path()});
@@ -149,7 +153,7 @@ private slots:
         }
         ids.sort();
         QCOMPARE(ids, (QStringList{QStringLiteral("cat"), QStringLiteral("coffee"), QStringLiteral("engine"),
-                                   QStringLiteral("partyparrot"), QStringLiteral("walkinggoose")}));
+                                   QStringLiteral("partyparrot"), QStringLiteral("rickroll"), QStringLiteral("walkinggoose")}));
     }
 
     void selectionPersists()
@@ -168,7 +172,8 @@ private slots:
 
         QTemporaryDir user;
         const aqtruncat::RunnerService runners({installedRoot(), user.path()});
-        for (const QString &id : {QStringLiteral("walkinggoose"), QStringLiteral("partyparrot"), QStringLiteral("engine")}) {
+        for (const QString &id : {QStringLiteral("walkinggoose"), QStringLiteral("partyparrot"), QStringLiteral("engine"),
+                                  QStringLiteral("rickroll")}) {
             const StartupRunnerSelection startup = selectStartupRunner(runners, id, QStringLiteral("cat"), false);
             QVERIFY(startup.choice.runner);
             QCOMPARE(startup.choice.runner->id, id);

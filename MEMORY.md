@@ -1,19 +1,21 @@
-# MEMORY.md — AQTRunCat maintainer notes (2.0.0)
+# MEMORY.md — AQTRunCat maintainer notes (2.1.1)
 
 > Audience: an AI agent or developer maintaining AQTRunCat without access to
 > earlier conversations. Precedence when sources disagree: **actual
 > code/tests > this file (frozen decisions §5) > docs/ > commit messages**.
 >
-> **State (2026-10-22): AQTRunCat 2.0.0**, the consolidation release of the
-> complete 1.x application (M0–M9 → 1.0.0, then F1–F7 → 1.7.4) on branch
-> `feature/main`; no functional change from 1.7.4. All 1.x features are
+> **State (2026-10-23): AQTRunCat 2.1.1** on branch `feature/v2/main`
+> (v2F1 started: 2.1.0 baseline + 2.1.1 Rickroll runner, uncommitted —
+> the user commits). 2.0.0 (commit 61f3a8e) was the consolidation release
+> of the complete 1.x application (M0–M9 → 1.0.0, then F1–F7 → 1.7.4),
+> without functional change from 1.7.4. All 1.x features are
 > complete (summary §2, history §4 and §13, normative summaries in
 > `docs/feature-reference.md`, topic documents indexed by `docs/README.md`).
 > `requirements.md` is the **v2 roadmap**: v2F1 Custom Metrics v3 + Rickroll
 > (2.1.x), v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings
-> (2.3.x), v2F4 Dependency Advisor (2.4.x) — all PLANNED (summary at the end
-> of §2); start one only on the user's explicit instruction, one
-> sub-feature at a time.
+> (2.3.x), v2F4 Dependency Advisor (2.4.x) (summary at the end of §2).
+> Done: 2.1.0, 2.1.1. Next: 2.1.2 (`enabled` flag) — only on the user's
+> explicit instruction, one sub-feature at a time.
 >
 > The user owns every Git write (branches, commits, merges, tags); read-only
 > Git only. Reports to the user in Italian; code, comments and
@@ -63,6 +65,8 @@
   significant dependency is needed, stop and ask first.
 - Branches (observed 2026-10-22): the 1.x work was done on `feature/f1` …
   `feature/f7` (pushed to origin) and consolidated on `feature/main` (2.0.0);
+  2.0.0 was then committed on `main` (61f3a8e) and v2 work happens on
+  `feature/v2/main` (observed 2026-10-23, 2.1.1);
   local `main` is still at an old commit (27e6d2d) and `feature/base`, once
   planned as the common baseline, never existed. Ask the user which branch
   a v2 feature starts from; never create or switch branches yourself.
@@ -100,7 +104,7 @@
 ## 1. Project identity
 
 - Name **AQTRunCat**, tagline **"A Cute Run Cat for Linux"**, executable
-  **`aqtruncat`**, version **2.0.0** (CMake `PROJECT_VERSION`). History:
+  **`aqtruncat`**, version **2.1.1** (CMake `PROJECT_VERSION`). History:
   1.0.0 = M0–M9; F<n> raised the minor and its sub-features the patch (1.4.2
   = F4.2, 1.5.6 = F5.1–F5.6, 1.6.3 = F6.1–F6.3, 1.7.4 = F7.1–F7.4); 2.0.0 =
   consolidation of 1.7.4. v2 rule (requirements.md "Versioning"): v2F<n>
@@ -155,7 +159,9 @@ F5 COMPLETE   Additional Built-in Metrics: uptime, GPU (per device), FPS (MangoH
 F6 COMPLETE   Hover Information: CPU/RAM/swap summary in the tray tooltip and the Plasmoid's native tooltip; Metrics Bar/popup details (1.6.3)
 F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (partyparrot), Engine (engine) (1.7.4)
 2.0.0         Consolidation release: version 2.0.0, docs by topic (docs/README.md), v2 roadmap in requirements.md; no functional change
-NEXT          v2F1 Custom Metrics v3 + Rickroll (2.1.x), v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
+2.1.0 DONE    v2F1 baseline (roadmap only; version went 2.0.0 → 2.1.1 directly, no separate 2.1.0 build)
+2.1.1 DONE    v2F1.1 Rickroll built-in runner (rickroll, 31 frames 33×36): six built-in runners (docs/built-in-runners.md §10)
+NEXT          v2F1 2.1.2–2.1.7 Custom Metrics v3, v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
 ```
 
 v2 roadmap summary (requirements.md is authoritative; added 2026-10-23):
@@ -222,7 +228,7 @@ v2 roadmap summary (requirements.md is authoritative; added 2026-10-23):
   data); native packages in `packaging/` (Arch PKGBUILD, Fedora RPM, Debian);
   Flatpak/AppImage deferred. License Apache-2.0 (`LICENSE`); original icon.
 - Runner system: generic runners, bundled `cat` (default), `coffee`,
-  `walkinggoose`, `partyparrot`, `engine` (F7), user
+  `walkinggoose`, `partyparrot`, `engine` (F7), `rickroll` (2.1.1), user
   runners in XDG data dir, Gallery-compatible, safe ZIP import, removal.
 - Metrics: CPU, RAM, swap, network, storage capacity, disk I/O via a Qt-free
   layer; consumed by CLI and by the app-owned desktop sampler/Dashboard.
@@ -650,7 +656,7 @@ Key components:
 | Formatting | binary units, 1 decimal, `std::to_chars` (locale-independent) | QCoreApplication sets the system locale (Italian comma) |
 | Runner precedence | user > bundled; same-root dup id → first in natural order wins + note | |
 | Explicit `--runner` missing/invalid | error, never fallback | default runner may fall back with a warning |
-| Bundled runners | `cat` (default), `coffee`, `walkinggoose`, `partyparrot`, `engine` (F7) | don't add more without being asked |
+| Bundled runners | `cat` (default), `coffee`, `walkinggoose`, `partyparrot`, `engine` (F7), `rickroll` (2.1.1) | one new runner per v2 feature at 2.x.1, only with user-supplied/approved art; don't add others without being asked |
 | XDG | runners: `$XDG_DATA_HOME/AQTRunCat/runners/`; settings: `$XDG_CONFIG_HOME/AQTRunCat/AQTRunCat.ini`; autostart: `$XDG_CONFIG_HOME/autostart/aqtruncat.desktop` | Qt/XDG standard locations, data and config separate |
 | Custom Metrics snapshot contract (M6, preserved by F1) | external RunCat Neo JSON snapshots; `formattedValue` stays opaque; snapshot sources run no commands/providers/scheduler | compatibility with existing producers; F1 deliberately adds a separate command-backed source while retaining this snapshot contract |
 | Custom Metrics command contract (F1) | explicit `source.type=command`; required `id`, `title`, `executable`; direct executable + ≤256 args, no shell/elevation; scalar UTF-8 stdout; prefix/suffix and optional normalized range | invalid/malformed config is never executed or treated as snapshot |
@@ -806,9 +812,9 @@ Gallery has no frame order field. Some assets contain duplicate frames
 
 **Locations & precedence**: bundled = Qt resources `:/runners/<id>/` (frames
 from `third_party/runcatneo/runners/<id>/`, since F7 per id
-`runner_frames_<id>` for `walkinggoose`/`partyparrot`; metadata from
+`runner_frames_<id>` for `walkinggoose`/`partyparrot`/`rickroll`; metadata from
 `data/runners/<id>/`; CMake cache vars
-`AQTRUNCAT_BUNDLED_RUNNERS="cat;coffee;walkinggoose;partyparrot;engine"` (migrated
+`AQTRUNCAT_BUNDLED_RUNNERS="cat;coffee;walkinggoose;partyparrot;engine;rickroll"` (migrated
 from an old cache unless customised),
 `AQTRUNCAT_DEFAULT_RUNNER="cat"`, configure fails if default not bundled);
 user = `$XDG_DATA_HOME/AQTRunCat/runners/` (default `~/.local/share/...`).
@@ -899,6 +905,16 @@ sample on purpose (hot-plug) — caching not needed.
 ---
 
 ## 9. Tests and validation
+
+2.1.1 (2026-10-23, Rickroll): clean build in a fresh directory 0 warnings;
+ctest **53/53** (`loadsInPlasma` 3/3 not skipped); `packaging-versions`
+2.1.1; every executable prints 2.1.1; `aqtruncat runner list` shows six
+bundled runners; shellcheck and `git diff --check` clean. Isolated runtime:
+tray with `runner/id=rickroll` (private bus, fake SNI host, Wayland
+platform): 33×36 icon, ~10 fps, F6 tooltip "AQTRunCat — Rickroll";
+`tools/plasmoid-preview.sh --runner rickroll` OK; CMake cache migration
+from a 2.0.0 tree verified (default list gains `rickroll`, custom kept).
+Real Plasma session checks are left to the user.
 
 2.0.0 (2026-10-22): clean build in a fresh directory 0 warnings; ctest
 **53/53** (installer included, `loadsInPlasma` 3/3 not skipped);
@@ -1570,6 +1586,27 @@ time" refers to the state when the feature was finished.
 
 ---
 
+## 13b. v2 history (2.1.0 onwards)
+
+### v2F1.1 — Rickroll runner (2.1.1, 2026-10-23)
+
+- 2.1.0 baseline documented only; version 2.0.0 → 2.1.1 directly.
+- Assets prepared with the user (photo GIF → silhouette + stencil of face/
+  collar/shirt, variant chosen by the user; duplicate GIF frame 1 dropped):
+  `third_party/rickroll/runners/rickroll/rickroll-frame-{0..30}.png`,
+  33×36, monochrome; `third_party/rickroll/make-frames.py` reproduces them
+  byte for byte from the GIF (SHA-256 in the folder README; GIF not in
+  the repo). Attribution: Rick Astley, "Never Gonna Give You Up", the
+  Rickroll meme; no licence claimed, user's decision.
+- Integration exactly like F7: id in `AQTRUNCAT_BUNDLED_RUNNERS`,
+  `runner_frames_rickroll`, `data/runners/rickroll/metadata.json`; no code
+  change in loader, tray, backend, API or Plasmoid. Tests extended in
+  `bundledrunners`, `backendipc`, `plasmoidclient`, `tst_logic.qml`,
+  installer. Debian copyright stanza `third_party/rickroll/runners/*`.
+- Record: docs/built-in-runners.md §10.
+
+---
+
 ## 14. Important files map
 
 ```text
@@ -1623,6 +1660,7 @@ src/metrics/{uptime,systeminfo,gpu,fps,packageupdates}.*   F5 Qt-free sources: /
 src/app/updatesservice.*, boundedprocess.*, processgroup.h   F5 backend update checks (two non-overlapping jobs), bounded subprocess (shared process-group rules with F1)
 docs/built-in-runners.md   F7 assets, CMake integration/cache migration, selection, packaging, tests, isolated runtime, deferred Engine, manual checks
 third_party/{walkinggoose,partyparrot}/   F7 runner frames (derived from Tenor GIFs, licence unknown, user's decision) + README provenance
+third_party/rickroll/          2.1.1 runner frames runners/rickroll/rickroll-frame-{0..30}.png (Rick Astley, "Never Gonna Give You Up", Rickroll meme GIF; no licence claimed, user's decision), README provenance (GIF SHA-256), make-frames.py (reproduces the frames byte for byte from the GIF, not in the repo)
 tests/tst_bundledrunners.cpp   F7 real bundled runners: files, list, selection, persistence, fallbacks
 src/app/hoversummary.*   F6 hover summary (CPU/RAM/swap lines, backend states, whenText), QtCore only
 docs/hover-information.md   F6 existing tooltips, shared format, tray/Plasmoid/details, API unchanged, performance, tests, isolated runtime validation, manual checks
