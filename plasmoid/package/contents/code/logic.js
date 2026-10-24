@@ -541,3 +541,30 @@ function errorText(reply) {
         return error.message;
     return error && typeof error.name === "string" ? error.name : "unknown error";
 }
+
+// v2F1.6 (schema 6): the line shown after ReloadCustomMetrics, the same as
+// the tray's Settings (custommetrics::reloadSummary).
+function reloadSummary(report) {
+    var count = function (key) { return report && Array.isArray(report[key]) ? report[key].length : 0; };
+    var text = "Custom Metrics reloaded: " + count("added") + " added, " + count("changed") + " changed, "
+        + count("removed") + " removed, " + (report && typeof report.unchanged === "number" ? report.unchanged : 0)
+        + " unchanged.";
+    var named = function (entries) {
+        var names = entries.slice(0, 3).map(function (entry) { return entry.name + " (" + entry.message + ")"; });
+        if (entries.length > 3)
+            names.push((entries.length - 3) + " more");
+        return names.join("; ");
+    };
+    var errors = report && Array.isArray(report.errors) ? report.errors : [];
+    if (errors.length)
+        text += " " + errors.length + " with errors: " + named(errors) + ".";
+    var warnings = report && Array.isArray(report.warnings) ? report.warnings : [];
+    if (warnings.length)
+        text += " " + warnings.length + " with warnings: " + named(warnings) + ".";
+    return text;
+}
+
+// A refused reload: the backend's reason; nothing was changed.
+function reloadFailure(message) {
+    return "Custom Metrics not reloaded: " + message + " The active configuration is unchanged.";
+}

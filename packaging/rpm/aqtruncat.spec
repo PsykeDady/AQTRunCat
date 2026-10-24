@@ -1,7 +1,7 @@
 # Build: packaging/make-source-tarball.sh ~/rpmbuild/SOURCES
 #        rpmbuild -ba packaging/rpm/aqtruncat.spec
 Name:           aqtruncat
-Version:        2.1.5
+Version:        2.1.6
 Release:        1%{?dist}
 Summary:        A Cute Run Cat for Linux
 
@@ -66,6 +66,13 @@ export QT_QPA_PLATFORM=offscreen
 %{_docdir}/%{name}/
 
 %changelog
+* Sat Oct 24 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.1.6-1
+- 2.1.6 (v2F1): Reload Custom Metrics without restarting: Settings, the
+  Plasma widget and "aqtruncatctl custom reload" rescan the files and apply
+  the metrics and groups that were added, changed or removed; unchanged
+  commands keep running, a reload that cannot read a directory changes
+  nothing.
+
 * Fri Oct 23 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.1.5-1
 - 2.1.5 (v2F1): Custom Metric groups: a package's metric.json with
   "source": {"type": "group"} whose subdirectories are child metrics that

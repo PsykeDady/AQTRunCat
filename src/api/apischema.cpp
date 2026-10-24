@@ -713,6 +713,7 @@ QJsonObject customMetric(const custommetrics::Source &source)
     metric.insert(QStringLiteral("showBar"), !source.snapshot || source.snapshot->showBar); // schema 4
     metric.insert(QStringLiteral("state"), stateName(source.state));
     metric.insert(QStringLiteral("message"), source.message);
+    metric.insert(QStringLiteral("warnings"), QJsonArray::fromStringList(source.warnings)); // schema 6
     QJsonArray items;
     if (source.snapshot) {
         const custommetrics::Snapshot &snapshot = *source.snapshot;
@@ -748,6 +749,55 @@ QJsonObject customMetric(const custommetrics::Source &source)
         {QStringLiteral("groupId"), source.parentId},
         {QStringLiteral("configuredEnabled"), source.configuredEnabled}});
     return metric;
+}
+
+namespace {
+QJsonArray reloadEntries(const QList<custommetrics::ReloadEntry> &entries)
+{
+    QJsonArray array;
+    for (const custommetrics::ReloadEntry &entry : entries) {
+        array.append(QJsonObject{{QStringLiteral("id"), metricsbar::customId(entry.id)},
+                                 {QStringLiteral("sourceId"), entry.id},
+                                 {QStringLiteral("name"), entry.name},
+                                 {QStringLiteral("message"), entry.message}});
+    }
+    return array;
+}
+
+QList<custommetrics::ReloadEntry> reloadEntriesFromJson(const QJsonValue &value)
+{
+    QList<custommetrics::ReloadEntry> entries;
+    for (const QJsonValue &entry : value.toArray()) {
+        const QJsonObject object = entry.toObject();
+        entries.append({object.value(QStringLiteral("sourceId")).toString(),
+                        object.value(QStringLiteral("name")).toString(),
+                        object.value(QStringLiteral("message")).toString()});
+    }
+    return entries;
+}
+}
+
+QJsonObject reloadReport(const custommetrics::ReloadReport &report)
+{
+    return QJsonObject{{QStringLiteral("added"), reloadEntries(report.added)},
+                       {QStringLiteral("changed"), reloadEntries(report.changed)},
+                       {QStringLiteral("removed"), reloadEntries(report.removed)},
+                       {QStringLiteral("unchanged"), report.unchanged},
+                       {QStringLiteral("errors"), reloadEntries(report.errors)},
+                       {QStringLiteral("warnings"), reloadEntries(report.warnings)}};
+}
+
+custommetrics::ReloadReport reloadReportFromJson(const QJsonObject &object)
+{
+    custommetrics::ReloadReport report;
+    report.ok = true;
+    report.added = reloadEntriesFromJson(object.value(QStringLiteral("added")));
+    report.changed = reloadEntriesFromJson(object.value(QStringLiteral("changed")));
+    report.removed = reloadEntriesFromJson(object.value(QStringLiteral("removed")));
+    report.errors = reloadEntriesFromJson(object.value(QStringLiteral("errors")));
+    report.warnings = reloadEntriesFromJson(object.value(QStringLiteral("warnings")));
+    report.unchanged = object.value(QStringLiteral("unchanged")).toInt();
+    return report;
 }
 
 QJsonObject settingsObject(const AppSettings &settings)
@@ -937,6 +987,8 @@ QList<custommetrics::Source> sourcesFromMetrics(const QJsonArray &array)
             : state == QLatin1String("error")                  ? custommetrics::State::Error
                                                                : custommetrics::State::Unavailable;
         source.message = metric.value(QStringLiteral("message")).toString();
+        for (const QJsonValue &warning : metric.value(QStringLiteral("warnings")).toArray())
+            source.warnings.append(warning.toString());
         if (data.value(QStringLiteral("hasSnapshot")).toBool()) {
             custommetrics::Snapshot snapshot;
             snapshot.title = metric.value(QStringLiteral("title")).toString();

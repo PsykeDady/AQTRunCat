@@ -185,15 +185,25 @@ QJsonObject effectiveChild(const Inheritance &parent, const QJsonObject &child, 
     return effective;
 }
 
-QStringList childConfigurations(const QString &groupDirectory, QStringList &visited)
+QStringList childConfigurations(const QString &groupDirectory, QStringList &visited, QString *error)
 {
     QStringList children;
+    if (!QFileInfo(groupDirectory).isReadable()) {
+        if (error && error->isEmpty())
+            *error = QStringLiteral("Cannot read the directory %1.").arg(groupDirectory);
+        return children;
+    }
     // Natural order: d6, d20, d100.
     QFileInfoList directories = QDir(groupDirectory).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
     std::sort(directories.begin(), directories.end(), [](const QFileInfo &a, const QFileInfo &b) {
         return naturalLess(a.fileName(), b.fileName());
     });
     for (const QFileInfo &directory : directories) {
+        if (!directory.isReadable() || !directory.isExecutable()) {
+            if (error && error->isEmpty())
+                *error = QStringLiteral("Cannot read the directory %1.").arg(directory.absoluteFilePath());
+            continue;
+        }
         const QString canonical = directory.canonicalFilePath();
         if (canonical.isEmpty() || visited.contains(canonical))
             continue; // a symlink back to an ancestor (or one already seen)

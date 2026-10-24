@@ -88,6 +88,8 @@ private:
     QCheckBox *m_autostart = nullptr;
     QTreeWidget *m_customMetricFiles = nullptr;
     QPushButton *m_removeCustomMetric = nullptr;
+    QPushButton *m_reloadCustomMetrics = nullptr;   // v2F1.6
+    QLabel *m_customMetricsReloadStatus = nullptr;
     QCheckBox *m_metricsBarEnabled = nullptr;
     QTreeWidget *m_metricsBarItems = nullptr;
     QPushButton *m_metricsBarUp = nullptr;

@@ -1,6 +1,6 @@
 # AQTRunCat Documentation
 
-Technical documentation of AQTRunCat **2.1.5**, by topic. Users start with
+Technical documentation of AQTRunCat **2.1.6**, by topic. Users start with
 the main [README](../README.md); the v2 roadmap is
 [requirements.md](../requirements.md). The topic documents are design and
 validation records written in Italian; [feature-reference.md](feature-reference.md)
@@ -44,7 +44,7 @@ service, client), `aqtruncat_desktop` (Widgets UI). Details: `MEMORY.md` §3.
 | Dashboard | [dashboard.md](dashboard.md) |
 | Settings, autostart, desktop integration | [settings-and-desktop-integration.md](settings-and-desktop-integration.md) |
 | Custom Metrics: RunCat Neo-compatible snapshots | [custom-metrics.md](custom-metrics.md) |
-| Custom Metrics: command sources, packages, icons | [custom-metrics-commands.md](custom-metrics-commands.md) |
+| Custom Metrics: command sources, packages, icons, groups, reload | [custom-metrics-commands.md](custom-metrics-commands.md) |
 | Claude Code integration | [integration-claude-code.md](integration-claude-code.md) |
 | Codex integration | [integration-codex.md](integration-codex.md) |
 | Metrics Bar | [metrics-bar.md](metrics-bar.md) |

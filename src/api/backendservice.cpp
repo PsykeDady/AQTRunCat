@@ -343,7 +343,7 @@ QJsonArray BackendService::capabilities() const
 {
     QJsonArray list{QStringLiteral("metrics"), QStringLiteral("metrics-delta"), QStringLiteral("runner"),
                     QStringLiteral("settings"), QStringLiteral("set-setting"), QStringLiteral("custom-metrics"),
-                    QStringLiteral("integrations")};
+                    QStringLiteral("integrations"), QStringLiteral("custom-metrics-reload")};
     if (m_config.runnerCatalog)
         list.append(QStringLiteral("runners"));
     return list;
@@ -546,6 +546,20 @@ void BackendService::SetCustomMetricEnabled(const QString &path, bool enabled)
     QString error;
     if (!m_custom->setEnabled(source->path, enabled, &error))
         fail(aqtruncat::api::ErrorFailed, error);
+}
+
+QString BackendService::ReloadCustomMetrics()
+{
+    const aqtruncat::custommetrics::ReloadReport report = m_custom->reloadNow();
+    if (!report.ok) {
+        fail(aqtruncat::api::ErrorFailed, report.error);
+        return {};
+    }
+    // The new metric set goes out before the reply: a client that refreshes
+    // on the answer already has it (one sender's messages keep their order).
+    m_coalesce.stop();
+    publishMetrics();
+    return compact(aqtruncat::api::reloadReport(report));
 }
 
 ProviderIntegration *BackendService::integration(const QString &id) const

@@ -15,7 +15,7 @@ normative summaries of the 1.x features are in
 [docs/feature-reference.md](docs/feature-reference.md).
 
     2.0.0  Consolidation baseline (1.x complete)            COMPLETE
-    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       IN PROGRESS (2.1.5 done)
+    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       IN PROGRESS (2.1.6 done)
     v2F2   Independent Autostart + new runner   2.2.x       PLANNED
     v2F3   Standalone Settings + new runner     2.3.x       PLANNED
     v2F4   Dependency Advisor + new runner      2.4.x       PLANNED
@@ -113,8 +113,8 @@ Requirements for every v2 runner:
 
 ## v2F1 — Custom Metrics v3 + Rickroll
 
-Status: IN PROGRESS. Version family **2.1.x**; current version **2.1.5**
-(2.1.0–2.1.5 COMPLETE, 2.1.6–2.1.7 PLANNED).
+Status: IN PROGRESS. Version family **2.1.x**; current version **2.1.6**
+(2.1.0–2.1.6 COMPLETE, 2.1.7 PLANNED).
 
 Extends Custom Metrics v2 (command and snapshot sources,
 [docs/custom-metrics-commands.md](docs/custom-metrics-commands.md)) without
@@ -345,6 +345,13 @@ Plasmoid: the same as a `Flow`; Metrics Bar: children are ordinary items
 groups without enabled children are hidden; Settings: a tree.
 
 ### 2.1.6 — Reload Custom Metrics
+
+Status: COMPLETE (2026-10-24). Record:
+[docs/custom-metrics-commands.md](docs/custom-metrics-commands.md) §12.
+Entry points: Settings and Plasma widget "Reload Custom Metrics",
+`aqtruncatctl custom reload`, D-Bus `ReloadCustomMetrics` (schema 6).
+A reload that cannot read a directory is not applied; per-file errors keep
+the established policy (the source stays, in Error, listed in the report).
 
 - Reload the Custom Metric configurations without restarting.
 - Rescan the Custom Metrics directory recursively: new metrics and groups

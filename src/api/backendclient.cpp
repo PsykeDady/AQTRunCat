@@ -285,6 +285,29 @@ bool BackendClient::setEnabled(const QString &path, bool enabled, QString *error
     return true;
 }
 
+void BackendClient::reloadConfigurations()
+{
+    if (m_reloading)
+        return;
+    m_reloading = true;
+    // A reload rescans files and may stop running commands: a generous
+    // timeout, and the GUI keeps going meanwhile.
+    QDBusMessage call = QDBusMessage::createMethodCall(aqtruncat::api::ServiceName, aqtruncat::api::ObjectPath,
+                                                       aqtruncat::api::InterfaceName, QStringLiteral("ReloadCustomMetrics"));
+    auto *watcher = new QDBusPendingCallWatcher(m_options.connection.asyncCall(call, 30000), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        m_reloading = false;
+        const QDBusPendingReply<QString> reply = *w;
+        aqtruncat::custommetrics::ReloadReport report;
+        if (reply.isError())
+            report.error = reply.error().message().isEmpty() ? reply.error().name() : reply.error().message();
+        else
+            report = aqtruncat::api::reloadReportFromJson(parseObject(reply.value()));
+        emit reloadFinished(report);
+    });
+}
+
 void BackendClient::unregisterFile(const QString &path)
 {
     QDBusMessage call = QDBusMessage::createMethodCall(aqtruncat::api::ServiceName, aqtruncat::api::ObjectPath,

@@ -24,6 +24,7 @@
 #include <csignal>
 #include <cstdio>
 #include <optional>
+#include <utility>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -68,6 +69,8 @@ const char Help[] =
     "                                 updatesIntervalMinutes 60 (0 = off),\n"
     "                                 updatesRemoteRefresh false\n"
     "  custom add|remove PATH         (un)register a Custom Metrics file\n"
+    "  custom reload                  rescan the Custom Metrics files and apply\n"
+    "                                 what was added, changed or removed\n"
     "\n"
     "Options:\n"
     "  --json      machine-readable output (the API's JSON, one document; for\n"
@@ -194,6 +197,10 @@ void printMetric(const QJsonObject &metric)
     out(QStringLiteral("  %1%2%3%4").arg(padded(id, 18),
                                          padded(metric.value(QStringLiteral("title")).toString(), 22), value,
                                          detail.isEmpty() ? QString() : QStringLiteral("  ") + detail));
+    // v2F1.6: what does not stop a Custom Metric (a missing icon, a value
+    // outside its range).
+    for (const QJsonValue &warning : metric.value(QStringLiteral("warnings")).toArray())
+        out(QStringLiteral("      ! %1").arg(warning.toString()));
     for (const QJsonValue &itemValue : items) {
         const QJsonObject item = itemValue.toObject();
         const QString itemDetail = item.value(QStringLiteral("detail")).toString();
@@ -363,6 +370,38 @@ int simple(Client &client, const QString &method, const QVariantList &arguments,
     return Ok;
 }
 
+// v2F1.6: ReloadCustomMetrics; a refused reload is the backend's error
+// (exit status 1), configuration errors in an applied one are listed.
+int reloadCustomMetrics(Client &client, bool json)
+{
+    int code = Ok;
+    const std::optional<QString> reply = client.call(QStringLiteral("ReloadCustomMetrics"), {}, code, 60000);
+    if (!reply)
+        return code;
+    if (json) {
+        out(reply->trimmed());
+        return Ok;
+    }
+    const aqtruncat::custommetrics::ReloadReport report = aqtruncat::api::reloadReportFromJson(object(*reply));
+    // The errors and warnings one per line below, not folded into the summary.
+    aqtruncat::custommetrics::ReloadReport counts = report;
+    counts.errors.clear();
+    counts.warnings.clear();
+    QString text = aqtruncat::custommetrics::reloadSummary(counts);
+    for (const auto &[label, entries] : {std::pair{QStringLiteral("added"), &report.added},
+                                         std::pair{QStringLiteral("changed"), &report.changed},
+                                         std::pair{QStringLiteral("removed"), &report.removed}}) {
+        for (const aqtruncat::custommetrics::ReloadEntry &entry : *entries)
+            text += QStringLiteral("\n  %1: %2").arg(label, entry.name);
+    }
+    for (const aqtruncat::custommetrics::ReloadEntry &entry : report.errors)
+        text += QStringLiteral("\n  error: %1: %2").arg(entry.name, entry.message);
+    for (const aqtruncat::custommetrics::ReloadEntry &entry : report.warnings)
+        text += QStringLiteral("\n  warning: %1: %2").arg(entry.name, entry.message);
+    out(text);
+    return Ok;
+}
+
 // Prints MetricsChanged signals (see watch).
 class ChangePrinter : public QObject
 {
@@ -491,6 +530,8 @@ int main(int argc, char *argv[])
                       {path}, rest.at(0) == QLatin1String("add") ? QStringLiteral("registered %1").arg(path)
                                                                   : QStringLiteral("unregistered %1").arg(path));
     }
+    if (command == QLatin1String("custom") && rest.size() == 1 && rest.at(0) == QLatin1String("reload"))
+        return reloadCustomMetrics(client, json);
     return usage(QStringLiteral("invalid command \"%1\"").arg((QStringList{command} + rest).join(u' ')));
 }
 

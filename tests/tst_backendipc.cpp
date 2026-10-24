@@ -15,6 +15,7 @@
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
+#include <QDBusPendingCall>
 #include <QDir>
 #include <QFile>
 #include <QHash>
@@ -433,6 +434,118 @@ private slots:
                                           .value(QStringLiteral("formattedValue")).toString(), QString::number(sides), 10000);
         }
         QDir(group).removeRecursively();
+    }
+
+    // v2F1.6 (schema 6): ReloadCustomMetrics through D-Bus, the Qt client
+    // and aqtruncatctl: the report, the new metric set delivered before the
+    // reply, simultaneous requests served one after the other without a
+    // second run of an unchanged command, and a refused reload (unreadable
+    // directory) as a Failed error that leaves every metric as it was.
+    void reloadThroughTheApi()
+    {
+        const QString helper = QCoreApplication::applicationDirPath() + QStringLiteral("/custommetric_test_helper");
+        const QString counter = m_root.filePath(QStringLiteral("reload.count"));
+        auto commandJson = [&](const QString &id, const QJsonArray &arguments) {
+            return QJsonDocument(QJsonObject{{QStringLiteral("id"), id}, {QStringLiteral("title"), id.toUpper()},
+                                             {QStringLiteral("source"), QJsonObject{{QStringLiteral("type"), QStringLiteral("command")},
+                                                                                    {QStringLiteral("executable"), helper},
+                                                                                    {QStringLiteral("arguments"), arguments},
+                                                                                    {QStringLiteral("intervalSeconds"), 3600}}}}).toJson();
+        };
+        const QString a = m_metricsDir + QStringLiteral("/reload-a.json");
+        writeFile(a, commandJson(QStringLiteral("a"), {QStringLiteral("counter"), counter}));
+        startBackend();
+        QVERIFY(callObject(QStringLiteral("GetInfo")).value(QStringLiteral("capabilities")).toArray()
+                    .contains(QStringLiteral("custom-metrics-reload")));
+        const QString aId = aqtruncat::metricsbar::customId(QFileInfo(a).canonicalFilePath());
+        auto metrics = [&] { return callObject(QStringLiteral("GetMetrics")).value(QStringLiteral("metrics")).toArray(); };
+        QTRY_COMPARE_WITH_TIMEOUT(metricById(metrics(), aId).value(QStringLiteral("formattedValue")).toString(), QStringLiteral("1"), 10000);
+
+        // Nothing changed: a report with everything unchanged.
+        QDBusMessage reply = call(QStringLiteral("ReloadCustomMetrics"));
+        QVERIFY2(reply.type() == QDBusMessage::ReplyMessage, qPrintable(reply.errorMessage()));
+        QJsonObject report = object(reply.arguments().value(0).toString());
+        QCOMPARE(report.value(QStringLiteral("unchanged")).toInt(), 1);
+        for (const QString &key : {QStringLiteral("added"), QStringLiteral("changed"), QStringLiteral("removed"), QStringLiteral("errors")})
+            QVERIFY2(report.value(key).isArray() && report.value(key).toArray().isEmpty(), qPrintable(key));
+
+        // A new metric: in the delta before the reply arrives.
+        SignalLog log;
+        log.subscribe();
+        const QString b = m_metricsDir + QStringLiteral("/reload-b.json");
+        writeFile(b, commandJson(QStringLiteral("b"), {QStringLiteral("value"), QStringLiteral("bee")}));
+        reply = call(QStringLiteral("ReloadCustomMetrics"));
+        QVERIFY2(reply.type() == QDBusMessage::ReplyMessage, qPrintable(reply.errorMessage()));
+        const QString bId = aqtruncat::metricsbar::customId(QFileInfo(b).canonicalFilePath());
+        QCoreApplication::processEvents(); // the signal queued before the reply
+        const bool delivered = std::any_of(log.deltas.cbegin(), log.deltas.cend(), [&](const QJsonObject &delta) {
+            const QJsonArray changed = delta.value(QStringLiteral("metrics")).toArray();
+            return std::any_of(changed.cbegin(), changed.cend(), [&](const QJsonValue &v) { return v.toObject().value(QStringLiteral("id")) == bId; });
+        });
+        QVERIFY(delivered);
+        QTRY_COMPARE_WITH_TIMEOUT(metricById(metrics(), bId).value(QStringLiteral("formattedValue")).toString(), QStringLiteral("bee"), 10000);
+
+        // The Qt client: asynchronous, its sources follow.
+        BackendClient client(BackendClient::Options{});
+        client.start();
+        QTRY_VERIFY_WITH_TIMEOUT(client.connected(), 10000);
+        QSignalSpy finished(&client, &CustomMetricsModel::reloadFinished);
+        QVERIFY(QFile::remove(b));
+        client.reloadConfigurations();
+        client.reloadConfigurations(); // shares the pending request
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
+        QTest::qWait(200);
+        QCOMPARE(finished.size(), 1);
+        aqtruncat::custommetrics::ReloadReport clientReport = finished.first().first().value<aqtruncat::custommetrics::ReloadReport>();
+        QVERIFY(clientReport.ok);
+        QTRY_VERIFY_WITH_TIMEOUT(std::none_of(client.sources().cbegin(), client.sources().cend(),
+                                              [&](const aqtruncat::custommetrics::Source &s) { return s.path == b; }), 10000);
+        QVERIFY(metricById(metrics(), bId).isEmpty());
+
+        // Simultaneous requests: each answered, the unchanged command not run again.
+        QList<QDBusPendingCall> pending;
+        for (int i = 0; i < 4; ++i) {
+            const QDBusMessage message = QDBusMessage::createMethodCall(aqtruncat::api::ServiceName, aqtruncat::api::ObjectPath,
+                                                                        aqtruncat::api::InterfaceName, QStringLiteral("ReloadCustomMetrics"));
+            pending.append(QDBusConnection::sessionBus().asyncCall(message, 20000));
+        }
+        for (QDBusPendingCall &call : pending) {
+            call.waitForFinished();
+            QVERIFY2(!call.isError(), qPrintable(call.error().message()));
+        }
+        QTest::qWait(300);
+        QFile count(counter);
+        QVERIFY(count.open(QIODevice::ReadOnly));
+        QCOMPARE(count.readAll().trimmed(), QByteArray("1"));
+        count.close();
+
+        // The command-line client.
+        Run r = ctl({QStringLiteral("custom"), QStringLiteral("reload")});
+        QCOMPARE(r.exitCode, 0);
+        QVERIFY2(r.out.startsWith("Custom Metrics reloaded: 0 added, 0 changed, 0 removed, 1 unchanged."), r.out.constData());
+        r = ctl({QStringLiteral("--json"), QStringLiteral("custom"), QStringLiteral("reload")});
+        QCOMPARE(r.exitCode, 0);
+        QCOMPARE(QJsonDocument::fromJson(r.out).object().value(QStringLiteral("unchanged")).toInt(), 1);
+        QCOMPARE(ctl({QStringLiteral("custom"), QStringLiteral("reload"), QStringLiteral("extra")}).exitCode, 2);
+
+        // Refused: Failed, nothing changed, and the clients are told why.
+        const QFile::Permissions permissions = QFile::permissions(m_metricsDir);
+        QVERIFY(QFile::setPermissions(m_metricsDir, QFile::WriteOwner));
+        reply = call(QStringLiteral("ReloadCustomMetrics"));
+        r = ctl({QStringLiteral("custom"), QStringLiteral("reload")});
+        finished.clear();
+        client.reloadConfigurations();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
+        QVERIFY(QFile::setPermissions(m_metricsDir, permissions));
+        QCOMPARE(reply.errorName(), aqtruncat::api::ErrorFailed);
+        QVERIFY2(reply.errorMessage().startsWith(QStringLiteral("Cannot read the directory")), qPrintable(reply.errorMessage()));
+        QCOMPARE(r.exitCode, 1);
+        QVERIFY(r.err.contains("Cannot read the directory"));
+        clientReport = finished.first().first().value<aqtruncat::custommetrics::ReloadReport>();
+        QVERIFY(!clientReport.ok);
+        QVERIFY(aqtruncat::custommetrics::reloadSummary(clientReport).contains(QStringLiteral("Cannot read the directory")));
+        QCOMPARE(metricById(metrics(), aId).value(QStringLiteral("formattedValue")).toString(), QStringLiteral("1"));
+        QFile::remove(a);
     }
 
     void customMetricsAndIntegrationsAreClassified()

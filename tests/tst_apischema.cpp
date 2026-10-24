@@ -478,11 +478,50 @@ private slots:
         QCOMPARE(api::customMetric(source).value(QStringLiteral("showBar")), QJsonValue(true));
     }
 
+    // Schema 6 (2.1.6): the ReloadCustomMetrics report, both ways.
+    void reloadReport()
+    {
+        QCOMPARE(api::SchemaVersion, 6);
+        custommetrics::ReloadReport report;
+        report.ok = true;
+        report.added = {{QStringLiteral("/m/a.json"), QStringLiteral("a"), {}}};
+        report.removed = {{QStringLiteral("/m/b.json"), QStringLiteral("/m/b.json"), {}}};
+        report.errors = {{QStringLiteral("/m/c.json"), QStringLiteral("c"), QStringLiteral("invalid JSON")}};
+        report.warnings = {{QStringLiteral("/m/d.json"), QStringLiteral("d"), QStringLiteral("icon file /m/d.svg does not exist")}};
+        report.unchanged = 2;
+        const QJsonObject json = api::reloadReport(report);
+        const QJsonObject added = json.value(QStringLiteral("added")).toArray().first().toObject();
+        QCOMPARE(added.value(QStringLiteral("id")).toString(), QStringLiteral("custom:/m/a.json"));
+        QCOMPARE(added.value(QStringLiteral("sourceId")).toString(), QStringLiteral("/m/a.json"));
+        QCOMPARE(added.value(QStringLiteral("name")).toString(), QStringLiteral("a"));
+        QVERIFY(json.value(QStringLiteral("changed")).toArray().isEmpty());
+        QCOMPARE(json.value(QStringLiteral("unchanged")).toInt(), 2);
+        const custommetrics::ReloadReport back = api::reloadReportFromJson(json);
+        QVERIFY(back.ok);
+        QCOMPARE(back.added.first().id, QStringLiteral("/m/a.json"));
+        QCOMPARE(back.removed.first().name, QStringLiteral("/m/b.json"));
+        QCOMPARE(back.errors.first().message, QStringLiteral("invalid JSON"));
+        QCOMPARE(back.warnings.first().name, QStringLiteral("d"));
+        QCOMPARE(back.unchanged, 2);
+        QCOMPARE(custommetrics::reloadSummary(back),
+                 QStringLiteral("Custom Metrics reloaded: 1 added, 0 changed, 1 removed, 2 unchanged. 1 with errors: c (invalid JSON). "
+                                "1 with warnings: d (icon file /m/d.svg does not exist)."));
+
+        // A source's warnings, both ways.
+        custommetrics::Source source;
+        source.id = source.path = QStringLiteral("/m/d.json");
+        source.state = custommetrics::State::Available;
+        source.warnings = {QStringLiteral("icon file /m/d.svg does not exist")};
+        const QJsonObject metric = api::customMetric(source);
+        QCOMPARE(metric.value(QStringLiteral("warnings")).toArray(), QJsonArray{QStringLiteral("icon file /m/d.svg does not exist")});
+        QCOMPARE(api::sourcesFromMetrics(QJsonArray{metric}).first().warnings, source.warnings);
+    }
+
     // Schema 5 (2.1.5): groups, both ways: kind "group", data.groupId on
     // children, data.configuredEnabled next to the effective "enabled".
     void customMetricGroups()
     {
-        QCOMPARE(api::SchemaVersion, 5);
+        QVERIFY(api::SchemaVersion >= 5);
         custommetrics::Source group;
         group.id = group.path = QStringLiteral("/m/dice/metric.json");
         group.type = custommetrics::SourceType::Group;

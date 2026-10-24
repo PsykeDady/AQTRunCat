@@ -1,12 +1,13 @@
-# MEMORY.md — AQTRunCat maintainer notes (2.1.5)
+# MEMORY.md — AQTRunCat maintainer notes (2.1.6)
 
 > Audience: an AI agent or developer maintaining AQTRunCat without access to
 > earlier conversations. Precedence when sources disagree: **actual
 > code/tests > this file (frozen decisions §5) > docs/ > commit messages**.
 >
-> **State (2026-10-23): AQTRunCat 2.1.5** on branch `feature/v2/f4`
+> **State (2026-10-24): AQTRunCat 2.1.6** (Custom Metrics reload)
+> implemented on branch `feature/v2/f1.6`, uncommitted — the user commits
 > (v2F1: 2.1.1 = 385ceb1, 2.1.2 = 0a72597, 2.1.3 = 613bdbe, 2.1.4 =
-> f3440d6; 2.1.5 groups uncommitted — the user commits). 2.0.0 (commit 61f3a8e) was the consolidation release
+> f3440d6, 2.1.5 = f00da7e). 2.0.0 (commit 61f3a8e) was the consolidation release
 > of the complete 1.x application (M0–M9 → 1.0.0, then F1–F7 → 1.7.4),
 > without functional change from 1.7.4. All 1.x features are
 > complete (summary §2, history §4 and §13, normative summaries in
@@ -14,8 +15,8 @@
 > `requirements.md` is the **v2 roadmap**: v2F1 Custom Metrics v3 + Rickroll
 > (2.1.x), v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings
 > (2.3.x), v2F4 Dependency Advisor (2.4.x) (summary at the end of §2).
-> Done: 2.1.0–2.1.5. Next: 2.1.6 (reload Custom Metrics) — only on the
-> user's explicit instruction, one sub-feature at a time.
+> Done: 2.1.0–2.1.6. Next: 2.1.7 (manual refresh by clicking metric
+> icons) — only on the user's explicit instruction, one sub-feature at a time.
 >
 > The user owns every Git write (branches, commits, merges, tags); read-only
 > Git only. Reports to the user in Italian; code, comments and
@@ -66,7 +67,8 @@
 - Branches (observed 2026-10-22): the 1.x work was done on `feature/f1` …
   `feature/f7` (pushed to origin) and consolidated on `feature/main` (2.0.0);
   2.0.0 was then committed on `main` (61f3a8e) and v2 work happens on
-  `feature/v2/main` (observed 2026-10-23, 2.1.1);
+  `feature/v2/main` (observed 2026-10-23, 2.1.1), later one branch per
+  sub-feature (`feature/v2/f4` for 2.1.5, `feature/v2/f1.6` for 2.1.6);
   local `main` is still at an old commit (27e6d2d) and `feature/base`, once
   planned as the common baseline, never existed. Ask the user which branch
   a v2 feature starts from; never create or switch branches yourself.
@@ -104,12 +106,12 @@
 ## 1. Project identity
 
 - Name **AQTRunCat**, tagline **"A Cute Run Cat for Linux"**, executable
-  **`aqtruncat`**, version **2.1.1** (CMake `PROJECT_VERSION`). History:
+  **`aqtruncat`**, version **2.1.6** (CMake `PROJECT_VERSION`). History:
   1.0.0 = M0–M9; F<n> raised the minor and its sub-features the patch (1.4.2
   = F4.2, 1.5.6 = F5.1–F5.6, 1.6.3 = F6.1–F6.3, 1.7.4 = F7.1–F7.4); 2.0.0 =
   consolidation of 1.7.4. v2 rule (requirements.md "Versioning"): v2F<n>
   raises the minor (v2F1 → 2.1.x), its sub-features the patch. The D-Bus
-  api (1) and payload schema (5 since 2.1.5) change only with their contract. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
+  api (1) and payload schema (6 since 2.1.6) change only with their contract. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
   debian/changelog, the man page and `plasmoid/package/metadata.json`
   (KPlugin.Version) together (`packaging-versions` test).
   All executables accept `-v`/`--version`; the tray menus show "AQTRunCat
@@ -363,6 +365,10 @@ Key components:
   QFileSystemWatcher over files/directories, atomic-replace recovery, 100 ms
   debounce, 3×200 ms transient retry and shared 5 s degraded-only recovery.
   Publishes separate typed custom snapshots and never samples system metrics.
+  2.1.6: `reloadNow()` / `reloadConfigurations()` = explicit full rescan
+  (builds the candidate aside, refuses it when a directory is unreadable,
+  diffs by `Source::configuration`, keeps jobs whose definition changed only
+  in presentation/schedule); see §13b v2F1.6.
 - **CpuMonitor** (`src/app/cpumonitor.*`): consumes raw CPU from shared
   snapshots, keeps `Ema(0.4)` and emits `sampled(raw, smoothed)`; it owns no
   source and no timer. Pending/unavailable/error snapshots are ignored.
@@ -684,6 +690,7 @@ Key components:
 | Custom symbols (F1) | legacy string or `{type: theme|file, value}`; file/executable relative paths and command CWD resolve from config directory; invalid icon uses fallback without invalidating metric | deterministic self-contained packages, never process CWD |
 | Custom identity/order | canonical path when resolvable; explicit order first, discovered-only by stable name/path | no duplicate aliases or filesystem-order dependence |
 | Custom failure/retry | last-known-good retained; 100 ms debounce, 3×200 ms retry, shared degraded-only 5 s recovery | atomic saves do not flash errors; no healthy-state polling |
+| Custom Metrics reload (2.1.6) | explicit only (Settings, widget, `aqtruncatctl custom reload`, D-Bus `ReloadCustomMetrics`); the M6 watcher stays, no periodic rescan; candidate built aside; an existing-but-unreadable discovery/package/group/child directory refuses the whole reload (also for watcher reloads), a missing discovery directory is empty; per-file errors keep the M6/2.1.5 policy (source stays, Error, listed in `errors`); a missing icon or a value outside its range is a warning (`warnings`), never an error; presentation-only (title/symbol/showBar/id/integration) and schedule-only (interval/timeout) changes never restart a job; execution changes replace it (old process group stopped, value dropped); callbacks checked by run id; `MetricsChanged` before the reply | user prompt 2.1.6: safe reconciliation, never silently erase active metrics, no unnecessary restarts |
 | Custom input limits | 1 MiB JSON, 256 entries, 4096 chars per known string | local malformed/accidentally huge files cannot exhaust the tray app |
 | ZIP | libarchive, ZIP only (seekable, central directory) | user choice; no Qt private QZipReader, no custom parser, no shelling out, no KArchive |
 | Archive security | §7 rules + limits | untrusted input |
@@ -909,6 +916,19 @@ sample on purpose (hot-plug) — caching not needed.
 ---
 
 ## 9. Tests and validation
+
+2.1.6 (2026-10-24, Custom Metrics reload): clean build in a fresh directory
+0 warnings; ctest **55/55** (new suite `custommetricsreload`);
+`packaging-versions` 2.1.6; `git diff --check` clean (no shell script in the
+repo changed). Isolated runtime (private bus, temporary HOME, real
+`aqtruncatd` + `aqtruncatctl`): dice group; reload with no change = 3
+unchanged; new child dir + file, a child renamed and the parent interval
+changed in one reload = "1 added, 3 changed", each child ran exactly once
+(no restart for rename/interval); broken child JSON = listed error, exit 0;
+`chmod 000` on the group dir = exit 1 "Cannot read the directory …",
+metrics unchanged; backend exit 0, no leftover process. Real-session
+checks (tray Settings button, Plasma widget button after a plasmashell
+restart) are for the user.
 
 2.1.5 (2026-10-23, groups): clean build in a fresh directory 0 warnings;
 ctest **54/54** (new suite `metricgroups`); `packaging-versions` 2.1.5;
@@ -1620,6 +1640,51 @@ time" refers to the state when the feature was finished.
 ---
 
 ## 13b. v2 history (2.1.0 onwards)
+
+### v2F1.6 — Custom Metrics reload (2.1.6, 2026-10-24)
+
+- Model (`app/custommetricsmodel.h`): `custommetrics::ReloadEntry`/
+  `ReloadReport` (ok, error, added/changed/removed/errors, unchanged),
+  `reloadSummary()` (implemented at the end of custommetricsservice.cpp; the
+  one English line used by Settings, ctl, log), virtual
+  `reloadConfigurations()` + signal `reloadFinished(report)`.
+- `CustomMetricsService::reload(bool)` now returns the report: structural
+  check (`m_reloadFailure`: discovery root exists but not a readable/
+  searchable dir; package dir unreadable; `childConfigurations(…, &error)`
+  for group/child dirs) → not applied, warning logged once per reason,
+  retry only on non-final attempts. Diff by `Source::configuration` (new
+  engine-only field: compact effective JSON or read error; children carry
+  the merged effective object), type and parentId. Errors = sources in
+  Error without a scheduled definition (runtime failures excluded).
+  `m_reloading` guard: a re-entrant call is refused and folded into the
+  debounce timer. `reloadNow()` stops debounce/retry first, logs the summary.
+- Jobs: `CommandJob::run` (+`m_nextRun`), `startedMilliseconds`,
+  `finishedMilliseconds`; `runningJob(id, run)` gates every callback
+  (stale-result suppression, also the deferred FailedToStart);
+  `definitionChange()` None/Presentation/Schedule/Execution;
+  `applyPresentation()` patches the last snapshot (scalar item title too).
+- API schema **6**: `ReloadCustomMetrics() → s` (`BackendService`, publishes
+  metrics synchronously before replying; `Failed` on refusal), capability
+  `custom-metrics-reload`, `api::reloadReport`/`reloadReportFromJson`
+  (entries `{id: custom:<path>, sourceId, name, message}`; also `warnings`).
+- Warnings (user request after the first 2.1.6 pass): `Source::warnings`
+  (API `warnings[]`, report `warnings`) for what does not stop a source:
+  missing/unreadable icon file, theme icon not in any installed theme
+  (`IconThemeLookup`, filesystem lookup: the daemon is QtCore only), value
+  outside `display.normalizedRange` (`valueWarnings`; the scalar item gets
+  `warning` + detail "outside the range a–b"). Icon check per reload
+  (`m_iconWarnings`), value check per run (`updateWarnings` in
+  `setOutcome`); logged once when they appear. Settings: warning icon +
+  "Warning: …" tooltip; ctl: "! …" under the metric, "warning:" lines.
+- `BackendClient::reloadConfigurations`: async (30 s), coalesced
+  (`m_reloading`). Settings: button `reloadCustomMetrics` (right of
+  Add/Remove), label `customMetricsReloadStatus` (plain text, wraps).
+  ctl: `custom reload` (+`--json`). Plasmoid: `BackendClient.reloadCustomMetrics`
+  + `reloadingCustomMetrics`, `Logic.reloadSummary`/`reloadFailure`,
+  button in configGeneral.qml (feedback via `replied`).
+- Tests: new `custommetricsreload` (offscreen, 19 cases incl. Dashboard and
+  Metrics Bar following a reload); additions to backendipc, settingswindow,
+  apischema, plasmoidclient, plasmoidlogic; plasmoidpackage allow-list.
 
 ### v2F1.5 — Groups and JSON inheritance (2.1.5, 2026-10-23)
 

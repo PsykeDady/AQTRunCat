@@ -95,6 +95,11 @@ public slots:
     // applies it at once. NotFound for an unknown source, InvalidArgument
     // for an integration's source, Failed when the file cannot be written.
     Q_SCRIPTABLE void SetCustomMetricEnabled(const QString &path, bool enabled);
+    // v2F1.6 (schema 6): rescans the Custom Metrics configuration and
+    // applies what changed (CustomMetricsService::reloadNow); returns the
+    // report (apischema reloadReport). Failed when it cannot be applied: the
+    // active configuration is then unchanged.
+    Q_SCRIPTABLE QString ReloadCustomMetrics();
     Q_SCRIPTABLE QString SetIntegrationEnabled(const QString &id, bool enabled);
     Q_SCRIPTABLE QString SetIntegrationLiveUpdates(const QString &id, bool on);
 

@@ -2,10 +2,12 @@
 
 #include <QByteArray>
 #include <QDateTime>
+#include <QHash>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 #include <optional>
 
@@ -110,6 +112,14 @@ struct Source {
     State state = State::Pending;
     QString message;
     std::optional<Snapshot> snapshot; // last known good snapshot, retained on failure
+    // v2F1.6: what the source was built from (its effective configuration
+    // as compact JSON, or why it could not be read); a reload compares it
+    // to tell changed sources from unchanged ones. Engine only, not in the API.
+    QByteArray configuration;
+    // v2F1.6: problems that do not stop the source (an icon that cannot be
+    // found, a value outside its range): it keeps running and the frontends
+    // fall back (a default icon, a full or empty bar); shown with a warning.
+    QStringList warnings;
 };
 
 struct ParseResult {
@@ -137,6 +147,25 @@ bool writeEnabled(const QString &path, bool enabled, QString *error = nullptr);
 bool parseSymbol(const QJsonValue &value, const QString &baseDirectory,
                  std::optional<QString> &legacySymbol, std::optional<IconReference> &icon,
                  QString &error);
+
+// v2F1.6: whether a theme icon is installed, looked up as the freedesktop
+// icon theme specification does but in every installed theme (each frontend
+// may use another one) and in the pixmaps directory. The theme directory
+// lists are read once per instance: one instance per reload.
+class IconThemeLookup
+{
+public:
+    bool contains(const QString &name);
+
+private:
+    QStringList m_directories;
+    QHash<QString, bool> m_found;
+    bool m_loaded = false;
+};
+
+// v2F1.6: why a configured icon cannot be shown, or empty. The metric still
+// works; the frontends show their fallback icon instead.
+QString iconWarning(const IconReference &icon, IconThemeLookup &themes);
 
 ParseResult parseJson(const QByteArray &json, const QString &baseDirectory = {});
 ParseResult parseFile(const QString &path);

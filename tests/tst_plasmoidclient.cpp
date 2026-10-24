@@ -276,6 +276,66 @@ private slots:
         }(), 10000);
     }
 
+    // v2F1.6: the widget's "Reload Custom Metrics": the report as a line,
+    // the new group and its child in the metrics (delta before the reply),
+    // the removed ones gone, and a refused reload as an error.
+    void reloadsCustomMetrics()
+    {
+        auto client = createClient();
+        QTRY_COMPARE_WITH_TIMEOUT(status(client.get()), QStringLiteral("connected"), 15000);
+        const QString metricsDir = testHome() + QStringLiteral("/data/AQTRunCat/metrics");
+        const QString group = metricsDir + QStringLiteral("/reload-group");
+        QDir().mkpath(group + QStringLiteral("/child"));
+        const QString helper = QCoreApplication::applicationDirPath() + QStringLiteral("/custommetric_test_helper");
+        QFile parent(group + QStringLiteral("/metric.json"));
+        QVERIFY(parent.open(QIODevice::WriteOnly));
+        parent.write(QJsonDocument(QJsonObject{{QStringLiteral("id"), QStringLiteral("reload")}, {QStringLiteral("title"), QStringLiteral("Reload")},
+                                               {QStringLiteral("source"), QJsonObject{{QStringLiteral("type"), QStringLiteral("group")},
+                                                                                      {QStringLiteral("executable"), helper}}}}).toJson());
+        parent.close();
+        QFile child(group + QStringLiteral("/child/metric.json"));
+        QVERIFY(child.open(QIODevice::WriteOnly));
+        child.write(R"({"title": "Child", "source": {"type": "command", "arguments": ["value", "42"]}})");
+        child.close();
+        const QString groupId = QStringLiteral("custom:") + QFileInfo(parent.fileName()).canonicalFilePath();
+        const QString childId = QStringLiteral("custom:") + QFileInfo(child.fileName()).canonicalFilePath();
+        auto find = [&](const QString &id) {
+            for (const QJsonValue &m : jsonProperty(client.get(), "metrics").toArray()) {
+                if (m[QStringLiteral("id")] == id)
+                    return m.toObject();
+            }
+            return QJsonObject();
+        };
+
+        QSignalSpy replied(client.get(), SIGNAL(replied(QString,bool,QString)));
+        QVERIFY(QMetaObject::invokeMethod(client.get(), "reloadCustomMetrics"));
+        QVERIFY(client->property("reloadingCustomMetrics").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(replied.size(), 1, 10000);
+        QCOMPARE(replied.at(0).at(0).toString(), QStringLiteral("ReloadCustomMetrics"));
+        QVERIFY(replied.at(0).at(1).toBool());
+        QVERIFY2(replied.at(0).at(2).toString().startsWith(QLatin1String("Custom Metrics reloaded: ")),
+                 qPrintable(replied.at(0).at(2).toString()));
+        QVERIFY(!client->property("reloadingCustomMetrics").toBool());
+        QCOMPARE(find(groupId).value(QStringLiteral("kind")).toString(), QStringLiteral("group"));
+        QCOMPARE(find(childId)[QStringLiteral("data")][QStringLiteral("groupId")].toString(), QFileInfo(parent.fileName()).canonicalFilePath());
+        QTRY_COMPARE_WITH_TIMEOUT(find(childId).value(QStringLiteral("formattedValue")).toString(), QStringLiteral("42"), 10000);
+
+        QVERIFY(QDir(group).removeRecursively());
+        QVERIFY(QMetaObject::invokeMethod(client.get(), "reloadCustomMetrics"));
+        QTRY_COMPARE_WITH_TIMEOUT(replied.size(), 2, 10000);
+        QVERIFY(replied.at(1).at(1).toBool());
+        QVERIFY(find(groupId).isEmpty() && find(childId).isEmpty());
+
+        const QFile::Permissions permissions = QFile::permissions(metricsDir);
+        QVERIFY(QFile::setPermissions(metricsDir, QFile::WriteOwner));
+        QVERIFY(QMetaObject::invokeMethod(client.get(), "reloadCustomMetrics"));
+        QTRY_COMPARE_WITH_TIMEOUT(replied.size(), 3, 10000);
+        QVERIFY(QFile::setPermissions(metricsDir, permissions));
+        QVERIFY(!replied.at(2).at(1).toBool());
+        QVERIFY2(replied.at(2).at(2).toString().startsWith(QLatin1String("Custom Metrics not reloaded: Cannot read the directory")),
+                 qPrintable(replied.at(2).at(2).toString()));
+    }
+
     void followsDeltasLikeTheBackend()
     {
         auto client = createClient();

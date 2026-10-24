@@ -1,3 +1,13 @@
+aqtruncat (2.1.6-1) unstable; urgency=medium
+
+  * 2.1.6 (v2F1): Reload Custom Metrics without restarting: Settings, the
+    Plasma widget and "aqtruncatctl custom reload" rescan the files and apply
+    the metrics and groups that were added, changed or removed; unchanged
+    commands keep running, a reload that cannot read a directory changes
+    nothing.
+
+ -- AQTRunCat maintainers <maintainers@aqtruncat.invalid>  Sat, 24 Oct 2026 12:00:00 +0200
+
 aqtruncat (2.1.5-1) unstable; urgency=medium
 
   * 2.1.5 (v2F1): Custom Metric groups: a package's metric.json with

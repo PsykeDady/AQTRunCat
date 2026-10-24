@@ -110,6 +110,88 @@ bool parseSymbol(const QJsonValue &value, const QString &baseDirectory,
     return true;
 }
 
+bool IconThemeLookup::contains(const QString &name)
+{
+    if (name.isEmpty() || name.contains(u'/'))
+        return false;
+    if (!m_loaded) {
+        m_loaded = true;
+        // Base directories in the specification's order; each holds icons
+        // directly (pixmaps-like) and themes with an index.theme.
+        QStringList bases{QDir::homePath() + QStringLiteral("/.icons")};
+        const QString dataHome = qEnvironmentVariable("XDG_DATA_HOME", QDir::homePath() + QStringLiteral("/.local/share"));
+        bases.append(dataHome + QStringLiteral("/icons"));
+        QString dataDirs = qEnvironmentVariable("XDG_DATA_DIRS");
+        if (dataDirs.isEmpty())
+            dataDirs = QStringLiteral("/usr/local/share:/usr/share");
+        for (const QString &directory : dataDirs.split(u':', Qt::SkipEmptyParts))
+            bases.append(directory + QStringLiteral("/icons"));
+        bases.append(QStringLiteral("/usr/share/pixmaps"));
+        for (const QString &base : std::as_const(bases)) {
+            const QDir baseDirectory(base);
+            if (!baseDirectory.exists())
+                continue;
+            m_directories.append(baseDirectory.absolutePath());
+            const QStringList themes = baseDirectory.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+            for (const QString &theme : themes) {
+                QFile index(baseDirectory.filePath(theme + QStringLiteral("/index.theme")));
+                if (!index.open(QIODevice::ReadOnly | QIODevice::Text))
+                    continue;
+                bool iconTheme = false;
+                while (!index.atEnd()) {
+                    const QString line = QString::fromUtf8(index.readLine()).trimmed();
+                    if (line.startsWith(u'[')) {
+                        iconTheme = line == QLatin1String("[Icon Theme]");
+                        continue;
+                    }
+                    const qsizetype equals = line.indexOf(u'=');
+                    if (!iconTheme || equals < 0)
+                        continue;
+                    const QString key = line.left(equals).trimmed();
+                    if (key != QLatin1String("Directories") && key != QLatin1String("ScaledDirectories"))
+                        continue;
+                    for (const QString &directory : line.mid(equals + 1).split(u',', Qt::SkipEmptyParts))
+                        m_directories.append(baseDirectory.filePath(theme + u'/' + directory.trimmed()));
+                }
+            }
+        }
+        m_directories.removeDuplicates();
+    }
+    const auto known = m_found.constFind(name);
+    if (known != m_found.cend())
+        return *known;
+    static const QStringList extensions{QStringLiteral(".png"), QStringLiteral(".svg"),
+                                        QStringLiteral(".svgz"), QStringLiteral(".xpm")};
+    bool found = false;
+    for (const QString &directory : std::as_const(m_directories)) {
+        for (const QString &extension : extensions) {
+            if (QFileInfo::exists(directory + u'/' + name + extension)) {
+                found = true;
+                break;
+            }
+        }
+        if (found)
+            break;
+    }
+    m_found.insert(name, found);
+    return found;
+}
+
+QString iconWarning(const IconReference &icon, IconThemeLookup &themes)
+{
+    if (icon.type == IconType::Theme) {
+        return themes.contains(icon.resolvedValue)
+            ? QString()
+            : QStringLiteral("icon \"%1\" is not in any installed icon theme").arg(icon.value);
+    }
+    const QFileInfo info(icon.resolvedValue);
+    if (!info.exists())
+        return QStringLiteral("icon file %1 does not exist").arg(icon.resolvedValue);
+    if (!info.isFile() || !info.isReadable())
+        return QStringLiteral("icon file %1 cannot be read").arg(icon.resolvedValue);
+    return {};
+}
+
 ParseResult parseJson(const QByteArray &json, const QString &baseDirectory)
 {
     ParseResult result;

@@ -56,6 +56,23 @@ T *child(SettingsWindow &window, const char *name)
     return result;
 }
 
+// v2F1.6: a model whose reload answers later, as the D-Bus client does.
+class DeferredReloadModel : public CustomMetricsModel
+{
+public:
+    using CustomMetricsModel::CustomMetricsModel;
+    const QList<aqtruncat::custommetrics::Source> &sources() const override { return m_sources; }
+    QString discoveryDirectory() const override { return QStringLiteral("/nowhere"); }
+    bool registerFile(const QString &, QString * = nullptr) override { return false; }
+    void unregisterFile(const QString &) override {}
+    bool setEnabled(const QString &, bool, QString * = nullptr) override { return false; }
+    void reloadConfigurations() override { ++requests; }
+    int requests = 0;
+
+private:
+    QList<aqtruncat::custommetrics::Source> m_sources;
+};
+
 } // namespace
 
 class TestSettingsWindow : public QObject
@@ -161,6 +178,84 @@ private slots:
         QCOMPARE(tree->topLevelItem(0)->text(2), QStringLiteral("Discovered"));
         QVERIFY(QFileInfo::exists(file));
         QVERIFY(settings.customMetricFiles().isEmpty());
+    }
+
+    // v2F1.6: "Reload Custom Metrics" rescans through the model, shows the
+    // outcome under the list (also a refusal, with the list unchanged) and
+    // keeps the selected row.
+    void reloadCustomMetricsGivesFeedback()
+    {
+        QTemporaryDir temporary;
+        const QString discovery = temporary.filePath(QStringLiteral("data/metrics"));
+        QDir().mkpath(discovery);
+        auto write = [&](const QString &name) {
+            QFile json(discovery + u'/' + name);
+            QVERIFY(json.open(QIODevice::WriteOnly));
+            json.write("{\"title\":\"" + name.toUtf8() + "\",\"metrics\":[],\"lastUpdatedDate\":\"2026-06-05T04:50:40Z\"}");
+        };
+        write(QStringLiteral("first.json"));
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
+        CustomMetricsService service(&settings, discovery);
+        service.start();
+        SettingsWindow window(&settings,
+            {{QStringLiteral("cat"), QStringLiteral("Cat"), aqtruncat::RunnerSource::Bundled}}, &service);
+        auto *tree = child<QTreeWidget>(window, "customMetricFiles");
+        auto *reload = child<QPushButton>(window, "reloadCustomMetrics");
+        auto *status = child<QLabel>(window, "customMetricsReloadStatus");
+        QVERIFY(reload->isEnabled());
+        QVERIFY(status->isHidden());
+        tree->setCurrentItem(tree->topLevelItem(0));
+
+        write(QStringLiteral("second.json"));
+        reload->click();
+        QCOMPARE(status->text(), QStringLiteral("Custom Metrics reloaded: 1 added, 0 changed, 0 removed, 1 unchanged."));
+        QVERIFY(!status->isHidden());
+        QVERIFY(reload->isEnabled());
+        QCOMPARE(tree->topLevelItemCount(), 2);
+        QCOMPARE(tree->currentItem()->text(0), QStringLiteral("first.json"));
+
+        const QFile::Permissions permissions = QFile::permissions(discovery);
+        QVERIFY(QFile::setPermissions(discovery, QFile::WriteOwner));
+        reload->click();
+        QVERIFY(QFile::setPermissions(discovery, permissions));
+        QCOMPARE(status->text(), QStringLiteral("Custom Metrics not reloaded: Cannot read the directory %1. "
+                                                "The active configuration is unchanged.").arg(discovery));
+        QCOMPARE(tree->topLevelItemCount(), 2);
+
+        // A missing icon: listed, the row keeps working with a warning.
+        QFile json(discovery + QStringLiteral("/third.json"));
+        QVERIFY(json.open(QIODevice::WriteOnly));
+        json.write("{\"title\":\"third\",\"symbol\":{\"type\":\"file\",\"value\":\"./missing.svg\"},"
+                   "\"metrics\":[],\"lastUpdatedDate\":\"2026-06-05T04:50:40Z\"}");
+        json.close();
+        reload->click();
+        const QString warning = QStringLiteral("icon file %1/missing.svg does not exist").arg(discovery);
+        QCOMPARE(status->text(), QStringLiteral("Custom Metrics reloaded: 1 added, 0 changed, 0 removed, 2 unchanged. "
+                                                "1 with warnings: %1 (%2).").arg(discovery + QStringLiteral("/third.json"), warning));
+        const QList<QTreeWidgetItem *> third = tree->findItems(QStringLiteral("third"), Qt::MatchExactly);
+        QCOMPARE(third.size(), 1);
+        QCOMPARE(third.first()->text(3), QStringLiteral("Available"));
+        QVERIFY(!third.first()->icon(3).isNull());
+        QCOMPARE(third.first()->toolTip(3), QStringLiteral("Warning: ") + warning);
+        service.stop();
+
+        // An answer that comes later: one request, the button off meanwhile.
+        DeferredReloadModel deferred;
+        SettingsWindow pending(&settings,
+            {{QStringLiteral("cat"), QStringLiteral("Cat"), aqtruncat::RunnerSource::Bundled}}, &deferred);
+        auto *button = child<QPushButton>(pending, "reloadCustomMetrics");
+        button->click();
+        QVERIFY(!button->isEnabled());
+        button->click();
+        QCOMPARE(deferred.requests, 1);
+        QCOMPARE(child<QLabel>(pending, "customMetricsReloadStatus")->text(), QStringLiteral("Reloading Custom Metrics…"));
+        aqtruncat::custommetrics::ReloadReport report;
+        report.ok = true;
+        report.unchanged = 3;
+        emit deferred.reloadFinished(report);
+        QVERIFY(button->isEnabled());
+        QCOMPARE(child<QLabel>(pending, "customMetricsReloadStatus")->text(),
+                 QStringLiteral("Custom Metrics reloaded: 0 added, 0 changed, 0 removed, 3 unchanged."));
     }
 
     void metricsBarSelectionOrderAndRuntimeApply()

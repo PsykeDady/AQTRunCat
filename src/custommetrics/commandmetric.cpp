@@ -233,6 +233,26 @@ CommandParseResult parseCommandFile(const QString &path)
     return parseCommandJson(bytes, path);
 }
 
+QStringList valueWarnings(const Snapshot &snapshot, const CommandDefinition *definition)
+{
+    QStringList warnings;
+    const bool scalar = definition && definition->output == CommandOutput::Scalar && definition->normalizedRange;
+    for (const Item &item : snapshot.metrics) {
+        if (!item.normalizedValue || (*item.normalizedValue >= 0.0 && *item.normalizedValue <= 1.0))
+            continue;
+        if (scalar) {
+            const NormalizedRange &range = *definition->normalizedRange;
+            warnings.append(QStringLiteral("value %1 is outside display.normalizedRange %2–%3")
+                                .arg(item.formattedValue, QString::number(range.minimum),
+                                     QString::number(range.maximum)));
+        } else {
+            warnings.append(QStringLiteral("item \"%1\": normalizedValue %2 is outside 0–1")
+                                .arg(item.title, QString::number(*item.normalizedValue)));
+        }
+    }
+    return warnings;
+}
+
 ScalarResult snapshotFromCommandOutput(const CommandDefinition &definition,
                                        const QByteArray &standardOutput,
                                        const QDateTime &updatedAt)
@@ -293,6 +313,12 @@ ScalarResult snapshotFromCommandOutput(const CommandDefinition &definition,
         }
         const auto &range = *definition.normalizedRange;
         item.normalizedValue = (value - range.minimum) / (range.maximum - range.minimum);
+        // v2F1.6: still a value, with a warning; the bar is clamped.
+        if (*item.normalizedValue < 0.0 || *item.normalizedValue > 1.0) {
+            item.warning = true;
+            item.detail = QStringLiteral("outside the range %1–%2")
+                              .arg(QString::number(range.minimum), QString::number(range.maximum));
+        }
     }
 
     Snapshot snapshot;

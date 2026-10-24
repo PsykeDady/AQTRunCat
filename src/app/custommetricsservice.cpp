@@ -6,6 +6,7 @@
 
 #include "custommetrics/metricgroup.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
@@ -18,6 +19,7 @@
 #include <algorithm>
 #include <limits>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include <csignal>
@@ -69,6 +71,14 @@ struct CustomMetricsService::CommandJob {
     QByteArray standardError;
     qint64 nextDueMilliseconds = 0;
     qint64 deadlineMilliseconds = 0;
+    // v2F1.6: when the current run started and the last one ended (-1:
+    // never), so a reload can move the deadline and the next run of a
+    // changed interval or timeout without restarting the job.
+    qint64 startedMilliseconds = -1;
+    qint64 finishedMilliseconds = -1;
+    // The current run's id: callbacks of an earlier process (this job's
+    // before a reload replaced its definition) never touch this one.
+    quint64 run = 0;
     QString forcedError;
     // The last result of this job, for logging transitions only.
     State lastOutcome = State::Pending;
@@ -231,16 +241,70 @@ void CustomMetricsService::rescan()
         reload(true);
 }
 
+void CustomMetricsService::reloadConfigurations()
+{
+    const ReloadReport report = reloadNow();
+    emit reloadFinished(report);
+}
+
+ReloadReport CustomMetricsService::reloadNow()
+{
+    if (!m_active) {
+        ReloadReport report;
+        report.error = tr("Custom Metrics are not running.");
+        return report;
+    }
+    // Whatever the watcher had pending is part of this reload.
+    m_debounce.stop();
+    m_retry.stop();
+    m_retryAttempt = 0;
+    const ReloadReport report = reload(true);
+    if (report.ok)
+        qCInfo(lcCustomMetrics).noquote() << reloadSummary(report);
+    return report;
+}
+
 void CustomMetricsService::scheduleReload()
 {
     if (m_active)
         m_debounce.start();
 }
 
-void CustomMetricsService::reload(bool finalAttempt)
+namespace {
+QByteArray compactJson(const QJsonObject &object)
 {
-    if (!m_active)
-        return;
+    return QJsonDocument(object).toJson(QJsonDocument::Compact);
+}
+
+QString reportName(const Source &source)
+{
+    return source.configuredId.isEmpty() ? source.path : source.configuredId;
+}
+}
+
+ReloadReport CustomMetricsService::reload(bool finalAttempt)
+{
+    ReloadReport report;
+    if (!m_active) {
+        report.error = tr("Custom Metrics are not running.");
+        return report;
+    }
+    if (m_reloading) {
+        // Never inside another reload (it is synchronous; this would only be
+        // a re-entrant call): the request is folded into a reload right after.
+        m_debounce.start();
+        report.error = tr("A reload is already running; it is repeated when it ends.");
+        return report;
+    }
+    m_reloading = true;
+    m_reloadFailure.clear();
+
+    // v2F1.6: a directory that exists but cannot be listed would make every
+    // source below it look removed. Such a reload is not applied (a missing
+    // discovery directory is just empty: nothing is configured there).
+    const QFileInfo root(m_discoveryDirectory);
+    if (root.exists() && (!root.isDir() || !root.isReadable() || !root.isExecutable()))
+        m_reloadFailure = tr("Cannot read the directory %1.").arg(m_discoveryDirectory);
 
     struct Candidate { QString path; QString explicitPath; bool explicitFile; bool discovered; };
     QList<Candidate> candidates;
@@ -277,6 +341,8 @@ void CustomMetricsService::reload(bool finalAttempt)
     const QFileInfoList packages = discovery.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot,
                                                             QDir::Name | QDir::IgnoreCase);
     for (const QFileInfo &directory : packages) {
+        if ((!directory.isReadable() || !directory.isExecutable()) && m_reloadFailure.isEmpty())
+            m_reloadFailure = tr("Cannot read the directory %1.").arg(directory.absoluteFilePath());
         const QString path = directory.absoluteFilePath() + QStringLiteral("/metric.json");
         if (!QFileInfo(path).isFile())
             continue;
@@ -290,6 +356,8 @@ void CustomMetricsService::reload(bool finalAttempt)
         candidates.append({path, {}, false, true});
     }
 
+    // The candidate configuration is built aside; m_sources and the jobs
+    // only change once it is complete and applicable.
     QList<Source> next;
     QList<CommandDefinition> commandDefinitions;
     bool retryNeeded = false;
@@ -308,46 +376,114 @@ void CustomMetricsService::reload(bool finalAttempt)
         const QFileInfo info(candidate.path);
         if (!info.exists() || !info.isFile()) {
             source.message = tr("File is not available.");
+            source.configuration = source.message.toUtf8();
             if (!finalAttempt && source.explicitlyRegistered && source.snapshot) {
                 source.state = State::Pending;
                 retryNeeded = true;
             } else {
                 source.state = State::Unavailable;
             }
-        } else if (const ConfigObject config = readConfigObject(candidate.path);
-                   config.object && isGroupObject(*config.object)) {
+            next.append(std::move(source));
+            continue;
+        }
+        const ConfigObject config = readConfigObject(candidate.path);
+        source.configuration = config.object ? compactJson(*config.object) : config.error.toUtf8();
+        if (config.object && isGroupObject(*config.object)) {
             // v2F1.5: a group and, recursively, its children.
             appendGroup(std::move(source), *config.object, next, commandDefinitions);
             continue;
+        }
+        const CommandParseResult command = parseCommandFile(candidate.path);
+        if (command.recognized) {
+            applyCommand(source, command, previous, commandDefinitions);
         } else {
-            const CommandParseResult command = parseCommandFile(candidate.path);
-            if (command.recognized) {
-                applyCommand(source, command, previous, commandDefinitions);
+            const ParseResult parsed = parseFile(candidate.path);
+            if (parsed.snapshot && !parsed.enabled) {
+                disable(source, parsed.snapshot->title, parsed.snapshot->symbol, parsed.snapshot->icon);
+                source.configuredEnabled = false;
+            } else if (parsed.snapshot) {
+                source.snapshot = parsed.snapshot;
+                source.state = State::Available;
             } else {
-                const ParseResult parsed = parseFile(candidate.path);
-                if (parsed.snapshot && !parsed.enabled) {
-                    disable(source, parsed.snapshot->title, parsed.snapshot->symbol, parsed.snapshot->icon);
-                    source.configuredEnabled = false;
-                } else if (parsed.snapshot) {
-                    source.snapshot = parsed.snapshot;
-                    source.state = State::Available;
+                source.message = parsed.error;
+                if (!finalAttempt) {
+                    source.state = State::Pending;
+                    retryNeeded = true;
                 } else {
-                    source.message = parsed.error;
-                    if (!finalAttempt) {
-                        source.state = State::Pending;
-                        retryNeeded = true;
-                    } else {
-                        source.state = State::Error;
-                    }
+                    source.state = State::Error;
                 }
             }
         }
         next.append(std::move(source));
     }
+
+    if (!m_reloadFailure.isEmpty()) {
+        // Not applied: the active sources, jobs and watches stay as they are.
+        report.error = m_reloadFailure;
+        if (report.error != m_loggedFailure)
+            qCWarning(lcCustomMetrics).noquote()
+                << QStringLiteral("Custom Metrics configuration not reloaded: %1").arg(report.error);
+        m_loggedFailure = report.error;
+        m_reloading = false;
+        if (!finalAttempt)
+            m_retry.start();
+        return report;
+    }
+    m_loggedFailure.clear();
+
+    // What changed, by stable source id.
+    report.ok = true;
+    QHash<QString, const Source *> before;
+    for (const Source &old : std::as_const(m_sources))
+        before.insert(old.id, &old);
+    QSet<QString> scheduled;
+    for (const CommandDefinition &definition : std::as_const(commandDefinitions))
+        scheduled.insert(identityFor(definition.configurationPath));
+    for (const Source &source : std::as_const(next)) {
+        const ReloadEntry entry{source.id, reportName(source), {}};
+        const Source *old = before.take(source.id);
+        if (!old)
+            report.added.append(entry);
+        else if (old->configuration != source.configuration || old->type != source.type
+                 || old->parentId != source.parentId)
+            report.changed.append(entry);
+        else
+            ++report.unchanged;
+        // Configuration errors only; a scheduled command's last run may
+        // have failed too, which is not the configuration's fault.
+        if (source.state == State::Error && !scheduled.contains(source.id))
+            report.errors.append({source.id, reportName(source), source.message});
+    }
+    for (const Source &old : std::as_const(m_sources)) {
+        if (before.contains(old.id))
+            report.removed.append({old.id, reportName(old), {}});
+    }
+
+    QHash<QString, QStringList> warningsBefore;
+    for (const Source &old : std::as_const(m_sources))
+        warningsBefore.insert(old.id, old.warnings);
+    const QHash<QString, QString> iconWarningsBefore = std::exchange(m_iconWarnings, {});
     m_sources = std::move(next);
     syncCommandJobs(commandDefinitions);
+    // v2F1.6: what does not stop a source: logged when it appears, listed
+    // in the report (every reload, like the errors) until it is fixed.
+    IconThemeLookup themes;
+    for (Source &source : m_sources) {
+        if (source.snapshot && source.snapshot->icon) {
+            const QString warning = iconWarning(*source.snapshot->icon, themes);
+            if (!warning.isEmpty())
+                m_iconWarnings.insert(source.id, warning);
+            if (!warning.isEmpty() && iconWarningsBefore.value(source.id) != warning)
+                qCWarning(lcCustomMetrics).noquote()
+                    << QStringLiteral("custom metric \"%1\": %2").arg(reportName(source), warning);
+        }
+        updateWarnings(source, warningsBefore.value(source.id));
+        for (const QString &warning : std::as_const(source.warnings))
+            report.warnings.append({source.id, reportName(source), warning});
+    }
     rebuildWatches();
     publish();
+    m_reloading = false;
 
     if (retryNeeded && !finalAttempt)
         m_retry.start();
@@ -359,6 +495,7 @@ void CustomMetricsService::reload(bool finalAttempt)
         m_recovery.start();
     else
         m_recovery.stop();
+    return report;
 }
 
 void CustomMetricsService::rebuildWatches()
@@ -414,6 +551,48 @@ bool CustomMetricsService::hasDegradedExplicitSource() const
     });
 }
 
+namespace {
+// v2F1.6: how a command's definition changed. Presentation: what the
+// frontends show (title, icon, showBar, id, provenance); Schedule: also the
+// interval or the timeout; Execution: anything that changes what runs or
+// how its output is read.
+enum class DefinitionChange { None, Presentation, Schedule, Execution };
+
+DefinitionChange definitionChange(const CommandDefinition &before, const CommandDefinition &after)
+{
+    if (before == after)
+        return DefinitionChange::None;
+    CommandDefinition normalized = after;
+    normalized.id = before.id;
+    normalized.title = before.title;
+    normalized.integration = before.integration;
+    normalized.icon = before.icon;
+    normalized.legacySymbol = before.legacySymbol;
+    normalized.configuredExecutable = before.configuredExecutable; // the same resolved executable
+    normalized.showBar = before.showBar;
+    if (normalized == before)
+        return DefinitionChange::Presentation;
+    normalized.intervalSeconds = before.intervalSeconds;
+    normalized.timeoutSeconds = before.timeoutSeconds;
+    return normalized == before ? DefinitionChange::Schedule : DefinitionChange::Execution;
+}
+
+// The last result keeps its values and takes the new presentation, as the
+// next run would give it (snapshotFromCommandOutput: the configuration owns
+// title, icon and showBar; a scalar's item is named after the title).
+void applyPresentation(Snapshot &snapshot, const CommandDefinition &definition)
+{
+    snapshot.title = definition.title;
+    snapshot.symbol = definition.legacySymbol;
+    snapshot.icon = definition.icon;
+    snapshot.showBar = definition.showBar;
+    if (definition.output == CommandOutput::Scalar) {
+        for (Item &item : snapshot.metrics)
+            item.title = definition.title;
+    }
+}
+}
+
 void CustomMetricsService::syncCommandJobs(const QList<CommandDefinition> &definitions)
 {
     std::set<QString> wanted;
@@ -421,8 +600,25 @@ void CustomMetricsService::syncCommandJobs(const QList<CommandDefinition> &defin
         const QString id = identityFor(definition.configurationPath);
         wanted.insert(id);
         const auto existing = m_commandJobs.find(id);
-        if (existing != m_commandJobs.end() && existing->second->definition == definition)
+        const DefinitionChange change = existing != m_commandJobs.end()
+            ? definitionChange(existing->second->definition, definition) : DefinitionChange::Execution;
+        if (change == DefinitionChange::None)
             continue;
+        if (change != DefinitionChange::Execution) {
+            // The job goes on: no restart, its last values and its running
+            // process are kept; only what was changed is applied.
+            CommandJob &job = *existing->second;
+            job.definition = definition;
+            if (change == DefinitionChange::Schedule) {
+                if (job.process && job.forcedError.isEmpty())
+                    job.deadlineMilliseconds = job.startedMilliseconds + qint64(definition.timeoutSeconds) * 1000;
+                else if (!job.process && job.finishedMilliseconds >= 0)
+                    job.nextDueMilliseconds = job.finishedMilliseconds + qint64(definition.intervalSeconds) * 1000;
+            }
+            if (Source *source = sourceFor(id); source && source->snapshot)
+                applyPresentation(*source->snapshot, definition);
+            continue;
+        }
         if (existing != m_commandJobs.end()) {
             stopCommand(*existing->second);
             m_commandJobs.erase(existing);
@@ -519,27 +715,29 @@ void CustomMetricsService::startCommand(const QString &id)
     job.standardOutput.clear();
     job.standardError.clear();
     job.forcedError.clear();
+    job.run = ++m_nextRun;
+    const quint64 run = job.run;
     job.process = std::make_unique<QProcess>();
     QProcess *process = job.process.get();
     process->setProcessChannelMode(QProcess::SeparateChannels);
     process->setWorkingDirectory(job.definition.workingDirectory);
     aqtruncat::process::runInOwnGroup(*process);
-    connect(process, &QProcess::readyReadStandardOutput, this, [this, id] { readCommandOutput(id); });
-    connect(process, &QProcess::readyReadStandardError, this, [this, id] { readCommandOutput(id); });
+    connect(process, &QProcess::readyReadStandardOutput, this, [this, id, run] { readCommandOutput(id, run); });
+    connect(process, &QProcess::readyReadStandardError, this, [this, id, run] { readCommandOutput(id, run); });
     connect(process, &QProcess::finished, this,
-            [this, id](int exitCode, QProcess::ExitStatus status) { finishCommand(id, exitCode, status); });
-    connect(process, &QProcess::errorOccurred, this, [this, id](QProcess::ProcessError error) {
+            [this, id, run](int exitCode, QProcess::ExitStatus status) { finishCommand(id, run, exitCode, status); });
+    connect(process, &QProcess::errorOccurred, this, [this, id, run](QProcess::ProcessError error) {
         if (error != QProcess::FailedToStart)
             return;
-        const auto it = m_commandJobs.find(id);
-        if (it == m_commandJobs.end() || !it->second->process)
+        CommandJob *job = runningJob(id, run);
+        if (!job)
             return;
-        it->second->forcedError = tr("Could not start executable: %1")
-                                      .arg(it->second->process->errorString());
+        job->forcedError = tr("Could not start executable: %1").arg(job->process->errorString());
         // FailedToStart may be emitted synchronously from QProcess::start().
         // Defer teardown so the emitting QProcess is never destroyed inside
-        // its own signal delivery.
-        QTimer::singleShot(0, this, [this, id] { finishCommand(id, -1, QProcess::CrashExit); });
+        // its own signal delivery; by then a reload may have replaced the
+        // job, whose new run this must not finish (run id).
+        QTimer::singleShot(0, this, [this, id, run] { finishCommand(id, run, -1, QProcess::CrashExit); });
     });
 
     if (Source *source = sourceFor(id)) {
@@ -547,16 +745,25 @@ void CustomMetricsService::startCommand(const QString &id)
         source->message = tr("Command is running.");
     }
     publish();
+    job.startedMilliseconds = m_clock.elapsed();
     process->start(job.definition.executable, job.definition.arguments, QIODevice::ReadOnly);
-    job.deadlineMilliseconds = m_clock.elapsed() + qint64(job.definition.timeoutSeconds) * 1000;
+    job.deadlineMilliseconds = job.startedMilliseconds + qint64(job.definition.timeoutSeconds) * 1000;
 }
 
-void CustomMetricsService::readCommandOutput(const QString &id)
+CustomMetricsService::CommandJob *CustomMetricsService::runningJob(const QString &id, quint64 run)
 {
     const auto found = m_commandJobs.find(id);
-    if (found == m_commandJobs.end() || !found->second->process)
+    if (found == m_commandJobs.end() || !found->second->process || found->second->run != run)
+        return nullptr;
+    return found->second.get();
+}
+
+void CustomMetricsService::readCommandOutput(const QString &id, quint64 run)
+{
+    CommandJob *running = runningJob(id, run);
+    if (!running)
         return;
-    CommandJob &job = *found->second;
+    CommandJob &job = *running;
     const QByteArray out = job.process->readAllStandardOutput();
     const QByteArray err = job.process->readAllStandardError();
     if (job.standardOutput.size() + out.size() > MaxCommandOutputBytes
@@ -571,13 +778,14 @@ void CustomMetricsService::readCommandOutput(const QString &id)
     job.standardError.append(err);
 }
 
-void CustomMetricsService::finishCommand(const QString &id, int exitCode, QProcess::ExitStatus exitStatus)
+void CustomMetricsService::finishCommand(const QString &id, quint64 run, int exitCode,
+                                         QProcess::ExitStatus exitStatus)
 {
-    const auto found = m_commandJobs.find(id);
-    if (found == m_commandJobs.end() || !found->second->process)
+    CommandJob *running = runningJob(id, run);
+    if (!running)
         return;
-    CommandJob &job = *found->second;
-    readCommandOutput(id);
+    CommandJob &job = *running;
+    readCommandOutput(id, run);
 
     QString error = job.forcedError;
     State failure = State::Error;
@@ -605,7 +813,8 @@ void CustomMetricsService::finishCommand(const QString &id, int exitCode, QProce
     }
     job.process->disconnect(this);
     job.process.reset();
-    job.nextDueMilliseconds = m_clock.elapsed() + qint64(job.definition.intervalSeconds) * 1000;
+    job.finishedMilliseconds = m_clock.elapsed();
+    job.nextDueMilliseconds = job.finishedMilliseconds + qint64(job.definition.intervalSeconds) * 1000;
 
     if (Source *source = sourceFor(id)) {
         if (snapshot) {
@@ -624,7 +833,8 @@ void CustomMetricsService::failCommand(const QString &id, State state, const QSt
     const auto found = m_commandJobs.find(id);
     if (found == m_commandJobs.end())
         return;
-    found->second->nextDueMilliseconds = m_clock.elapsed()
+    found->second->finishedMilliseconds = m_clock.elapsed();
+    found->second->nextDueMilliseconds = found->second->finishedMilliseconds
         + qint64(found->second->definition.intervalSeconds) * 1000;
     if (Source *source = sourceFor(id))
         setOutcome(*source, state, message);
@@ -649,6 +859,7 @@ void CustomMetricsService::setOutcome(Source &source, State state, const QString
         job->second->lastOutcome = state;
         job->second->lastMessage = message;
     }
+    updateWarnings(source, source.warnings);
 }
 
 void CustomMetricsService::disable(Source &source, const QString &title, const std::optional<QString> &symbol,
@@ -764,7 +975,11 @@ void CustomMetricsService::appendChildren(const QString &parentId, const QString
                                           QList<Source> &next, QList<CommandDefinition> &definitions)
 {
     QStringList ids;
-    for (const QString &path : childConfigurations(directory, visited)) {
+    QString unreadable;
+    const QStringList children = childConfigurations(directory, visited, &unreadable);
+    if (!unreadable.isEmpty() && m_reloadFailure.isEmpty())
+        m_reloadFailure = unreadable;
+    for (const QString &path : children) {
         Source child;
         child.id = identityFor(path);
         child.path = path;
@@ -787,6 +1002,7 @@ void CustomMetricsService::appendChildren(const QString &parentId, const QString
             child.type = SourceType::Command;
             child.state = State::Error;
             child.message = config.object ? error : config.error;
+            child.configuration = child.message.toUtf8();
             child.snapshot.reset();
             next.append(std::move(child));
             continue;
@@ -797,6 +1013,7 @@ void CustomMetricsService::appendChildren(const QString &parentId, const QString
             child.type = SourceType::Command;
             child.state = State::Error;
             child.message = tr("Duplicate id \"%1\" in this group.").arg(child.configuredId);
+            child.configuration = child.message.toUtf8();
             child.snapshot.reset();
             next.append(std::move(child));
             continue;
@@ -804,6 +1021,8 @@ void CustomMetricsService::appendChildren(const QString &parentId, const QString
         ids.append(id);
         const bool enabled = inheritance.enabled && own;
         const QJsonObject effective = effectiveChild(inheritance, *config.object, childDirectory, id, enabled);
+        // Inherited values are part of it: a group's change changes its children.
+        child.configuration = compactJson(effective);
 
         if (isGroupObject(effective)) {
             // A nested group: a container again, its children one level down.
@@ -834,6 +1053,25 @@ void CustomMetricsService::appendChildren(const QString &parentId, const QString
                 child.snapshot.reset();
         }
         next.append(std::move(child));
+    }
+}
+
+void CustomMetricsService::updateWarnings(Source &source, const QStringList &before)
+{
+    source.warnings.clear();
+    const QString icon = m_iconWarnings.value(source.id);
+    if (!icon.isEmpty())
+        source.warnings.append(icon);
+    // Only for values on show: not the last ones of a failed or unavailable run.
+    if (source.snapshot && source.state != State::Error && source.state != State::Unavailable) {
+        const auto job = m_commandJobs.find(source.id);
+        const QStringList values = valueWarnings(*source.snapshot,
+                                                 job != m_commandJobs.end() ? &job->second->definition : nullptr);
+        // Logged when values leave their range, not on each run outside it.
+        if (!values.isEmpty() && before.size() <= (icon.isEmpty() ? 0 : 1))
+            qCWarning(lcCustomMetrics).noquote()
+                << QStringLiteral("custom metric \"%1\": %2").arg(reportName(source), values.join(QStringLiteral("; ")));
+        source.warnings += values;
     }
 }
 
@@ -893,4 +1131,36 @@ void CustomMetricsService::stopCommands()
         signalProcessGroup(*process, SIGKILL);
     }
     m_commandJobs.clear();
+}
+
+QString aqtruncat::custommetrics::reloadSummary(const ReloadReport &report)
+{
+    if (!report.ok)
+        return QCoreApplication::translate("CustomMetricsService",
+                                           "Custom Metrics not reloaded: %1 The active configuration is unchanged.")
+            .arg(report.error);
+    QString text = QCoreApplication::translate("CustomMetricsService",
+                                               "Custom Metrics reloaded: %1 added, %2 changed, %3 removed, %4 unchanged.")
+                       .arg(report.added.size()).arg(report.changed.size()).arg(report.removed.size())
+                       .arg(report.unchanged);
+    // A few named, enough to find them; Settings lists them all with their status.
+    const auto named = [](const QList<ReloadEntry> &entries) {
+        constexpr qsizetype Named = 3;
+        QStringList names;
+        for (const ReloadEntry &entry : entries.mid(0, Named))
+            names.append(QStringLiteral("%1 (%2)").arg(entry.name, entry.message));
+        if (entries.size() > Named)
+            names.append(QCoreApplication::translate("CustomMetricsService", "%n more", nullptr,
+                                                     int(entries.size() - Named)));
+        return names.join(QStringLiteral("; "));
+    };
+    if (!report.errors.isEmpty())
+        text += u' '
+            + QCoreApplication::translate("CustomMetricsService", "%n with errors: ", nullptr, int(report.errors.size()))
+            + named(report.errors) + u'.';
+    if (!report.warnings.isEmpty())
+        text += u' '
+            + QCoreApplication::translate("CustomMetricsService", "%n with warnings: ", nullptr, int(report.warnings.size()))
+            + named(report.warnings) + u'.';
+    return text;
 }

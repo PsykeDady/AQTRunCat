@@ -76,6 +76,11 @@ struct ScalarResult {
     QString error;
 };
 
+// v2F1.6: one message per item whose normalizedValue is outside 0...1 (the
+// frontends clamp its bar: full or empty). With a scalar command's
+// definition the message names the value and display.normalizedRange.
+QStringList valueWarnings(const Snapshot &snapshot, const CommandDefinition *definition = nullptr);
+
 ScalarResult snapshotFromCommandOutput(const CommandDefinition &definition,
                                        const QByteArray &standardOutput,
                                        const QDateTime &updatedAt = QDateTime::currentDateTimeUtc());

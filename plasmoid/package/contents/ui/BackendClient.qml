@@ -196,6 +196,22 @@ Item {
              (ok, result, reply) => replied("SetCustomMetricEnabled", ok, ok ? "" : Logic.errorText(reply)));
     }
 
+    // v2F1.6 (schema 6): rescans the Custom Metrics files; the reply is
+    // the report (Logic.reloadSummary) or the reason nothing was changed.
+    // The new metrics arrive as a MetricsChanged delta before the reply.
+    property bool reloadingCustomMetrics: false
+    function reloadCustomMetrics() {
+        if (reloadingCustomMetrics)
+            return;
+        reloadingCustomMetrics = true;
+        call("ReloadCustomMetrics", [], "", (ok, result, reply) => {
+            if (client)
+                client.reloadingCustomMetrics = false;
+            replied("ReloadCustomMetrics", ok, ok ? Logic.reloadSummary(Logic.parse(result))
+                                                  : Logic.reloadFailure(Logic.errorText(reply)));
+        });
+    }
+
     function unregisterCustomMetric(path) {
         call("UnregisterCustomMetric", [new DBus.string(path)], "(s)",
              (ok, result, reply) => replied("UnregisterCustomMetric", ok, ok ? "" : Logic.errorText(reply)));

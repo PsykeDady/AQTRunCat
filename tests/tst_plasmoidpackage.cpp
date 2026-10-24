@@ -182,7 +182,8 @@ private slots:
         const QSet<QString> api = {QStringLiteral("GetState"), QStringLiteral("GetMetrics"), QStringLiteral("GetRunners"),
                                    QStringLiteral("SetSetting"), QStringLiteral("SetIntegrationEnabled"),
                                    QStringLiteral("SetIntegrationLiveUpdates"), QStringLiteral("RegisterCustomMetric"),
-                                   QStringLiteral("UnregisterCustomMetric"), QStringLiteral("SetCustomMetricEnabled")};
+                                   QStringLiteral("UnregisterCustomMetric"), QStringLiteral("SetCustomMetricEnabled"),
+                                   QStringLiteral("ReloadCustomMetrics")}; // v2F1.6
         QVERIFY(!members.isEmpty());
         for (const QString &member : members)
             QVERIFY2(api.contains(member), qPrintable(member));

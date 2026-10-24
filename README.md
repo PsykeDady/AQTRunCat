@@ -219,6 +219,7 @@ aqtruncatctl --json metrics cpu memory       # the API's JSON, for scripts
 aqtruncatctl watch                           # follow changes (Ctrl+C)
 aqtruncatctl settings set speedMode slow-down
 aqtruncatctl integration enable codex
+aqtruncatctl custom reload                   # re-read the Custom Metrics files
 ```
 
 Exit status: 0 success, 1 backend failure, 2 invalid command line, 3 backend
@@ -306,7 +307,13 @@ an external producer writes; it is not how the Claude Code metric works (see
 [Claude Code metric](#claude-code-metric) below).
 
 Files are watched: updates (including atomic replace) appear immediately,
-and a broken or missing file only affects its own card.
+and a broken or missing file only affects its own card. To re-read the whole
+configuration on demand — for example after copying a new group package or
+editing several files — press **Reload Custom Metrics** in Settings (or in
+the Plasma widget's configuration), or run `aqtruncatctl custom reload`.
+Added, changed and removed metrics and groups are applied without a restart;
+unchanged commands keep running with their current values; if a directory
+cannot be read, nothing changes and the reason is shown.
 
 A command-backed metric uses an explicit executable and argument array—never
 an implicit shell—and reads one UTF-8 scalar line from standard output:

@@ -31,6 +31,10 @@ public:
     bool registerFile(const QString &path, QString *error = nullptr) override;
     void unregisterFile(const QString &path) override;
     bool setEnabled(const QString &path, bool enabled, QString *error = nullptr) override;
+    // v2F1.6: the explicit reload (Settings, D-Bus ReloadCustomMetrics):
+    // reloadNow answers at once, reloadConfigurations also emits it.
+    void reloadConfigurations() override;
+    aqtruncat::custommetrics::ReloadReport reloadNow();
 
 public slots:
     void start();
@@ -42,15 +46,18 @@ private:
     static QString identityFor(const QString &path);
     struct CommandJob;
     void scheduleReload();
-    void reload(bool finalAttempt);
+    aqtruncat::custommetrics::ReloadReport reload(bool finalAttempt);
     void rebuildWatches();
     bool hasDegradedExplicitSource() const;
     void syncCommandJobs(const QList<aqtruncat::custommetrics::CommandDefinition> &definitions);
     void scheduleCommandWake();
     void processCommandWake();
     void startCommand(const QString &id);
-    void readCommandOutput(const QString &id);
-    void finishCommand(const QString &id, int exitCode, QProcess::ExitStatus exitStatus);
+    // run: the job's run the call belongs to; a call for an earlier run (a
+    // replaced or removed job) is ignored.
+    CommandJob *runningJob(const QString &id, quint64 run);
+    void readCommandOutput(const QString &id, quint64 run);
+    void finishCommand(const QString &id, quint64 run, int exitCode, QProcess::ExitStatus exitStatus);
     void failCommand(const QString &id, aqtruncat::custommetrics::State state,
                      const QString &message);
     aqtruncat::custommetrics::Source *sourceFor(const QString &id);
@@ -71,6 +78,7 @@ private:
     void disable(aqtruncat::custommetrics::Source &source, const QString &title,
                  const std::optional<QString> &symbol,
                  const std::optional<aqtruncat::custommetrics::IconReference> &icon);
+    void updateWarnings(aqtruncat::custommetrics::Source &source, const QStringList &before);
     void publish();
     void stopCommand(CommandJob &job);
     void stopCommands();
@@ -87,4 +95,13 @@ private:
     std::map<QString, std::unique_ptr<CommandJob>> m_commandJobs;
     int m_retryAttempt = 0;
     bool m_active = false;
+    // v2F1.6: the reload being built (a reload never runs inside another),
+    // why it cannot be applied, the last failure logged, and the next run id.
+    bool m_reloading = false;
+    QString m_reloadFailure;
+    QString m_loggedFailure;
+    quint64 m_nextRun = 0;
+    // v2F1.6: each source's icon warning, checked by every reload (an icon
+    // installed later is found by the next one).
+    QHash<QString, QString> m_iconWarnings;
 };

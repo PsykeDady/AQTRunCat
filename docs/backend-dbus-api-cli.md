@@ -161,13 +161,17 @@ backend.
   delle Custom Metrics e metodo `SetCustomMetricEnabled`, vedi
   `docs/custom-metrics-commands.md` §8), **4 da 2.1.4** (campo `showBar`,
   §10), **5 da 2.1.5** (gruppi: `kind` `group`, `data.groupId`,
-  `data.configuredEnabled`, §11). Le aggiunte compatibili (nuovi
+  `data.configuredEnabled`, §11), **6 da 2.1.6** (metodo
+`ReloadCustomMetrics`, capability `custom-metrics-reload` e campo
+`warnings` delle Custom Metrics, §12). Le
+aggiunte compatibili (nuovi
   campi, nuove capability, nuovi id di metrica) non cambiano `api`.
 - I client **devono ignorare i campi sconosciuti** e trattare un valore
   sconosciuto di `state` come `error`.
 - `capabilities` (in `GetInfo`) elenca le funzioni opzionali: `metrics`,
   `metrics-delta`, `runner`, `settings`, `set-setting`, `custom-metrics`,
-  `integrations` e, da F4.2, `runners` (catalogo dei runner, §5.4.1).
+  `integrations` e, da F4.2, `runners` (catalogo dei runner, §5.4.1); da
+  2.1.6 `custom-metrics-reload` (`ReloadCustomMetrics`).
 
 ## 5. Contratto API
 
@@ -186,6 +190,7 @@ backend.
 | `RegisterCustomMetric` | `(s path) → ()` | registra un file Custom Metrics (stesse regole di Settings) |
 | `UnregisterCustomMetric` | `(s path) → ()` | rimuove la registrazione esplicita |
 | `SetCustomMetricEnabled` (2.1.2, schema 3) | `(s path, b enabled) → ()` | scrive `"enabled"` nel file della Custom Metric (sostituzione atomica, il resto del file invariato) e lo applica subito: disabilitata non viene più eseguita né mostrata. `NotFound` per una sorgente sconosciuta, `InvalidArgument` per la sorgente di un'integrazione (si usa `SetIntegrationEnabled`), `Failed` se il file non si può scrivere |
+| `ReloadCustomMetrics` (2.1.6, schema 6) | `() → s` | rilegge tutta la configurazione Custom Metrics (file registrati, cartella di scoperta, gruppi e figli) e applica ciò che è cambiato senza riavvio; risponde `{added[], changed[], removed[], unchanged, errors[], warnings[]}` (voci `{id, sourceId, name, message}`; `errors` = sorgenti con configurazione non valida, che restano visibili in `error`; `warnings` = un avviso per voce, la metrica funziona: icona mancante, valore fuori range; lo stesso testo è nel campo `warnings[]` di ogni Custom Metric). Il `MetricsChanged` con il nuovo insieme arriva **prima** della risposta. `Failed` se una cartella non è leggibile: in quel caso nulla è cambiato. Vedi `docs/custom-metrics-commands.md` §12 |
 | `SetIntegrationEnabled` | `(s id, b enabled) → s` | `enable`/`disable` dell'adattatore; restituisce il suo messaggio |
 | `SetIntegrationLiveUpdates` | `(s id, b on) → s` | `live-updates on|off` dell'adattatore |
 
@@ -431,6 +436,7 @@ aqtruncatctl [--json] [--no-start] COMMAND
   settings
   settings set KEY VALUE
   custom add|remove PATH
+  custom reload                  rilegge le Custom Metrics (2.1.6)
 ```
 
 | Codice di uscita | Significato |

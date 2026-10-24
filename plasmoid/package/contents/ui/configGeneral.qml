@@ -316,6 +316,15 @@ KCM.SimpleKCM {
             text: "Add Custom Metrics file…"
             onClicked: fileDialog.open()
         }
+        // v2F1.6: rescans the files; the result shows in the message above.
+        QQC2.Button {
+            enabled: client.connected && !client.reloadingCustomMetrics
+            icon.name: "view-refresh"
+            text: client.reloadingCustomMetrics ? "Reloading Custom Metrics…" : "Reload Custom Metrics"
+            QQC2.ToolTip.text: "Read the Custom Metrics files again and apply the metrics and groups that were added, changed or removed"
+            QQC2.ToolTip.visible: hovered
+            onClicked: client.reloadCustomMetrics()
+        }
         FileDialog {
             id: fileDialog
             title: "Custom Metrics file"

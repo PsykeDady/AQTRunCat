@@ -465,6 +465,17 @@ manuale:
 | dopo un aggiornamento il widget sul pannello è vecchio | Plasma ricarica il QML al successivo avvio (login) |
 | runner nuovo non in lista | riapri la configurazione del widget |
 
+## 15b. Ricarica delle Custom Metrics (2.1.6)
+
+La pagina di configurazione **AQTRunCat** ha il pulsante **Reload Custom
+Metrics** sotto la lista dei file: chiama `ReloadCustomMetrics`
+(`BackendClient.reloadCustomMetrics`, una richiesta alla volta,
+`reloadingCustomMetrics`), e mostra l'esito nel messaggio in alto
+(`Logic.reloadSummary`, lo stesso testo della finestra Settings del tray;
+un rifiuto con `Logic.reloadFailure`). Le metriche nuove o rimosse arrivano
+al popup con il normale delta `MetricsChanged`, prima della risposta: nessun
+riavvio di plasmashell né del widget. Il widget non legge mai i file.
+
 ## 16. Limitazioni note
 
 - Il widget dipende dalla D-Bus activation (nessun ripiego di avvio dal

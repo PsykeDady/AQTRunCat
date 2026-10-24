@@ -556,4 +556,22 @@ TestCase {
         compare(Logic.rowToolTip("", [], false), "");
         compare(Logic.rowToolTip(undefined, null, false), "");
     }
+
+    // v2F1.6: the reload feedback matches the tray's Settings.
+    function test_reloadSummary() {
+        compare(Logic.reloadSummary({ added: [{ name: "a" }], changed: [], removed: [{ name: "b" }, { name: "c" }],
+                                      unchanged: 4, errors: [] }),
+                "Custom Metrics reloaded: 1 added, 0 changed, 2 removed, 4 unchanged.");
+        const errors = [1, 2, 3, 4, 5].map(n => ({ name: "m" + n, message: "bad " + n }));
+        compare(Logic.reloadSummary({ added: [], changed: [], removed: [], unchanged: 0, errors: errors }),
+                "Custom Metrics reloaded: 0 added, 0 changed, 0 removed, 0 unchanged. 5 with errors: "
+                + "m1 (bad 1); m2 (bad 2); m3 (bad 3); 2 more.");
+        compare(Logic.reloadSummary({ added: [], changed: [], removed: [], unchanged: 2, errors: [errors[0]],
+                                      warnings: [{ name: "d", message: "icon file /m/d.svg does not exist" }] }),
+                "Custom Metrics reloaded: 0 added, 0 changed, 0 removed, 2 unchanged. 1 with errors: m1 (bad 1). "
+                + "1 with warnings: d (icon file /m/d.svg does not exist).");
+        compare(Logic.reloadSummary(null), "Custom Metrics reloaded: 0 added, 0 changed, 0 removed, 0 unchanged.");
+        compare(Logic.reloadFailure("Cannot read the directory /m."),
+                "Custom Metrics not reloaded: Cannot read the directory /m. The active configuration is unchanged.");
+    }
 }

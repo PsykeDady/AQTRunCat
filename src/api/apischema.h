@@ -1,5 +1,6 @@
 #pragma once
 
+#include "app/custommetricsmodel.h"
 #include "custommetrics/custommetric.h"
 #include "metrics/systemmetrics.h"
 
@@ -26,10 +27,11 @@ inline const QString ObjectPath = QStringLiteral("/io/github/psykedady/AQTRunCat
 // keep it and raise SchemaVersion.
 inline const QString InterfaceName = QStringLiteral("io.github.psykedady.AQTRunCat1");
 inline constexpr int ApiVersion = 1;
-inline constexpr int SchemaVersion = 5; // 2 (F5): uptime, GPUs, FPS, updates, kernel, distribution;
+inline constexpr int SchemaVersion = 6; // 2 (F5): uptime, GPUs, FPS, updates, kernel, distribution;
                                         // 3 (2.1.2): Custom Metrics "enabled", SetCustomMetricEnabled;
                                         // 4 (2.1.4): Custom Metrics "showBar";
-                                        // 5 (2.1.5): kind "group", data.groupId, data.configuredEnabled
+                                        // 5 (2.1.5): kind "group", data.groupId, data.configuredEnabled;
+                                        // 6 (2.1.6): ReloadCustomMetrics, Custom Metrics "warnings"
 inline const QString ErrorInvalidArgument = QStringLiteral("io.github.psykedady.AQTRunCat1.Error.InvalidArgument");
 inline const QString ErrorNotFound = QStringLiteral("io.github.psykedady.AQTRunCat1.Error.NotFound");
 inline const QString ErrorFailed = QStringLiteral("io.github.psykedady.AQTRunCat1.Error.Failed");
@@ -43,6 +45,12 @@ QJsonArray builtInMetrics(const std::optional<metrics::SystemMetricsSnapshot> &s
 // A Custom Metrics source: category "integration" when it carries an
 // official integration's provenance, else "custom".
 QJsonObject customMetric(const custommetrics::Source &source);
+
+// v2F1.6 (schema 6): the answer of ReloadCustomMetrics. added, changed,
+// removed and errors are arrays of {id (the metric id), sourceId, name,
+// message}; unchanged is a count. A refused reload is a D-Bus error instead.
+QJsonObject reloadReport(const custommetrics::ReloadReport &report);
+custommetrics::ReloadReport reloadReportFromJson(const QJsonObject &report);
 
 // Settings exposed by the API (and accepted by SetSetting).
 QJsonObject settingsObject(const AppSettings &settings);

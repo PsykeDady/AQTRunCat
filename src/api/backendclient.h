@@ -52,6 +52,9 @@ public:
     bool registerFile(const QString &path, QString *error = nullptr) override;
     void unregisterFile(const QString &path) override;
     bool setEnabled(const QString &path, bool enabled, QString *error = nullptr) override;
+    // v2F1.6: asynchronous ReloadCustomMetrics (never blocks the GUI); a
+    // request made while one is pending shares its answer.
+    void reloadConfigurations() override;
 
 signals:
     void systemSnapshot(const aqtruncat::metrics::SystemMetricsSnapshot &snapshot);
@@ -85,6 +88,7 @@ private:
     std::optional<double> m_sampleTime;
     bool m_synced = false;
     bool m_requesting = false;
+    bool m_reloading = false;
     quint64 m_generation = 0;
     QJsonArray m_metrics;
     QJsonObject m_runner;

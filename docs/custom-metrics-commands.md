@@ -676,3 +676,193 @@ D20.
 Correzione collaterale: `tst_claudecodeintegration` assumeva che "fra due
 ore" fosse lo stesso giorno (falliva tra le 22 e mezzanotte); ora si aspetta
 il formato con la data quando il reset cade il giorno dopo.
+
+## 12. v2F1.6 — Ricarica delle Custom Metrics (2.1.6)
+
+Stato: **completata** il 2026-10-24, versione **2.1.6**. Branch
+`feature/v2/f1.6`.
+
+Rilettura esplicita, a richiesta, di tutta la configurazione Custom Metrics
+(file registrati, cartella di scoperta, package, gruppi e figli a ogni
+livello) e applicazione di ciò che è cambiato, senza riavviare backend,
+tray o widget. Il file watcher di M6 resta com'era (non è un nuovo
+meccanismo automatico, né una scansione periodica): la ricarica è la
+rilettura completa e garantita, utile per esempio dopo aver copiato un
+package di gruppo (una cartella figlio nuova non ancora osservata dal
+watcher), dopo modifiche a più file, o per sapere con certezza cosa è stato
+applicato.
+
+### Come si usa
+
+- **Settings** (tray), gruppo *Custom Metrics*: pulsante **Reload Custom
+  Metrics**. Spento finché la richiesta è in corso; l'esito compare sotto la
+  lista ("Custom Metrics reloaded: 1 added, 2 changed, 0 removed, 3
+  unchanged." più gli eventuali file non validi, oppure "Custom Metrics not
+  reloaded: … The active configuration is unchanged."). La lista si
+  aggiorna e la riga selezionata resta selezionata.
+- **Widget Plasma**, pagina di configurazione *AQTRunCat*: stesso pulsante,
+  esito nel messaggio in alto (`docs/plasma-widget.md` §15b).
+- **CLI**: `aqtruncatctl custom reload` (riepilogo e una riga per ogni
+  sorgente aggiunta, cambiata, rimossa o con errore; `--json` = il report
+  dell'API; uscita 1 se rifiutata).
+- **D-Bus**: `ReloadCustomMetrics() → s` (schema 6, capability
+  `custom-metrics-reload`; `docs/backend-dbus-api-cli.md` §5.1).
+
+I frontend non leggono mai i file: chiedono al backend, che è l'unico a
+rileggere.
+
+### Riconciliazione
+
+`CustomMetricsService::reload` costruisce la configurazione candidata
+**a parte** (stesse funzioni di sempre: `readConfigObject`,
+`parseCommandFile`/`parseFile`, `appendGroup`/`appendChildren` con
+`effectiveChild`; nessun secondo parser) e solo alla fine la confronta con
+quella attiva, per id stabile (percorso canonico del file):
+
+- **Aggiunta / rimossa / cambiata / invariata**: ogni `Source` porta la sua
+  `configuration` (JSON effettivo compatto — per un figlio quello già fuso
+  con gli antenati — oppure il motivo per cui non si legge). Cambiata =
+  `configuration`, tipo o gruppo di appartenenza diversi. Così un cambio del
+  gruppo che un figlio eredita rende cambiato anche quel figlio, mentre un
+  figlio che ridefinisce il valore resta invariato. Spazi e ordine delle
+  chiavi non contano.
+- **Job dei comandi** (`syncCommandJobs`, `definitionChange`):
+  - nessuna differenza → il job continua, valore e stato restano;
+  - solo **presentazione** (`title`, `symbol`, `display.showBar`, `id`,
+    `integration`) → nessun riavvio: il processo in corso continua, l'ultimo
+    valore resta e prende titolo/icona/showBar nuovi (`applyPresentation`);
+  - solo **pianificazione** (`intervalSeconds`, `timeoutSeconds`) → nessun
+    riavvio: la scadenza della corsa in corso diventa inizio + nuovo
+    timeout, la prossima corsa fine dell'ultima + nuovo intervallo;
+  - **esecuzione** (programma, argomenti, cartella, `output`, prefisso,
+    suffisso, `normalizedRange`) → il job viene sostituito: il gruppo di
+    processi della corsa in corso viene terminato (stesso `stopCommand` di
+    sempre), il nuovo parte subito e il valore vecchio non viene più
+    mostrato ("Waiting for the first command result.");
+  - `enabled` false → nessun job (fermato); true → job nuovo, parte subito.
+- Le metriche built-in, le impostazioni e la selezione della Metrics Bar
+  (che usa l'id stabile) non vengono toccate; una metrica rimossa e poi
+  ripristinata torna nel suo posto della Metrics Bar.
+- Nessun file viene riscritto dalla ricarica.
+
+### Fallimenti e atomicità
+
+Due livelli, scelti per non cambiare la politica già stabilita da M6 e 2.1.5
+(ogni file fallisce da solo):
+
+1. **Rifiuto completo** — se la cartella di scoperta esiste ma non è una
+   cartella leggibile ed attraversabile, oppure una sua sottocartella
+   (package, cartella di un gruppo o di un figlio) non si può leggere o
+   attraversare, la ricarica **non viene applicata**: sorgenti, job,
+   processi in corso, valori e watch restano esattamente quelli di prima,
+   nessun `sourcesChanged`, e l'errore ("Cannot read the directory …") torna
+   a chi l'ha chiesta (`ok=false`; D-Bus `Error.Failed`). Senza questo
+   controllo tutte le metriche sotto quella cartella sembrerebbero rimosse.
+   Vale anche per le riletture del watcher (riprova come prima, poi lascia
+   lo stato invariato, una riga di log per motivo). Una cartella di scoperta
+   **assente** non è un errore: è vuota (viene ricreata all'avvio).
+2. **Errori per file** (politica esistente) — JSON non valido, gruppo non
+   valido, id duplicato in un gruppo, comando non valido: quella sorgente
+   resta nella lista in stato Error con il motivo (mai rimossa né
+   disabilitata in silenzio), le altre vengono applicate; il report le elenca
+   in `errors`, e Settings/widget/CLI le mostrano. Un eseguibile mancante
+   resta un errore di esecuzione 2.1.3 ("Executable not found"), non di
+   configurazione.
+
+### Avvisi (la metrica continua a funzionare)
+
+Alcuni problemi non fermano una metrica ma vanno segnalati
+(`Source::warnings`, campo `warnings` dell'API, voce `warnings` del report):
+
+- **icona mancante**: un `symbol` di tipo `file` che non esiste o non è
+  leggibile ("icon file … does not exist" / "cannot be read"), oppure un
+  `symbol` di tipo `theme` che non si trova in nessun tema di icone
+  installato ("icon "…" is not in any installed icon theme"). Il backend non
+  ha una sessione grafica: il nome viene cercato come prevede la specifica
+  freedesktop (`~/.icons`, `$XDG_DATA_HOME/icons`, `$XDG_DATA_DIRS/*/icons`,
+  le cartelle elencate da ogni `index.theme`, `/usr/share/pixmaps`, estensioni
+  png/svg/svgz/xpm) ma in **tutti** i temi, perché ogni frontend può usarne
+  uno diverso; i ripieghi di Qt/KDE sul nome (es. senza l'ultimo `-…`) non
+  contano. Il controllo viene rifatto a ogni ricarica: un'icona aggiunta dopo
+  si trova alla ricarica successiva (il file dell'icona non è osservato). I
+  frontend mostrano la loro icona di ripiego come prima.
+- **valore fuori range**: un comando scalare con `display.normalizedRange`
+  che stampa un valore fuori dall'intervallo ("value 10 is outside
+  display.normalizedRange 0–1"); per snapshot e output snapshot, un
+  `normalizedValue` fuori da 0–1. Il valore resta mostrato, la barra viene
+  limitata (piena o vuota) come prima; l'elemento scalare ha `warning` e il
+  dettaglio "outside the range 0–1", quindi Dashboard e widget mostrano
+  l'icona di avviso. Viene ricalcolato a ogni corsa.
+
+Ogni avviso finisce nel log una volta, quando compare (un valore che resta
+fuori range non viene riscritto a ogni corsa). Settings mostra l'icona di
+avviso nella colonna di stato e gli avvisi nel tooltip ("Warning: …");
+`aqtruncatctl metrics` li stampa sotto la metrica ("! …"), `custom reload`
+come righe "warning: nome: messaggio"; il riepilogo aggiunge "N with
+warnings: …". Gli avvisi non contano come modifica della configurazione.
+
+### Processi e concorrenza
+
+- Ogni corsa ha un id (`CommandJob::run`); tutti i callback di un processo
+  (output, fine, `FailedToStart` differito) controllano id e job: il
+  risultato di una corsa sostituita o rimossa non può più comparire, anche
+  se arriva dopo la ricarica.
+- Nessun processo o timer orfano: un job rimosso o sostituito passa da
+  `stopCommand` (SIGTERM al gruppo, ≤250 ms, SIGKILL); limiti di output,
+  timeout e un solo processo per job restano quelli di F1.
+- La ricarica è sincrona nel thread del backend (nessun thread nuovo): le
+  richieste D-Bus vengono servite una dopo l'altra; una richiesta rientrante
+  (da un gestore di `sourcesChanged`) viene rifiutata ("already running") e
+  raccolta in una sola rilettura subito dopo. Il client Qt e il widget
+  inviano una sola richiesta alla volta (le altre condividono la risposta).
+- Il backend pubblica il nuovo insieme (`MetricsChanged`) prima della
+  risposta, così chi aggiorna la vista alla risposta lo ha già.
+
+### Frontend
+
+Dashboard, Metrics Bar, Settings e popup del widget seguono come per ogni
+altra variazione (`sourcesChanged` nel tray, delta `MetricsChanged` nel
+widget): card e celle di gruppo ricostruite, metriche rimosse sparite,
+titoli/icone/`showBar` aggiornati, regole di visibilità, Error e
+Unavailable invariati. Nessuna finestra va chiusa e riaperta.
+
+### Test
+
+`custommetricsreload` (nuova, 19 casi, incluso `warningsDoNotStopAMetric`: icona file e tema mancanti, valore fuori range, avvisi che spariscono dopo la correzione): nessuna modifica (nessuna nuova
+corsa, valori e id invariati), metrica singola aggiunta/cambiata/rimossa
+(il job rimosso non gira più), snapshot RunCat Neo, gruppo e figli
+aggiunti/rimossi, cambio ereditato dal gruppo con figlio che ridefinisce
+l'intervallo (non toccato), `enabled` su figlio e gruppo, modifica di sola
+presentazione senza riavvio (valore e normalizzazione conservati), cambio
+di programma durante una corsa (processo terminato, risultato vecchio mai
+visto), cambio di titolo durante una corsa (stessa corsa, titolo nuovo),
+JSON non valido e id duplicato (errori per file nel report), cartella di
+scoperta / package / figlio non leggibili (nulla applicato, nessuna
+pubblicazione), cartella assente, richiesta rientrante, avvisi 2.1.3
+conservati, Dashboard e Metrics Bar che seguono la ricarica, servizio
+fermo. Inoltre: `backendipc` (report, delta prima della risposta, client Qt
+asincrono, 4 richieste simultanee senza nuove corse, `aqtruncatctl custom
+reload` anche `--json`, rifiuto `Failed` con metriche invariate),
+`settingswindow` (pulsante, esito, rifiuto, risposta differita con pulsante
+spento), `apischema` (schema 6, report in entrambi i sensi),
+`plasmoidclient` (widget reale: report, gruppo e figlio, rimozione,
+rifiuto), `plasmoidlogic` (`reloadSummary`), `plasmoidpackage` (metodo
+consentito).
+
+Build pulita in una cartella nuova: 0 warning; ctest **55/55**;
+`packaging-versions` 2.1.6.
+
+Runtime isolato (bus privato, HOME temporanea, `aqtruncatd` e `aqtruncatctl`
+reali, gruppo di dadi con script `roll`): ricarica senza modifiche "0 added,
+0 changed, 0 removed, 3 unchanged."; nuova cartella figlio `d100` creata e
+riempita in un colpo, `d6` rinominato e intervallo del gruppo cambiato, in
+una sola ricarica: "1 added, 3 changed" (`dice`, `dice/d6`, `dice/d20`) e
+ogni figlio eseguito **una sola volta** (nessun riavvio per titolo o
+intervallo); JSON rotto in `d20`: errore elencato, uscita 0, `d20` resta in
+lista in errore; `chmod 000` sulla cartella del gruppo: uscita 1 "Cannot
+read the directory …", metriche invariate; backend chiuso con uscita 0,
+nessun processo rimasto.
+
+Da verificare nella sessione reale (non eseguito qui): il pulsante nella
+finestra Settings del tray installato e quello della configurazione del
+widget dopo il riavvio di plasmashell.

@@ -68,7 +68,9 @@ QJsonObject effectiveChild(const Inheritance &parent, const QJsonObject &child, 
 
 // The subdirectories of a group directory that hold a metric.json, sorted by
 // name, without directories already visited (canonical paths: symlink
-// cycles) and at most MaxGroupChildren.
-QStringList childConfigurations(const QString &groupDirectory, QStringList &visited);
+// cycles) and at most MaxGroupChildren. v2F1.6: a subdirectory that cannot
+// be read or entered sets *error (its children cannot be told apart from
+// removed ones).
+QStringList childConfigurations(const QString &groupDirectory, QStringList &visited, QString *error = nullptr);
 
 } // namespace aqtruncat::custommetrics

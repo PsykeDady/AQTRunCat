@@ -300,10 +300,25 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
     m_removeCustomMetric = new QPushButton(tr("Remove"), customBox);
     m_removeCustomMetric->setObjectName(QStringLiteral("removeCustomMetric"));
     m_removeCustomMetric->setEnabled(false);
+    // v2F1.6: rescans the files and applies what changed, without a restart.
+    m_reloadCustomMetrics = new QPushButton(QIcon::fromTheme(QStringLiteral("view-refresh")),
+                                            tr("Reload Custom Metrics"), customBox);
+    m_reloadCustomMetrics->setObjectName(QStringLiteral("reloadCustomMetrics"));
+    m_reloadCustomMetrics->setToolTip(tr("Read the Custom Metrics files again and apply the metrics and groups "
+                                         "that were added, changed or removed."));
+    m_reloadCustomMetrics->setEnabled(m_customMetrics != nullptr);
     customButtons->addWidget(addCustomMetric);
     customButtons->addWidget(m_removeCustomMetric);
     customButtons->addStretch();
+    customButtons->addWidget(m_reloadCustomMetrics);
     customLayout->addLayout(customButtons);
+    m_customMetricsReloadStatus = new QLabel(customBox);
+    m_customMetricsReloadStatus->setObjectName(QStringLiteral("customMetricsReloadStatus"));
+    m_customMetricsReloadStatus->setWordWrap(true);
+    m_customMetricsReloadStatus->setTextFormat(Qt::PlainText);
+    m_customMetricsReloadStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_customMetricsReloadStatus->hide();
+    customLayout->addWidget(m_customMetricsReloadStatus);
     root->addWidget(customBox);
 
     auto *barBox = group(tr("Metrics Bar"), this);
@@ -420,6 +435,15 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
         if (QTreeWidgetItem *item = m_customMetricFiles->currentItem())
             m_customMetrics->unregisterFile(item->data(0, Qt::UserRole).toString());
     });
+    connect(m_reloadCustomMetrics, &QPushButton::clicked, this, [this] {
+        if (!m_customMetrics)
+            return;
+        // One request at a time; the answer re-enables the button.
+        m_reloadCustomMetrics->setEnabled(false);
+        m_customMetricsReloadStatus->setText(tr("Reloading Custom Metrics…"));
+        m_customMetricsReloadStatus->show();
+        m_customMetrics->reloadConfigurations();
+    });
     connect(m_metricsBarEnabled, &QCheckBox::toggled, this, [this](bool checked) {
         if (!m_rebuilding)
             m_settings->setMetricsBarEnabled(checked);
@@ -444,6 +468,12 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
             rebuildCustomMetrics();
             rebuildMetricsBar();
         });
+        connect(m_customMetrics, &CustomMetricsModel::reloadFinished, this,
+                [this](const aqtruncat::custommetrics::ReloadReport &report) {
+                    m_reloadCustomMetrics->setEnabled(true);
+                    m_customMetricsReloadStatus->setText(aqtruncat::custommetrics::reloadSummary(report));
+                    m_customMetricsReloadStatus->show();
+                });
     }
     if (m_claude) {
         connect(m_claudeEnabled, &QCheckBox::toggled, this, [this](bool checked) {
@@ -888,7 +918,16 @@ void SettingsWindow::rebuildCustomMetrics()
         else if (source.state == aqtruncat::custommetrics::State::Error)
             item->setIcon(3, QIcon::fromTheme(QStringLiteral("dialog-error"),
                                               style()->standardIcon(QStyle::SP_MessageBoxCritical)));
-        item->setToolTip(3, source.message);
+        else if (!source.warnings.isEmpty())
+            item->setIcon(3, QIcon::fromTheme(QStringLiteral("dialog-warning"),
+                                              style()->standardIcon(QStyle::SP_MessageBoxWarning)));
+        // v2F1.6: the warnings (the metric still works) under its message.
+        QStringList status;
+        if (!source.message.isEmpty())
+            status.append(source.message);
+        for (const QString &warning : source.warnings)
+            status.append(tr("Warning: %1").arg(warning));
+        item->setToolTip(3, status.join(u'\n'));
     }
     m_customMetricFiles->setRootIsDecorated(!groups.isEmpty());
     m_customMetricFiles->expandAll();
