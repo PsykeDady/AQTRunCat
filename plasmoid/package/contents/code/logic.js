@@ -98,6 +98,29 @@ function itemRows(metric) {
     return rows;
 }
 
+// v2F1.6 (schema 6): a Custom Metric's own warnings (a missing icon): the
+// metric still works; they are shown under it.
+function sourceWarnings(metric) {
+    var list = metric && Array.isArray(metric.warnings) ? metric.warnings : [];
+    return list.filter(function (warning) { return typeof warning === "string" && warning.length > 0; });
+}
+
+// v2F1.6: what the configuration page lists, as the tray's Settings: the
+// metric's own warnings, then its values outside their range (whose item
+// carries the reason in its detail).
+function metricWarnings(metric) {
+    var warnings = sourceWarnings(metric);
+    if (!metric || metric.enabled === false || stateOf(metric) === "error" || stateOf(metric) === "unavailable")
+        return warnings;
+    var items = Array.isArray(metric.items) ? metric.items : [];
+    for (var i = 0; i < items.length; ++i) {
+        var item = items[i] || {};
+        if (typeof item.normalized === "number" && (item.normalized < 0 || item.normalized > 1))
+            warnings.push((items.length === 1 ? "value" : item.title) + " " + item.formattedValue + " (" + item.detail + ")");
+    }
+    return warnings;
+}
+
 // Theme icon name or file URL of a metric icon, "" when there is none
 // ("symbol" icons are SF Symbols names: no Plasma equivalent).
 function iconSource(metric) {
@@ -129,7 +152,8 @@ function metricRow(metric) {
         warning: false,
         icon: iconSource(metric),
         itemsJson: "[]",
-        group: false
+        group: false,
+        warnings: sourceWarnings(metric).join("\n")
     };
     var items = itemRows(metric);
     if (items.length === 1 && row.state === "ok") {
@@ -230,6 +254,13 @@ function groupCells(group, metrics) {
                 break;
             }
         }
+        // Under the cell: its own warnings, then its items' (a value
+        // outside its range).
+        var warnings = sourceWarnings(metric);
+        for (var w = 0; w < items.length && state === "ok"; ++w) {
+            if (items[w].warning && items[w].detail.length > 0)
+                warnings.push(items[w].detail);
+        }
         // A child's own icon (not the group's) is shown in its cell.
         var icon = iconSource(metric);
         cells.push({
@@ -238,7 +269,8 @@ function groupCells(group, metrics) {
             value: value,
             fraction: bar,
             state: state,
-            detail: state === "ok" ? "" : detailText(metric)
+            detail: state === "ok" ? "" : detailText(metric),
+            warnings: warnings
         });
     }
     return cells;

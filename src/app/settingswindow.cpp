@@ -4,6 +4,7 @@
 #include "custommetricsmodel.h"
 #include "metricsbarmodel.h"
 #include "providerintegration.h"
+#include "custommetrics/commandmetric.h"
 
 #include <QCheckBox>
 #include <QCloseEvent>
@@ -918,14 +919,19 @@ void SettingsWindow::rebuildCustomMetrics()
         else if (source.state == aqtruncat::custommetrics::State::Error)
             item->setIcon(3, QIcon::fromTheme(QStringLiteral("dialog-error"),
                                               style()->standardIcon(QStyle::SP_MessageBoxCritical)));
-        else if (!source.warnings.isEmpty())
+        // v2F1.6: the warnings (the metric still works) under its message:
+        // its own, then its values outside their range.
+        QStringList warnings = source.warnings;
+        if (source.snapshot && source.enabled && source.state != aqtruncat::custommetrics::State::Error
+            && source.state != aqtruncat::custommetrics::State::Unavailable)
+            warnings += aqtruncat::custommetrics::valueWarnings(*source.snapshot);
+        if (source.state != aqtruncat::custommetrics::State::Error && source.enabled && !warnings.isEmpty())
             item->setIcon(3, QIcon::fromTheme(QStringLiteral("dialog-warning"),
                                               style()->standardIcon(QStyle::SP_MessageBoxWarning)));
-        // v2F1.6: the warnings (the metric still works) under its message.
         QStringList status;
         if (!source.message.isEmpty())
             status.append(source.message);
-        for (const QString &warning : source.warnings)
+        for (const QString &warning : std::as_const(warnings))
             status.append(tr("Warning: %1").arg(warning));
         item->setToolTip(3, status.join(u'\n'));
     }

@@ -233,22 +233,39 @@ CommandParseResult parseCommandFile(const QString &path)
     return parseCommandJson(bytes, path);
 }
 
-QStringList valueWarnings(const Snapshot &snapshot, const CommandDefinition *definition)
+namespace {
+bool outOfRange(const Item &item)
+{
+    return item.normalizedValue && (*item.normalizedValue < 0.0 || *item.normalizedValue > 1.0);
+}
+
+QString outOfRangeDetail(double minimum, double maximum)
+{
+    return QStringLiteral("outside the range %1–%2").arg(QString::number(minimum), QString::number(maximum));
+}
+}
+
+void markValuesOutOfRange(Snapshot &snapshot)
+{
+    for (Item &item : snapshot.metrics) {
+        if (!outOfRange(item) || item.detail.contains(QLatin1String("outside the range")))
+            continue;
+        item.warning = true;
+        const QString reason = QStringLiteral("normalizedValue %1 %2")
+                                   .arg(QString::number(*item.normalizedValue), outOfRangeDetail(0, 1));
+        item.detail = item.detail.isEmpty() ? reason : item.detail + QStringLiteral(" · ") + reason;
+    }
+}
+
+QStringList valueWarnings(const Snapshot &snapshot)
 {
     QStringList warnings;
-    const bool scalar = definition && definition->output == CommandOutput::Scalar && definition->normalizedRange;
     for (const Item &item : snapshot.metrics) {
-        if (!item.normalizedValue || (*item.normalizedValue >= 0.0 && *item.normalizedValue <= 1.0))
-            continue;
-        if (scalar) {
-            const NormalizedRange &range = *definition->normalizedRange;
-            warnings.append(QStringLiteral("value %1 is outside display.normalizedRange %2–%3")
-                                .arg(item.formattedValue, QString::number(range.minimum),
-                                     QString::number(range.maximum)));
-        } else {
-            warnings.append(QStringLiteral("item \"%1\": normalizedValue %2 is outside 0–1")
-                                .arg(item.title, QString::number(*item.normalizedValue)));
-        }
+        // Named by its item only when there are several.
+        if (outOfRange(item))
+            warnings.append(QStringLiteral("%1 %2 (%3)")
+                                .arg(snapshot.metrics.size() == 1 ? QStringLiteral("value") : item.title,
+                                     item.formattedValue, item.detail));
     }
     return warnings;
 }
@@ -275,6 +292,7 @@ ScalarResult snapshotFromCommandOutput(const CommandDefinition &definition,
         parsed.snapshot->symbol = definition.legacySymbol;
         parsed.snapshot->icon = definition.icon;
         parsed.snapshot->showBar = definition.showBar;
+        markValuesOutOfRange(*parsed.snapshot);
         result.snapshot = std::move(parsed.snapshot);
         return result;
     }
@@ -314,10 +332,9 @@ ScalarResult snapshotFromCommandOutput(const CommandDefinition &definition,
         const auto &range = *definition.normalizedRange;
         item.normalizedValue = (value - range.minimum) / (range.maximum - range.minimum);
         // v2F1.6: still a value, with a warning; the bar is clamped.
-        if (*item.normalizedValue < 0.0 || *item.normalizedValue > 1.0) {
+        if (outOfRange(item)) {
             item.warning = true;
-            item.detail = QStringLiteral("outside the range %1–%2")
-                              .arg(QString::number(range.minimum), QString::number(range.maximum));
+            item.detail = outOfRangeDetail(range.minimum, range.maximum);
         }
     }
 

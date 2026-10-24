@@ -771,35 +771,48 @@ Due livelli, scelti per non cambiare la politica già stabilita da M6 e 2.1.5
 
 ### Avvisi (la metrica continua a funzionare)
 
-Alcuni problemi non fermano una metrica ma vanno segnalati
-(`Source::warnings`, campo `warnings` dell'API, voce `warnings` del report):
+Alcuni problemi non fermano una metrica ma vanno segnalati. Sono di due
+tipi:
 
-- **icona mancante**: un `symbol` di tipo `file` che non esiste o non è
-  leggibile ("icon file … does not exist" / "cannot be read"), oppure un
-  `symbol` di tipo `theme` che non si trova in nessun tema di icone
+- **avvisi della sorgente** (`Source::warnings`, campo `warnings[]`
+  dell'API): oggi l'**icona mancante**. Un `symbol` di tipo `file` che non
+  esiste o non è leggibile ("icon file … does not exist" / "cannot be
+  read"), oppure un `symbol` di tipo `theme` che non si trova in nessun tema
   installato ("icon "…" is not in any installed icon theme"). Il backend non
   ha una sessione grafica: il nome viene cercato come prevede la specifica
   freedesktop (`~/.icons`, `$XDG_DATA_HOME/icons`, `$XDG_DATA_DIRS/*/icons`,
   le cartelle elencate da ogni `index.theme`, `/usr/share/pixmaps`, estensioni
   png/svg/svgz/xpm) ma in **tutti** i temi, perché ogni frontend può usarne
   uno diverso; i ripieghi di Qt/KDE sul nome (es. senza l'ultimo `-…`) non
-  contano. Il controllo viene rifatto a ogni ricarica: un'icona aggiunta dopo
-  si trova alla ricarica successiva (il file dell'icona non è osservato). I
-  frontend mostrano la loro icona di ripiego come prima.
-- **valore fuori range**: un comando scalare con `display.normalizedRange`
-  che stampa un valore fuori dall'intervallo ("value 10 is outside
-  display.normalizedRange 0–1"); per snapshot e output snapshot, un
-  `normalizedValue` fuori da 0–1. Il valore resta mostrato, la barra viene
-  limitata (piena o vuota) come prima; l'elemento scalare ha `warning` e il
-  dettaglio "outside the range 0–1", quindi Dashboard e widget mostrano
-  l'icona di avviso. Viene ricalcolato a ogni corsa.
+  contano. Il controllo si rifà a ogni ricarica: un'icona aggiunta dopo si
+  trova alla ricarica successiva (il file dell'icona non è osservato). I
+  frontend usano la loro icona di ripiego, come prima.
+- **avvisi di valore** (sulla voce): un comando scalare con
+  `display.normalizedRange` che stampa un valore fuori dall'intervallo, o un
+  `normalizedValue` fuori da 0–1 in uno snapshot. Il valore resta mostrato,
+  la barra viene limitata (piena o vuota); la voce ha `warning` e nel
+  dettaglio "outside the range 0–1" (per uno snapshot: "normalizedValue 1.5
+  outside the range 0–1", dopo l'eventuale dettaglio del produttore).
+  Ricalcolato a ogni corsa.
 
-Ogni avviso finisce nel log una volta, quando compare (un valore che resta
-fuori range non viene riscritto a ogni corsa). Settings mostra l'icona di
-avviso nella colonna di stato e gli avvisi nel tooltip ("Warning: …");
-`aqtruncatctl metrics` li stampa sotto la metrica ("! …"), `custom reload`
-come righe "warning: nome: messaggio"; il riepilogo aggiunge "N with
-warnings: …". Gli avvisi non contano come modifica della configurazione.
+Dove si vedono (sempre sotto la metrica, con l'icona di avviso, come il
+dettaglio di una voce):
+
+- **Dashboard Qt**: avvisi della sorgente sotto i valori della card (e sotto
+  il titolo di un gruppo); nelle celle dei gruppi, sotto la cella, gli avvisi
+  del figlio e quelli dei suoi valori.
+- **Widget, popup**: stesse posizioni (riga della metrica, celle dei gruppi).
+- **Widget, configurazione** e **Settings del tray**: tutti gli avvisi della
+  metrica, inclusi quelli di valore ("Warning: value 10 (outside the range
+  0–1)"); Settings con l'icona nella colonna di stato e il testo nel tooltip.
+- **CLI**: `aqtruncatctl metrics` stampa "! …" sotto la metrica (e le voci
+  con "!" e il dettaglio); `custom reload` righe "warning: nome: messaggio".
+- **Report di ricarica**: voce `warnings` (avvisi della sorgente e di valore),
+  riepilogo "N with warnings: …".
+- **Log**: una riga quando l'avviso compare (un valore che resta fuori range
+  non viene riscritto a ogni corsa).
+
+Gli avvisi non contano come modifica della configurazione.
 
 ### Processi e concorrenza
 

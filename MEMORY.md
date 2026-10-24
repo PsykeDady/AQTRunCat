@@ -1667,15 +1667,19 @@ time" refers to the state when the feature was finished.
   metrics synchronously before replying; `Failed` on refusal), capability
   `custom-metrics-reload`, `api::reloadReport`/`reloadReportFromJson`
   (entries `{id: custom:<path>, sourceId, name, message}`; also `warnings`).
-- Warnings (user request after the first 2.1.6 pass): `Source::warnings`
-  (API `warnings[]`, report `warnings`) for what does not stop a source:
-  missing/unreadable icon file, theme icon not in any installed theme
-  (`IconThemeLookup`, filesystem lookup: the daemon is QtCore only), value
-  outside `display.normalizedRange` (`valueWarnings`; the scalar item gets
-  `warning` + detail "outside the range a–b"). Icon check per reload
-  (`m_iconWarnings`), value check per run (`updateWarnings` in
-  `setOutcome`); logged once when they appear. Settings: warning icon +
-  "Warning: …" tooltip; ctl: "! …" under the metric, "warning:" lines.
+- Warnings (user requests after the first 2.1.6 pass): never errors, the
+  metric keeps working. Source level `Source::warnings` (API `warnings[]`):
+  missing/unreadable icon file, theme icon in no installed theme
+  (`IconThemeLookup`, filesystem lookup: the daemon is QtCore only), checked
+  per reload (`m_iconWarnings`, logged on change). Item level: a value
+  outside `display.normalizedRange` (scalar) or a snapshot `normalizedValue`
+  outside 0–1 → `warning` + detail "outside the range a–b"
+  (`markValuesOutOfRange`); `valueWarnings()` gives "value 10 (outside the
+  range 0–1)" for Settings/report/log (`CommandJob::outOfRange` logs once).
+  Shown under the metric: Qt Dashboard (`customSourceWarning_i_n`, group
+  cells `customChildWarning_i_c_n`), widget popup (`warnings` row role,
+  cell `warnings`), widget config page and Settings (`Logic.metricWarnings`
+  / tooltip "Warning: …"), ctl "! …"; report `warnings`.
 - `BackendClient::reloadConfigurations`: async (30 s), coalesced
   (`m_reloading`). Settings: button `reloadCustomMetrics` (right of
   Add/Remove), label `customMetricsReloadStatus` (plain text, wraps).

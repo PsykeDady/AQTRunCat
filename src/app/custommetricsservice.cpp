@@ -83,6 +83,7 @@ struct CustomMetricsService::CommandJob {
     // The last result of this job, for logging transitions only.
     State lastOutcome = State::Pending;
     QString lastMessage;
+    bool outOfRange = false; // v2F1.6: the last result had values outside their range
 };
 
 CustomMetricsService::CustomMetricsService(aqtruncat::AppSettings *settings,
@@ -403,6 +404,7 @@ ReloadReport CustomMetricsService::reload(bool finalAttempt)
                 source.configuredEnabled = false;
             } else if (parsed.snapshot) {
                 source.snapshot = parsed.snapshot;
+                markValuesOutOfRange(*source.snapshot);
                 source.state = State::Available;
             } else {
                 source.message = parsed.error;
@@ -459,27 +461,42 @@ ReloadReport CustomMetricsService::reload(bool finalAttempt)
             report.removed.append({old.id, reportName(old), {}});
     }
 
-    QHash<QString, QStringList> warningsBefore;
-    for (const Source &old : std::as_const(m_sources))
-        warningsBefore.insert(old.id, old.warnings);
+    QSet<QString> outOfRangeBefore;
+    for (const Source &old : std::as_const(m_sources)) {
+        if (old.snapshot && !valueWarnings(*old.snapshot).isEmpty())
+            outOfRangeBefore.insert(old.id);
+    }
     const QHash<QString, QString> iconWarningsBefore = std::exchange(m_iconWarnings, {});
     m_sources = std::move(next);
     syncCommandJobs(commandDefinitions);
-    // v2F1.6: what does not stop a source: logged when it appears, listed
-    // in the report (every reload, like the errors) until it is fixed.
+    // v2F1.6: what does not stop a source, logged when it appears and listed
+    // by every reload (like the errors) until it is fixed: the source's own
+    // warnings (its icon), then its values outside their range (on the items).
     IconThemeLookup themes;
     for (Source &source : m_sources) {
+        source.warnings.clear();
         if (source.snapshot && source.snapshot->icon) {
             const QString warning = iconWarning(*source.snapshot->icon, themes);
-            if (!warning.isEmpty())
+            if (!warning.isEmpty()) {
                 m_iconWarnings.insert(source.id, warning);
-            if (!warning.isEmpty() && iconWarningsBefore.value(source.id) != warning)
-                qCWarning(lcCustomMetrics).noquote()
-                    << QStringLiteral("custom metric \"%1\": %2").arg(reportName(source), warning);
+                source.warnings.append(warning);
+                if (iconWarningsBefore.value(source.id) != warning)
+                    qCWarning(lcCustomMetrics).noquote()
+                        << QStringLiteral("custom metric \"%1\": %2").arg(reportName(source), warning);
+            }
         }
-        updateWarnings(source, warningsBefore.value(source.id));
         for (const QString &warning : std::as_const(source.warnings))
             report.warnings.append({source.id, reportName(source), warning});
+        // Only values on show: not the last ones of a failed or unavailable run.
+        if (!source.snapshot || source.state == State::Error || source.state == State::Unavailable)
+            continue;
+        const QStringList values = valueWarnings(*source.snapshot);
+        for (const QString &warning : values)
+            report.warnings.append({source.id, reportName(source), warning});
+        // A command's runs log their own (setOutcome).
+        if (!values.isEmpty() && source.type == SourceType::Snapshot && !outOfRangeBefore.contains(source.id))
+            qCWarning(lcCustomMetrics).noquote()
+                << QStringLiteral("custom metric \"%1\": %2").arg(reportName(source), values.join(QStringLiteral("; ")));
     }
     rebuildWatches();
     publish();
@@ -858,8 +875,15 @@ void CustomMetricsService::setOutcome(Source &source, State state, const QString
     if (job != m_commandJobs.end()) {
         job->second->lastOutcome = state;
         job->second->lastMessage = message;
+        // v2F1.6: logged when its values leave their range, not on each run
+        // outside it.
+        const QStringList values = state == State::Available && source.snapshot
+            ? valueWarnings(*source.snapshot) : QStringList();
+        if (!values.isEmpty() && !job->second->outOfRange)
+            qCWarning(lcCustomMetrics).noquote()
+                << QStringLiteral("custom metric \"%1\": %2").arg(name, values.join(QStringLiteral("; ")));
+        job->second->outOfRange = !values.isEmpty();
     }
-    updateWarnings(source, source.warnings);
 }
 
 void CustomMetricsService::disable(Source &source, const QString &title, const std::optional<QString> &symbol,
@@ -1053,25 +1077,6 @@ void CustomMetricsService::appendChildren(const QString &parentId, const QString
                 child.snapshot.reset();
         }
         next.append(std::move(child));
-    }
-}
-
-void CustomMetricsService::updateWarnings(Source &source, const QStringList &before)
-{
-    source.warnings.clear();
-    const QString icon = m_iconWarnings.value(source.id);
-    if (!icon.isEmpty())
-        source.warnings.append(icon);
-    // Only for values on show: not the last ones of a failed or unavailable run.
-    if (source.snapshot && source.state != State::Error && source.state != State::Unavailable) {
-        const auto job = m_commandJobs.find(source.id);
-        const QStringList values = valueWarnings(*source.snapshot,
-                                                 job != m_commandJobs.end() ? &job->second->definition : nullptr);
-        // Logged when values leave their range, not on each run outside it.
-        if (!values.isEmpty() && before.size() <= (icon.isEmpty() ? 0 : 1))
-            qCWarning(lcCustomMetrics).noquote()
-                << QStringLiteral("custom metric \"%1\": %2").arg(reportName(source), values.join(QStringLiteral("; ")));
-        source.warnings += values;
     }
 }
 

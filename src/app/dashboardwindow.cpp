@@ -6,6 +6,7 @@
 #include "metrics/uptime.h"
 
 #include <QCloseEvent>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QFont>
 #include <QGridLayout>
@@ -50,6 +51,30 @@ QLabel *label(const QString &text, QWidget *parent, const char *name = nullptr)
         result->setObjectName(QLatin1String(name));
     result->setTextInteractionFlags(Qt::TextSelectableByMouse);
     return result;
+}
+
+// v2F1.6: a warning under a metric: the warning icon, then the reason
+// (smaller, wrapped), as an item's detail under its value.
+QWidget *warningLine(const QString &text, QWidget *parent, int iconSize, const QString &name)
+{
+    auto *line = new QWidget(parent);
+    line->setObjectName(name);
+    auto *layout = new QHBoxLayout(line);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
+    auto *icon = new QLabel(line);
+    icon->setPixmap(QIcon::fromTheme(QStringLiteral("dialog-warning"),
+                                     line->style()->standardIcon(QStyle::SP_MessageBoxWarning))
+                        .pixmap(iconSize, iconSize));
+    icon->setAccessibleName(QCoreApplication::translate("DashboardWindow", "Warning"));
+    layout->addWidget(icon, 0, Qt::AlignTop);
+    auto *reason = label(text, line);
+    QFont secondary = reason->font();
+    secondary.setPointSizeF(secondary.pointSizeF() * 0.9);
+    reason->setFont(secondary);
+    reason->setWordWrap(true);
+    layout->addWidget(reason, 1);
+    return line;
 }
 
 QWidget *twoValues(const QString &leftTitle, QLabel **leftValue, const char *leftName,
@@ -783,6 +808,10 @@ QWidget *DashboardWindow::customCard(const aqtruncat::custommetrics::Source &sou
             ++itemIndex;
         }
     }
+    // v2F1.6: the source's own warnings (a missing icon) under its values.
+    for (int warning = 0; warning < source.warnings.size(); ++warning)
+        cardLayout->addWidget(warningLine(source.warnings.at(warning), card, 16,
+                                          QStringLiteral("customSourceWarning_%1_%2").arg(index).arg(warning)));
 
     QString footer;
     switch (shownState) {
@@ -855,6 +884,9 @@ QWidget *DashboardWindow::customGroupCard(const aqtruncat::custommetrics::Source
     headingLayout->addWidget(title);
     headingLayout->addStretch();
     cardLayout->addWidget(headingRow);
+    for (int warning = 0; warning < group.warnings.size(); ++warning)
+        cardLayout->addWidget(warningLine(group.warnings.at(warning), card, 16,
+                                          QStringLiteral("customSourceWarning_%1_%2").arg(index).arg(warning)));
 
     auto *cells = new QWidget(card);
     cells->setObjectName(QStringLiteral("customGroupCells_%1").arg(index));
@@ -932,6 +964,18 @@ QWidget *DashboardWindow::customGroupCard(const aqtruncat::custommetrics::Source
             setProgress(bar, std::clamp(*normalized, 0.0, 1.0) * 100.0);
             cellLayout->addWidget(bar);
         }
+        // v2F1.6: under the cell, as under a single card: the child's own
+        // warnings, then its items' (a value outside its range).
+        QStringList warnings = member->warnings;
+        if (snapshot && !failed) {
+            for (const aqtruncat::custommetrics::Item &item : snapshot->metrics) {
+                if (item.warning && !item.detail.isEmpty())
+                    warnings.append(item.detail);
+            }
+        }
+        for (int warning = 0; warning < warnings.size(); ++warning)
+            cellLayout->addWidget(warningLine(warnings.at(warning), cell, 12,
+                                              QStringLiteral("customChildWarning_%1_%2_%3").arg(index).arg(number).arg(warning)));
         // The state and its reason, as on a single card's status line.
         QString tip;
         switch (state) {
@@ -971,7 +1015,7 @@ QString DashboardWindow::customCardKey(const aqtruncat::custommetrics::Source &s
 {
     QString message;
     const aqtruncat::custommetrics::State state = presentedState(source, &message);
-    QStringList parts{source.path, QString::number(int(state)), message};
+    QStringList parts{source.path, QString::number(int(state)), message, source.warnings.join(u'\n')};
     if (source.type == aqtruncat::custommetrics::SourceType::Group) {
         // A group card shows its members: any change of theirs changes it.
         for (const aqtruncat::custommetrics::Source *member : groupMembers(source))

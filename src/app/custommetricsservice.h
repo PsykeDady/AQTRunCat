@@ -78,7 +78,6 @@ private:
     void disable(aqtruncat::custommetrics::Source &source, const QString &title,
                  const std::optional<QString> &symbol,
                  const std::optional<aqtruncat::custommetrics::IconReference> &icon);
-    void updateWarnings(aqtruncat::custommetrics::Source &source, const QStringList &before);
     void publish();
     void stopCommand(CommandJob &job);
     void stopCommands();
@@ -101,7 +100,7 @@ private:
     QString m_reloadFailure;
     QString m_loggedFailure;
     quint64 m_nextRun = 0;
-    // v2F1.6: each source's icon warning, checked by every reload (an icon
-    // installed later is found by the next one).
+    // v2F1.6: each source's icon warning (Source::warnings), checked by
+    // every reload (an icon installed later is found by the next one).
     QHash<QString, QString> m_iconWarnings;
 };

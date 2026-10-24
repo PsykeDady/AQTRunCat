@@ -336,6 +336,12 @@ TestCase {
         compare(cells[2].state, "error");
         compare(cells[2].detail, "boom");
         compare(cells[0].icon, ""); // no icon of its own
+        compare(cells[0].warnings, []);
+        // v2F1.6: a cell's warnings: its own, then a value outside its range.
+        const warned = Logic.metricRows([group, child(6, { warnings: ["icon file /m/d6.svg does not exist"],
+            items: [{ title: "D6", formattedValue: "10", detail: "outside the range 0–1", normalized: 10, warning: true }] })]);
+        compare(JSON.parse(warned[0].itemsJson)[0].warnings,
+                ["icon file /m/d6.svg does not exist", "outside the range 0–1"]);
         // A child's own icon (not the group's) is in its cell.
         const withIcons = [Object.assign({}, group, { icon: { type: "theme", value: "roll" } }),
                            child(6, { icon: { type: "theme", value: "roll" } }),
@@ -555,6 +561,23 @@ TestCase {
                 "7.2 GiB / 15.5 GiB used\nCurrent session: resets 18:00");
         compare(Logic.rowToolTip("", [], false), "");
         compare(Logic.rowToolTip(undefined, null, false), "");
+    }
+
+    // v2F1.6: a metric's own warnings travel with its row (shown under it);
+    // the configuration page also lists its values outside their range.
+    function test_warnings() {
+        const wrongIcon = metric({ id: "custom:/m/a.json", category: "custom", kind: "command", title: "WrongIcon",
+                                   warnings: ["icon file /m/d10.svg does not exist"],
+                                   items: [{ title: "WrongIcon", formattedValue: "1", detail: "", normalized: 1, warning: false }] });
+        compare(Logic.metricRow(wrongIcon).warnings, "icon file /m/d10.svg does not exist");
+        compare(Logic.metricRow(metric({})).warnings, "");
+        compare(Logic.metricWarnings(wrongIcon), ["icon file /m/d10.svg does not exist"]);
+        const wrongRange = metric({ id: "custom:/m/b.json", category: "custom", kind: "command", title: "WrongRange",
+                                    items: [{ title: "WrongRange", formattedValue: "10", detail: "outside the range 0–1",
+                                              normalized: 10, warning: true }] });
+        compare(Logic.metricWarnings(wrongRange), ["value 10 (outside the range 0–1)"]);
+        compare(Logic.metricWarnings(Object.assign({}, wrongRange, { state: "error" })), []);
+        compare(Logic.metricWarnings(null), []);
     }
 
     // v2F1.6: the reload feedback matches the tray's Settings.

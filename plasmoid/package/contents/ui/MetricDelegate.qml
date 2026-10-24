@@ -29,6 +29,8 @@ ColumnLayout {
     required property string itemsJson
     // v2F1.5: a group: items are its children's compact cells.
     required property bool group
+    // v2F1.6: the metric's own warnings (a missing icon), one per line.
+    required property string warnings
     property bool showDetails: true
 
     readonly property var items: {
@@ -155,6 +157,28 @@ ColumnLayout {
                     to: 1
                     value: cell.modelData.fraction === null ? 0 : cell.modelData.fraction
                 }
+                // v2F1.6: the child's warnings under it, as under a metric.
+                Repeater {
+                    model: cell.modelData.warnings || []
+                    RowLayout {
+                        required property string modelData
+                        spacing: Kirigami.Units.smallSpacing
+                        Kirigami.Icon {
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            Layout.alignment: Qt.AlignTop
+                            source: "dialog-warning"
+                        }
+                        PlasmaComponents.Label {
+                            Layout.maximumWidth: Kirigami.Units.gridUnit * 14
+                            text: parent.modelData
+                            textFormat: Text.PlainText
+                            wrapMode: Text.Wrap
+                            font: Kirigami.Theme.smallFont
+                            opacity: 0.7
+                        }
+                    }
+                }
             }
         }
     }
@@ -204,6 +228,31 @@ ColumnLayout {
                 Layout.fillWidth: true
                 visible: text.length > 0 && (metric.showDetails || item.modelData.warning)
                 text: item.modelData.detail
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                font: Kirigami.Theme.smallFont
+                opacity: 0.7
+            }
+        }
+    }
+
+    // v2F1.6: the metric's own warnings (a missing icon), always on screen:
+    // it still works, the reason is under it as a value's warning is.
+    Repeater {
+        model: metric.warnings.length > 0 ? metric.warnings.split("\n") : []
+        RowLayout {
+            required property string modelData
+            Layout.fillWidth: true
+            spacing: Kirigami.Units.smallSpacing
+            Kirigami.Icon {
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                Layout.alignment: Qt.AlignTop
+                source: "dialog-warning"
+            }
+            PlasmaComponents.Label {
+                Layout.fillWidth: true
+                text: parent.modelData
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 font: Kirigami.Theme.smallFont

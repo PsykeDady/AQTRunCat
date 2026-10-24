@@ -10,6 +10,7 @@
 #include "app/dashboardwindow.h"
 #include "app/metricsbarids.h"
 #include "app/metricsbarmodel.h"
+#include "custommetrics/commandmetric.h"
 #include "custommetrics/metricgroup.h"
 
 #include <QApplication>
@@ -668,7 +669,8 @@ private slots:
         QCOMPARE(byConfiguredId(service, QStringLiteral("theme"))->warnings,
                  QStringList{QStringLiteral("icon \"aqtruncat-test-absent\" is not in any installed icon theme")});
         const Source *outside = byConfiguredId(service, QStringLiteral("wrong-range"));
-        QCOMPARE(outside->warnings, QStringList{QStringLiteral("value 10 is outside display.normalizedRange 0–1")});
+        QVERIFY(outside->warnings.isEmpty()); // a value's warning is its item's
+        QCOMPARE(valueWarnings(*outside->snapshot), QStringList{QStringLiteral("value 10 (outside the range 0–1)")});
         QCOMPARE(outside->snapshot->metrics.first().formattedValue, QStringLiteral("10")); // still shown
         QVERIFY(outside->snapshot->metrics.first().warning);
         QCOMPARE(outside->snapshot->metrics.first().detail, QStringLiteral("outside the range 0–1"));
@@ -692,7 +694,7 @@ private slots:
         QVERIFY(byConfiguredId(service, QStringLiteral("wrong-icon"))->warnings.isEmpty());
         QTRY_VERIFY_WITH_TIMEOUT(settled(service, QStringLiteral("wrong-range")), 5000);
         outside = byConfiguredId(service, QStringLiteral("wrong-range"));
-        QVERIFY(outside->warnings.isEmpty());
+        QVERIFY(valueWarnings(*outside->snapshot).isEmpty());
         QVERIFY(!outside->snapshot->metrics.first().warning);
         service.stop();
 

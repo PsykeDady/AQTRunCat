@@ -476,6 +476,13 @@ un rifiuto con `Logic.reloadFailure`). Le metriche nuove o rimosse arrivano
 al popup con il normale delta `MetricsChanged`, prima della risposta: nessun
 riavvio di plasmashell né del widget. Il widget non legge mai i file.
 
+Avvisi (2.1.6): una metrica con icona mancante resta attiva; il popup mostra
+l'avviso sotto la riga (`warnings` della metrica, ruolo `warnings` del
+modello) e sotto la cella di un gruppo (con il valore fuori range della
+cella); la pagina di configurazione li elenca sotto ogni file
+(`Logic.metricWarnings`, anche i valori fuori range). Vedi
+`docs/custom-metrics-commands.md` §12, "Avvisi".
+
 ## 16. Limitazioni note
 
 - Il widget dipende dalla D-Bus activation (nessun ripiego di avvio dal

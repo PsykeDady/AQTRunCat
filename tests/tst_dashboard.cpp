@@ -475,6 +475,33 @@ private slots:
         QCOMPARE(child<QWidget>(window, "customChild_0_1")->toolTip(), QStringLiteral("Error: Command exited with status 1."));
         QCOMPARE(child<QLabel>(window, "customChildValue_0_0")->text(), QStringLiteral("3"));
 
+        // v2F1.6: warnings under the group's title and under a cell (the
+        // child's own, then a value outside its range); the metric works.
+        sources[0].warnings = {QStringLiteral("icon file /m/dice/dice.svg does not exist")};
+        sources[1].warnings = {QStringLiteral("icon \"roll\" is not in any installed icon theme")};
+        sources[1].snapshot->metrics.first().warning = true;
+        sources[1].snapshot->metrics.first().detail = QStringLiteral("outside the range 0–1");
+        window.updateCustomMetrics(sources);
+        const auto texts = [&](const char *name) {
+            QStringList list;
+            for (const QLabel *text : child<QWidget>(window, name)->findChildren<QLabel *>())
+                if (!text->text().isEmpty())
+                    list.append(text->text());
+            return list;
+        };
+        QCOMPARE(texts("customSourceWarning_0_0"), QStringList{QStringLiteral("icon file /m/dice/dice.svg does not exist")});
+        QCOMPARE(texts("customChildWarning_0_0_0"), QStringList{QStringLiteral("icon \"roll\" is not in any installed icon theme")});
+        QCOMPARE(texts("customChildWarning_0_0_1"), QStringList{QStringLiteral("outside the range 0–1")});
+        QCOMPARE(child<QLabel>(window, "customChildValue_0_0")->text(), QStringLiteral("3"));
+        QVERIFY(!window.findChild<QWidget *>(QStringLiteral("customChildWarning_0_1_0")));
+        sources[0].warnings.clear();
+        sources[1].warnings.clear();
+        sources[1].snapshot->metrics.first().warning = false;
+        sources[1].snapshot->metrics.first().detail.clear();
+        window.updateCustomMetrics(sources);
+        QVERIFY(!window.findChild<QWidget *>(QStringLiteral("customSourceWarning_0_0")));
+        QVERIFY(!window.findChild<QWidget *>(QStringLiteral("customChildWarning_0_0_0")));
+
         // Disabled children are left out; none left: no card at all.
         sources[1].enabled = false;
         window.updateCustomMetrics(sources);
@@ -605,6 +632,14 @@ private slots:
         QVERIFY(!icon->pixmap().isNull());
         QCOMPARE(icon->toolTip(), stale.detail);
         QVERIFY(!window.findChild<QLabel *>(QStringLiteral("customWarning_0_1")));
+        // v2F1.6: the source's own warning (a missing icon) under its values.
+        QVERIFY(!window.findChild<QWidget *>(QStringLiteral("customSourceWarning_0_0")));
+        warned.warnings = {QStringLiteral("icon file /m/claude.svg does not exist")};
+        window.updateCustomMetrics({warned});
+        const QWidget *line = child<QWidget>(window, "customSourceWarning_0_0");
+        QVERIFY(line->findChildren<QLabel *>().size() == 2);
+        QCOMPARE(line->findChildren<QLabel *>().last()->text(), QStringLiteral("icon file /m/claude.svg does not exist"));
+        QVERIFY(!line->findChildren<QLabel *>().first()->pixmap().isNull());
 
         // Only the provider: the Custom Metrics heading disappears.
         window.updateCustomMetrics({claude});

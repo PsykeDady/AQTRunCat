@@ -275,38 +275,66 @@ KCM.SimpleKCM {
         }
         Repeater {
             model: page.customSources
-            RowLayout {
+            ColumnLayout {
+                id: customSource
                 required property var modelData
-                // v2F1.2 / v2F1.5: the file's own "enabled" (a checked child of a
-                // disabled group stays inactive, shown faded).
-                readonly property bool own: modelData.data && typeof modelData.data.configuredEnabled === "boolean"
-                                            ? modelData.data.configuredEnabled : modelData.enabled !== false
                 Layout.fillWidth: true
                 Layout.leftMargin: page.groupDepth(modelData) * Kirigami.Units.gridUnit
-                QQC2.CheckBox {
-                    visible: typeof modelData.enabled === "boolean"
-                    checked: parent.own
-                    enabled: client.connected
-                    QQC2.ToolTip.text: checked ? "On: the metric runs and is shown" : "Off: the metric does not run and is not shown"
-                    QQC2.ToolTip.visible: hovered
-                    onToggled: {
-                        client.setCustomMetricEnabled(modelData.data.explicitPath || modelData.data.path, checked);
-                        // The backend's state decides (a refused write comes back unchanged).
-                        checked = Qt.binding(() => parent.own);
+                spacing: 0
+                RowLayout {
+                    readonly property var modelData: customSource.modelData
+                    // v2F1.2 / v2F1.5: the file's own "enabled" (a checked child of a
+                    // disabled group stays inactive, shown faded).
+                    readonly property bool own: modelData.data && typeof modelData.data.configuredEnabled === "boolean"
+                                                ? modelData.data.configuredEnabled : modelData.enabled !== false
+                    Layout.fillWidth: true
+                    QQC2.CheckBox {
+                        visible: typeof modelData.enabled === "boolean"
+                        checked: parent.own
+                        enabled: client.connected
+                        QQC2.ToolTip.text: checked ? "On: the metric runs and is shown" : "Off: the metric does not run and is not shown"
+                        QQC2.ToolTip.visible: hovered
+                        onToggled: {
+                            client.setCustomMetricEnabled(modelData.data.explicitPath || modelData.data.path, checked);
+                            // The backend's state decides (a refused write comes back unchanged).
+                            checked = Qt.binding(() => parent.own);
+                        }
+                    }
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        opacity: modelData.enabled === false ? 0.6 : 1
+                        text: modelData.title + "  ·  " + (modelData.data ? modelData.data.path : "")
+                        elide: Text.ElideMiddle
+                        textFormat: Text.PlainText
+                    }
+                    QQC2.Button {
+                        visible: modelData.data && modelData.data.explicit === true
+                        icon.name: "list-remove"
+                        text: "Remove"
+                        onClicked: client.unregisterCustomMetric(modelData.data.explicitPath || modelData.data.path)
                     }
                 }
-                QQC2.Label {
-                    Layout.fillWidth: true
-                    opacity: modelData.enabled === false ? 0.6 : 1
-                    text: modelData.title + "  ·  " + (modelData.data ? modelData.data.path : "")
-                    elide: Text.ElideMiddle
-                    textFormat: Text.PlainText
-                }
-                QQC2.Button {
-                    visible: modelData.data && modelData.data.explicit === true
-                    icon.name: "list-remove"
-                    text: "Remove"
-                    onClicked: client.unregisterCustomMetric(modelData.data.explicitPath || modelData.data.path)
+                // v2F1.6: its warnings under it (the metric still works), as in
+                // the tray's Settings.
+                Repeater {
+                    model: Logic.metricWarnings(customSource.modelData)
+                    RowLayout {
+                        required property string modelData
+                        Layout.fillWidth: true
+                        Kirigami.Icon {
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            Layout.alignment: Qt.AlignTop
+                            source: "dialog-warning"
+                        }
+                        QQC2.Label {
+                            Layout.fillWidth: true
+                            text: "Warning: " + parent.modelData
+                            textFormat: Text.PlainText
+                            wrapMode: Text.Wrap
+                            font: Kirigami.Theme.smallFont
+                        }
+                    }
                 }
             }
         }

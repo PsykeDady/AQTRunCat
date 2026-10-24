@@ -116,9 +116,9 @@ struct Source {
     // as compact JSON, or why it could not be read); a reload compares it
     // to tell changed sources from unchanged ones. Engine only, not in the API.
     QByteArray configuration;
-    // v2F1.6: problems that do not stop the source (an icon that cannot be
-    // found, a value outside its range): it keeps running and the frontends
-    // fall back (a default icon, a full or empty bar); shown with a warning.
+    // v2F1.6: the source's own problems that do not stop it (an icon that
+    // cannot be found: the frontends use their fallback); shown under it
+    // with a warning icon. A value outside its range is its item's warning.
     QStringList warnings;
 };
 

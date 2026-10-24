@@ -76,10 +76,15 @@ struct ScalarResult {
     QString error;
 };
 
-// v2F1.6: one message per item whose normalizedValue is outside 0...1 (the
-// frontends clamp its bar: full or empty). With a scalar command's
-// definition the message names the value and display.normalizedRange.
-QStringList valueWarnings(const Snapshot &snapshot, const CommandDefinition *definition = nullptr);
+// v2F1.6: a value outside its range is still shown, with a warning: its
+// item gets warning = true and the reason in detail (a scalar command's
+// display.normalizedRange; 0...1 for a snapshot's normalizedValue, after the
+// producer's own detail). The frontends clamp its bar (full or empty).
+void markValuesOutOfRange(Snapshot &snapshot);
+// v2F1.6: one message per item outside its range ("value 10 (outside the
+// range 0–1)"; "<item title> 10 (…)" with several items), for Settings, the
+// reload report and the log.
+QStringList valueWarnings(const Snapshot &snapshot);
 
 ScalarResult snapshotFromCommandOutput(const CommandDefinition &definition,
                                        const QByteArray &standardOutput,
