@@ -108,14 +108,14 @@ endforeach()
 # utility participates in the test contract.
 add_executable(custommetric_test_helper custommetric_test_helper.cpp)
 target_compile_options(custommetric_test_helper PRIVATE -Wall -Wextra -Wpedantic)
-foreach(name commandmetric commandmetricsservice metricgroups custommetricsreload)
+foreach(name commandmetric commandmetricsservice metricgroups custommetricsreload custommetricsrefresh)
     qt_add_executable(tst_${name} tst_${name}.cpp)
     target_link_libraries(tst_${name} PRIVATE aqtruncat_desktop Qt6::Test)
     target_compile_options(tst_${name} PRIVATE -Wall -Wextra -Wpedantic)
     add_dependencies(tst_${name} custommetric_test_helper)
     add_test(NAME ${name} COMMAND tst_${name})
 endforeach()
-set_tests_properties(custommetricsreload PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(custommetricsreload custommetricsrefresh PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # M7 Metrics Bar: semantic model, square SNI rendering and tray item lifecycle.
 qt_add_executable(tst_metricsbarmodel tst_metricsbarmodel.cpp)
@@ -239,6 +239,16 @@ find_program(AQTRUNCAT_QMLTESTRUNNER NAMES qmltestrunner6 qmltestrunner
 if(AQTRUNCAT_QMLTESTRUNNER)
     add_test(NAME plasmoidlogic COMMAND ${AQTRUNCAT_QMLTESTRUNNER} -input ${CMAKE_CURRENT_SOURCE_DIR}/plasmoid/tst_logic.qml)
     set_tests_properties(plasmoidlogic PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # v2F1.7: the popup's metric row itself (icon clicks), when Plasma's
+    # QML modules are installed.
+    find_file(AQTRUNCAT_PLASMA_COMPONENTS qmldir
+              PATHS "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_QML}/org/kde/plasma/components" NO_DEFAULT_PATH)
+    if(AQTRUNCAT_PLASMA_COMPONENTS)
+        add_test(NAME plasmoiddelegate COMMAND ${AQTRUNCAT_QMLTESTRUNNER} -input ${CMAKE_CURRENT_SOURCE_DIR}/plasmoid/tst_delegate.qml)
+        set_tests_properties(plasmoiddelegate PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    else()
+        message(STATUS "Plasma QML modules not found: the plasmoiddelegate test is not registered")
+    endif()
 else()
     message(STATUS "qmltestrunner not found: the plasmoidlogic test is not registered")
 endif()
@@ -275,7 +285,7 @@ if(Qt6Qml_FOUND AND AQTRUNCAT_DBUS_RUN_SESSION)
         AQTRUNCAT_DAEMON="$<TARGET_FILE:aqtruncatd>"
         AQTRUNCAT_CTL="$<TARGET_FILE:aqtruncatctl>"
         AQTRUNCAT_TEST_HOME="${plasmoid_home}")
-    add_dependencies(tst_plasmoidclient aqtruncatd aqtruncatctl)
+    add_dependencies(tst_plasmoidclient aqtruncatd aqtruncatctl custommetric_test_helper)
     add_test(NAME plasmoidclient COMMAND ${AQTRUNCAT_DBUS_RUN_SESSION} --config-file=${plasmoid_bus_dir}/session.conf
              -- $<TARGET_FILE:tst_plasmoidclient>)
     # The bus (and so the activated backend) gets the test's home: never

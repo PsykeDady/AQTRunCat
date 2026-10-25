@@ -3,6 +3,7 @@
 // any provider file itself. Contract: docs/backend-dbus-api-cli.md.
 
 #include "api/apischema.h"
+#include "app/metricsbarids.h"
 
 #include <QCoreApplication>
 #include <QDBusConnection>
@@ -71,6 +72,8 @@ const char Help[] =
     "  custom add|remove PATH         (un)register a Custom Metrics file\n"
     "  custom reload                  rescan the Custom Metrics files and apply\n"
     "                                 what was added, changed or removed\n"
+    "  custom refresh ID|PATH         sample a Custom Metric now (a group: its\n"
+    "                                 enabled metrics); ID as in metrics\n"
     "\n"
     "Options:\n"
     "  --json      machine-readable output (the API's JSON, one document; for\n"
@@ -402,6 +405,36 @@ int reloadCustomMetrics(Client &client, bool json)
     return Ok;
 }
 
+// v2F1.7: RefreshCustomMetric. The target is a metric id ("custom:<path>")
+// or the path of its file; a refused request is the backend's error.
+int refreshCustomMetric(Client &client, bool json, const QString &target)
+{
+    QString id = target;
+    if (!aqtruncat::metricsbar::isCustomId(id)) {
+        const QFileInfo file(target);
+        id = aqtruncat::metricsbar::customId(file.exists() ? file.canonicalFilePath() : file.absoluteFilePath());
+    }
+    int code = Ok;
+    const std::optional<QString> reply = client.call(QStringLiteral("RefreshCustomMetric"), {id}, code);
+    if (!reply)
+        return code;
+    if (json) {
+        out(reply->trimmed());
+        return Ok;
+    }
+    const aqtruncat::custommetrics::RefreshResult result = aqtruncat::api::refreshResultFromJson(object(*reply));
+    QString text = result.started.isEmpty() && result.coalesced.isEmpty()
+        ? QStringLiteral("Nothing to refresh: no enabled metric.")
+        : QStringLiteral("Refresh requested: %1 started, %2 already running or just refreshed.")
+              .arg(result.started.size()).arg(result.coalesced.size());
+    for (const QString &source : result.started)
+        text += QStringLiteral("\n  started: %1").arg(aqtruncat::metricsbar::customId(source));
+    for (const QString &source : result.coalesced)
+        text += QStringLiteral("\n  coalesced: %1").arg(aqtruncat::metricsbar::customId(source));
+    out(text);
+    return Ok;
+}
+
 // Prints MetricsChanged signals (see watch).
 class ChangePrinter : public QObject
 {
@@ -532,6 +565,8 @@ int main(int argc, char *argv[])
     }
     if (command == QLatin1String("custom") && rest.size() == 1 && rest.at(0) == QLatin1String("reload"))
         return reloadCustomMetrics(client, json);
+    if (command == QLatin1String("custom") && rest.size() == 2 && rest.at(0) == QLatin1String("refresh"))
+        return refreshCustomMetric(client, json, rest.at(1));
     return usage(QStringLiteral("invalid command \"%1\"").arg((QStringList{command} + rest).join(u' ')));
 }
 

@@ -1,13 +1,14 @@
-# MEMORY.md — AQTRunCat maintainer notes (2.1.6)
+# MEMORY.md — AQTRunCat maintainer notes (2.1.7)
 
 > Audience: an AI agent or developer maintaining AQTRunCat without access to
 > earlier conversations. Precedence when sources disagree: **actual
 > code/tests > this file (frozen decisions §5) > docs/ > commit messages**.
 >
-> **State (2026-10-24): AQTRunCat 2.1.6** (Custom Metrics reload)
-> implemented on branch `feature/v2/f1.6`, uncommitted — the user commits
-> (v2F1: 2.1.1 = 385ceb1, 2.1.2 = 0a72597, 2.1.3 = 613bdbe, 2.1.4 =
-> f3440d6, 2.1.5 = f00da7e). 2.0.0 (commit 61f3a8e) was the consolidation release
+> **State (2026-10-24): AQTRunCat 2.1.7** (manual refresh by clicking metric
+> icons) implemented on branch `feature/v2/f1.7`, uncommitted — the user
+> commits (v2F1: 2.1.1 = 385ceb1, 2.1.2 = 0a72597, 2.1.3 = 613bdbe, 2.1.4 =
+> f3440d6, 2.1.5 = f00da7e, 2.1.6 = ddbe06d + 07ccd3f). **v2F1 — Custom
+> Metrics v3 is complete.** 2.0.0 (commit 61f3a8e) was the consolidation release
 > of the complete 1.x application (M0–M9 → 1.0.0, then F1–F7 → 1.7.4),
 > without functional change from 1.7.4. All 1.x features are
 > complete (summary §2, history §4 and §13, normative summaries in
@@ -15,8 +16,9 @@
 > `requirements.md` is the **v2 roadmap**: v2F1 Custom Metrics v3 + Rickroll
 > (2.1.x), v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings
 > (2.3.x), v2F4 Dependency Advisor (2.4.x) (summary at the end of §2).
-> Done: 2.1.0–2.1.6. Next: 2.1.7 (manual refresh by clicking metric
-> icons) — only on the user's explicit instruction, one sub-feature at a time.
+> Done: 2.1.0–2.1.7 (v2F1 complete). Next: v2F2 Independent Autostart
+> (2.2.x, starting with its 2.2.1 runner, whose artwork the user supplies) —
+> only on the user's explicit instruction, one sub-feature at a time.
 >
 > The user owns every Git write (branches, commits, merges, tags); read-only
 > Git only. Reports to the user in Italian; code, comments and
@@ -68,7 +70,8 @@
   `feature/f7` (pushed to origin) and consolidated on `feature/main` (2.0.0);
   2.0.0 was then committed on `main` (61f3a8e) and v2 work happens on
   `feature/v2/main` (observed 2026-10-23, 2.1.1), later one branch per
-  sub-feature (`feature/v2/f4` for 2.1.5, `feature/v2/f1.6` for 2.1.6);
+  sub-feature (`feature/v2/f4` for 2.1.5, `feature/v2/f1.6` for 2.1.6,
+  `feature/v2/f1.7` for 2.1.7);
   local `main` is still at an old commit (27e6d2d) and `feature/base`, once
   planned as the common baseline, never existed. Ask the user which branch
   a v2 feature starts from; never create or switch branches yourself.
@@ -106,12 +109,12 @@
 ## 1. Project identity
 
 - Name **AQTRunCat**, tagline **"A Cute Run Cat for Linux"**, executable
-  **`aqtruncat`**, version **2.1.6** (CMake `PROJECT_VERSION`). History:
+  **`aqtruncat`**, version **2.1.7** (CMake `PROJECT_VERSION`). History:
   1.0.0 = M0–M9; F<n> raised the minor and its sub-features the patch (1.4.2
   = F4.2, 1.5.6 = F5.1–F5.6, 1.6.3 = F6.1–F6.3, 1.7.4 = F7.1–F7.4); 2.0.0 =
   consolidation of 1.7.4. v2 rule (requirements.md "Versioning"): v2F<n>
   raises the minor (v2F1 → 2.1.x), its sub-features the patch. The D-Bus
-  api (1) and payload schema (6 since 2.1.6) change only with their contract. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
+  api (1) and payload schema (7 since 2.1.7) change only with their contract. Bump CMakeLists, PKGBUILD, RPM spec (+changelog),
   debian/changelog, the man page and `plasmoid/package/metadata.json`
   (KPlugin.Version) together (`packaging-versions` test).
   All executables accept `-v`/`--version`; the tray menus show "AQTRunCat
@@ -167,7 +170,9 @@ F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (party
 2.1.4 DONE    v2F1.4 optional display.showBar (API schema 4) (docs/custom-metrics-commands.md §10)
 2.1.3 DONE    v2F1.3 Custom Metric execution warnings (docs/custom-metrics-commands.md §9)
 2.1.2 DONE    v2F1.2 optional Custom Metrics "enabled" (+ Settings/Plasmoid checkbox, SetCustomMetricEnabled, API schema 3) (docs/custom-metrics-commands.md §8)
-NEXT          v2F1 2.1.6–2.1.7 Custom Metrics v3, v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
+2.1.6 DONE    v2F1.6 Custom Metrics reload + warnings (ReloadCustomMetrics, API schema 6) (docs/custom-metrics-commands.md §12)
+2.1.7 DONE    v2F1.7 manual refresh by clicking metric icons (RefreshCustomMetric, API schema 7) (docs/custom-metrics-commands.md §13) — v2F1 COMPLETE
+NEXT          v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
 ```
 
 v2 roadmap summary (requirements.md is authoritative; added 2026-10-23):
@@ -368,7 +373,10 @@ Key components:
   2.1.6: `reloadNow()` / `reloadConfigurations()` = explicit full rescan
   (builds the candidate aside, refuses it when a directory is unreadable,
   diffs by `Source::configuration`, keeps jobs whose definition changed only
-  in presentation/schedule); see §13b v2F1.6.
+  in presentation/schedule); see §13b v2F1.6. 2.1.7: `refreshNow()` /
+  `refreshMetric()` = manual sample of a command or a group's enabled
+  descendants through `startCommand` (coalesced while running or < 1 s
+  after a run); see §13b v2F1.7.
 - **CpuMonitor** (`src/app/cpumonitor.*`): consumes raw CPU from shared
   snapshots, keeps `Ema(0.4)` and emits `sampled(raw, smoothed)`; it owns no
   source and no timer. Pending/unavailable/error snapshots are ignored.
@@ -691,6 +699,7 @@ Key components:
 | Custom identity/order | canonical path when resolvable; explicit order first, discovered-only by stable name/path | no duplicate aliases or filesystem-order dependence |
 | Custom failure/retry | last-known-good retained; 100 ms debounce, 3×200 ms retry, shared degraded-only 5 s recovery | atomic saves do not flash errors; no healthy-state polling |
 | Custom Metrics reload (2.1.6) | explicit only (Settings, widget, `aqtruncatctl custom reload`, D-Bus `ReloadCustomMetrics`); the M6 watcher stays, no periodic rescan; candidate built aside; an existing-but-unreadable discovery/package/group/child directory refuses the whole reload (also for watcher reloads), a missing discovery directory is empty; per-file errors keep the M6/2.1.5 policy (source stays, Error, listed in `errors`); a missing icon or a value outside its range is a warning (`warnings`), never an error; presentation-only (title/symbol/showBar/id/integration) and schedule-only (interval/timeout) changes never restart a job; execution changes replace it (old process group stopped, value dropped); callbacks checked by run id; `MetricsChanged` before the reply | user prompt 2.1.6: safe reconciliation, never silently erase active metrics, no unnecessary restarts |
+| Manual refresh (2.1.7) | an icon click (Dashboard/widget: the metric's, the group's, a child's own; Metrics Bar: middle click or "Refresh Now", left click unchanged; `aqtruncatctl custom refresh`; D-Bus `RefreshCustomMetric`) samples a command now through `startCommand`; a group = its enabled executable descendants, each its own job; disabled/snapshot/built-in never run; a running metric or one that ended < 1 s ago is coalesced (no queue, never two processes); the next periodic run is one interval after the manual one; reload/removal guarantees of 2.1.6 apply | user prompt 2.1.7: reuse the pipeline, no overlapping executions, smallest scheduler change |
 | Custom input limits | 1 MiB JSON, 256 entries, 4096 chars per known string | local malformed/accidentally huge files cannot exhaust the tray app |
 | ZIP | libarchive, ZIP only (seekable, central directory) | user choice; no Qt private QZipReader, no custom parser, no shelling out, no KArchive |
 | Archive security | §7 rules + limits | untrusted input |
@@ -916,6 +925,12 @@ sample on purpose (hot-plug) — caching not needed.
 ---
 
 ## 9. Tests and validation
+
+2.1.7 (2026-10-24, manual refresh): clean build in a fresh directory 0
+warnings; ctest **57/57** (new `custommetricsrefresh`, `plasmoiddelegate`);
+`packaging-versions` 2.1.7; `git diff --check` clean; no shell script
+changed. Not validated in the real session: tray Dashboard/Metrics Bar
+clicks (SNI middle click) and widget popup after a plasmashell restart.
 
 2.1.6 (2026-10-24, Custom Metrics reload): clean build in a fresh directory
 0 warnings; ctest **55/55** (new suite `custommetricsreload`);
@@ -1640,6 +1655,51 @@ time" refers to the state when the feature was finished.
 ---
 
 ## 13b. v2 history (2.1.0 onwards)
+
+### v2F1.7 — Manual refresh by clicking metric icons (2.1.7, 2026-10-24)
+
+Last v2F1 sub-feature: **v2F1 complete**.
+
+- Model (`app/custommetricsmodel.h`): `RefreshStatus` (Accepted, Invalid,
+  NotFound, Disabled, NotRunnable), `RefreshResult` (status, error,
+  `started`, `coalesced` source ids), virtual `refreshMetric(sourceId)` +
+  signal `refreshFinished(sourceId, result)`.
+- `CustomMetricsService::refreshNow`: target from `m_sources`; command →
+  `requestRun`; group → enabled descendants (nested groups via the
+  `parentId` chain; children follow their group in `m_sources`), each its
+  own job. `requestRun` coalesces when `job.process` or the last run ended
+  < `ManualRefreshSpacingMilliseconds` (1000) ago, else `startCommand` (the
+  periodic pipeline: Pending, timeout, 69, errors, stale-run ids). Next
+  periodic run = interval after this one ends (existing `finishCommand`);
+  `scheduleCommandWake()` re-armed once. No new timer, no queue, no global
+  cap beyond one process per metric (none existed).
+- API schema **7**: `RefreshCustomMetric(s id) → s` (`custom:<path>` only;
+  built-in/malformed/snapshot/disabled → InvalidArgument, unknown →
+  NotFound, unrunnable → Failed), capability `custom-metrics-refresh`,
+  `api::refreshResult`/`refreshResultFromJson` (`{id, started[],
+  coalesced[]}` as metric ids). `BackendClient::refreshMetric`: async, one
+  pending per source id (`m_refreshing`), D-Bus error name → status.
+- Frontends: Dashboard icon `QLabel`s get `refreshSource` + pointer cursor
+  + tooltip ("Refresh now"/"Refresh the group now") via `makeRefreshTarget`
+  (card icon `customIcon_i`, group icon, child's own `customChildIcon_i_c`;
+  not snapshots; no icon → nothing to click); left-button release in
+  `DashboardWindow::eventFilter` → `refreshRequested`; `showRefreshResult`
+  → `QToolTip` 2.5 s + `refreshFeedback()`. Metrics Bar: tray left click
+  unchanged (Dashboard); `MetricsBarTrayItem::secondaryActivated` (middle
+  click) + per-entry menu action "Refresh Now" for `custom:` items →
+  `MetricsBarPresenter::refreshRequested`. trayapp wires both to
+  `BackendClient::refreshMetric`. ctl: `custom refresh ID|PATH`.
+  Plasmoid: `RefreshArea.qml` (MouseArea in the icon, left button only),
+  roles `refreshable` (+ cells `metricId`/`refreshable`, `Logic.refreshable`),
+  `MetricDelegate.refreshRequested` → `BackendClient.refreshCustomMetric`
+  (`_refreshing`, `replied("RefreshCustomMetric", …)`), header message 3 s
+  (`Logic.refreshSummary`).
+- Tests: new `custommetricsrefresh` (11 cases incl. Dashboard clicks),
+  new `plasmoiddelegate` (qmltestrunner on the real MetricDelegate, only
+  when Plasma QML modules exist); additions to backendipc, apischema,
+  metricsbarpresenter, plasmoidlogic, plasmoidclient, plasmoidpackage.
+  Gotcha: a command's default interval is 1 s, so tests that refresh must
+  set `intervalSeconds` or the refresh is (correctly) coalesced.
 
 ### v2F1.6 — Custom Metrics reload (2.1.6, 2026-10-24)
 

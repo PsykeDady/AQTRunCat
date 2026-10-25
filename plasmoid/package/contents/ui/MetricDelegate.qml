@@ -31,7 +31,11 @@ ColumnLayout {
     required property bool group
     // v2F1.6: the metric's own warnings (a missing icon), one per line.
     required property string warnings
+    // v2F1.7: its icon asks for a fresh sample (a group's: of its metrics).
+    required property bool refreshable
     property bool showDetails: true
+
+    signal refreshRequested(string metricId)
 
     readonly property var items: {
         try {
@@ -70,6 +74,12 @@ ColumnLayout {
                   : metric.state === "unavailable" || metric.warning ? "dialog-warning"
                   : metric.state === "pending" ? "content-loading-symbolic"
                   : metric.icon
+            RefreshArea {
+                objectName: "refreshArea"
+                enabled: metric.refreshable
+                group: metric.group
+                onTriggered: metric.refreshRequested(metric.metricId)
+            }
         }
         PlasmaComponents.Label {
             Layout.fillWidth: true
@@ -137,6 +147,11 @@ ColumnLayout {
                         Layout.preferredHeight: Kirigami.Units.iconSizes.small
                         visible: (cell.modelData.icon || "").length > 0
                         source: cell.modelData.icon || ""
+                        RefreshArea {
+                            objectName: "childRefreshArea"
+                            enabled: !!cell.modelData.refreshable
+                            onTriggered: metric.refreshRequested(cell.modelData.metricId)
+                        }
                     }
                     PlasmaComponents.Label {
                         text: cell.modelData.title

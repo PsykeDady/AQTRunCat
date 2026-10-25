@@ -163,7 +163,8 @@ backend.
   §10), **5 da 2.1.5** (gruppi: `kind` `group`, `data.groupId`,
   `data.configuredEnabled`, §11), **6 da 2.1.6** (metodo
 `ReloadCustomMetrics`, capability `custom-metrics-reload` e campo
-`warnings` delle Custom Metrics, §12). Le
+`warnings` delle Custom Metrics, §12), **7 da 2.1.7** (metodo
+`RefreshCustomMetric`, capability `custom-metrics-refresh`, §13). Le
 aggiunte compatibili (nuovi
   campi, nuove capability, nuovi id di metrica) non cambiano `api`.
 - I client **devono ignorare i campi sconosciuti** e trattare un valore
@@ -171,7 +172,8 @@ aggiunte compatibili (nuovi
 - `capabilities` (in `GetInfo`) elenca le funzioni opzionali: `metrics`,
   `metrics-delta`, `runner`, `settings`, `set-setting`, `custom-metrics`,
   `integrations` e, da F4.2, `runners` (catalogo dei runner, §5.4.1); da
-  2.1.6 `custom-metrics-reload` (`ReloadCustomMetrics`).
+  2.1.6 `custom-metrics-reload` (`ReloadCustomMetrics`); da 2.1.7
+  `custom-metrics-refresh` (`RefreshCustomMetric`).
 
 ## 5. Contratto API
 
@@ -191,6 +193,7 @@ aggiunte compatibili (nuovi
 | `UnregisterCustomMetric` | `(s path) → ()` | rimuove la registrazione esplicita |
 | `SetCustomMetricEnabled` (2.1.2, schema 3) | `(s path, b enabled) → ()` | scrive `"enabled"` nel file della Custom Metric (sostituzione atomica, il resto del file invariato) e lo applica subito: disabilitata non viene più eseguita né mostrata. `NotFound` per una sorgente sconosciuta, `InvalidArgument` per la sorgente di un'integrazione (si usa `SetIntegrationEnabled`), `Failed` se il file non si può scrivere |
 | `ReloadCustomMetrics` (2.1.6, schema 6) | `() → s` | rilegge tutta la configurazione Custom Metrics (file registrati, cartella di scoperta, gruppi e figli) e applica ciò che è cambiato senza riavvio; risponde `{added[], changed[], removed[], unchanged, errors[], warnings[]}` (voci `{id, sourceId, name, message}`; `errors` = sorgenti con configurazione non valida, che restano visibili in `error`; `warnings` = un avviso per voce, la metrica funziona: icona mancante, valore fuori range). Ogni Custom Metric ha `warnings[]` con gli avvisi della sorgente (icona mancante); un valore fuori range è sulla sua voce (`warning: true` e il motivo in `detail`). Il `MetricsChanged` con il nuovo insieme arriva **prima** della risposta. `Failed` se una cartella non è leggibile: in quel caso nulla è cambiato. Vedi `docs/custom-metrics-commands.md` §12 |
+| `RefreshCustomMetric` (2.1.7, schema 7) | `(s id) → s` | chiede subito un nuovo campione di una Custom Metric di tipo comando (`id` = `custom:<percorso>`, come in `metrics[]`) o, per un gruppo, di tutti i suoi discendenti eseguibili abilitati (anche nei gruppi annidati), attraverso lo scheduler del backend: stesso comando, argomenti, timeout e limiti. Risponde subito `{id, started[], coalesced[]}` (id di metrica): `started` = corse avviate ora, `coalesced` = metriche già in esecuzione o terminate da meno di 1 s (nessun secondo processo). Un gruppo senza figli abilitati risponde con le due liste vuote. I valori arrivano poi come `MetricsChanged`. `InvalidArgument` per un id built-in o malformato, un file snapshot o una metrica (o gruppo) disabilitata; `NotFound` per una metrica sconosciuta; `Failed` se la metrica non può essere eseguita (configurazione non valida). Vedi `docs/custom-metrics-commands.md` §13 |
 | `SetIntegrationEnabled` | `(s id, b enabled) → s` | `enable`/`disable` dell'adattatore; restituisce il suo messaggio |
 | `SetIntegrationLiveUpdates` | `(s id, b on) → s` | `live-updates on|off` dell'adattatore |
 
@@ -201,9 +204,9 @@ Una parola nuda che non è JSON viene presa come stringa (`slow-down`).
 
 | Errore | Quando |
 |---|---|
-| `io.github.psykedady.AQTRunCat1.Error.InvalidArgument` | valore o chiave non validi, chiave in sola lettura, file Custom Metrics non valido |
-| `io.github.psykedady.AQTRunCat1.Error.NotFound` | integrazione sconosciuta o adattatore non installato; file non registrato |
-| `io.github.psykedady.AQTRunCat1.Error.Failed` | l'adattatore ha fallito il comando; il file di una Custom Metric non si può scrivere |
+| `io.github.psykedady.AQTRunCat1.Error.InvalidArgument` | valore o chiave non validi, chiave in sola lettura, file Custom Metrics non valido; refresh di un id non Custom, di uno snapshot o di una metrica disabilitata |
+| `io.github.psykedady.AQTRunCat1.Error.NotFound` | integrazione sconosciuta o adattatore non installato; file non registrato; refresh di una metrica sconosciuta |
+| `io.github.psykedady.AQTRunCat1.Error.Failed` | l'adattatore ha fallito il comando; il file di una Custom Metric non si può scrivere; ricarica non applicabile; refresh di una metrica con configurazione non valida |
 
 I metodi delle integrazioni rispondono **in differita**, quando il comando
 dell'adattatore è terminato; gli altri client continuano a essere serviti nel
@@ -437,6 +440,8 @@ aqtruncatctl [--json] [--no-start] COMMAND
   settings set KEY VALUE
   custom add|remove PATH
   custom reload                  rilegge le Custom Metrics (2.1.6)
+  custom refresh ID|PATH         campiona subito una Custom Metric o un
+                                 gruppo (2.1.7)
 ```
 
 | Codice di uscita | Significato |
@@ -659,6 +664,11 @@ La validazione ha trovato due difetti, corretti:
   riavvio del backend e recupero, ripiego di avvio, CLI (output leggibile,
   JSON, codici di uscita, impostazioni, custom metrics, integrazioni con un
   adattatore finto), attivazione D-Bus su un `dbus-daemon` privato.
+- 2.1.7: `tst_backendipc::refreshThroughTheApi` (`RefreshCustomMetric`:
+  metrica e gruppo, `started`/`coalesced`, delta con il nuovo valore,
+  errori `InvalidArgument`/`NotFound`, client Qt asincrono, `aqtruncatctl
+  custom refresh` per percorso e per id, anche `--json`, uscite 4 e 2) e
+  `tst_apischema::refreshResult` (schema 7).
 - Test dell'installer: backend, CLI e file di servizio installati, `Exec`
   corretto, backend chiuso dall'aggiornamento, disinstallazione pulita.
 - La suite completa (F1/F2/F3 inclusi) passa: vedi `requirements.md`.

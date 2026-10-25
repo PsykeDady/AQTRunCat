@@ -110,6 +110,10 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
     QObject::connect(&backend, &BackendClient::systemSnapshot, &dashboardUpdates, &SnapshotThrottle::submit);
     QObject::connect(&dashboardUpdates, &SnapshotThrottle::snapshotReady, &dashboard, &DashboardWindow::updateSnapshot);
     QObject::connect(&backend, &CustomMetricsModel::sourcesChanged, &dashboard, &DashboardWindow::updateCustomMetrics);
+    // v2F1.7: an icon clicked asks the backend for a fresh sample; the
+    // values come back to every frontend with the usual updates.
+    QObject::connect(&dashboard, &DashboardWindow::refreshRequested, &backend, &CustomMetricsModel::refreshMetric);
+    QObject::connect(&backend, &CustomMetricsModel::refreshFinished, &dashboard, &DashboardWindow::showRefreshResult);
     // One settings file: whatever the backend reports changed is re-read.
     QObject::connect(&backend, &BackendClient::settingsChanged, &settings, &aqtruncat::AppSettings::reload);
     QObject::connect(&tray, &TrayPresenter::dashboardToggleRequested, &dashboard, &DashboardWindow::toggleVisible);
@@ -149,6 +153,7 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
     QObject::connect(&backend, &CustomMetricsModel::sourcesChanged, &metricsBar, &MetricsBarModel::updateCustom);
     QObject::connect(&metricsBar, &MetricsBarModel::itemsChanged, &metricsBarTray, &MetricsBarPresenter::setItems);
     QObject::connect(&metricsBarTray, &MetricsBarPresenter::dashboardToggleRequested, &dashboard, &DashboardWindow::toggleVisible);
+    QObject::connect(&metricsBarTray, &MetricsBarPresenter::refreshRequested, &backend, &CustomMetricsModel::refreshMetric);
     QObject::connect(&dashboard, &DashboardWindow::visibilityChanged, &metricsBarTray, &MetricsBarPresenter::setDashboardVisible);
 
     QObject::connect(&settings, &aqtruncat::AppSettings::dashboardRefreshSecondsChanged,

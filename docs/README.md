@@ -1,6 +1,6 @@
 # AQTRunCat Documentation
 
-Technical documentation of AQTRunCat **2.1.6**, by topic. Users start with
+Technical documentation of AQTRunCat **2.1.7**, by topic. Users start with
 the main [README](../README.md); the v2 roadmap is
 [requirements.md](../requirements.md). The topic documents are design and
 validation records written in Italian; [feature-reference.md](feature-reference.md)
@@ -44,7 +44,7 @@ service, client), `aqtruncat_desktop` (Widgets UI). Details: `MEMORY.md` §3.
 | Dashboard | [dashboard.md](dashboard.md) |
 | Settings, autostart, desktop integration | [settings-and-desktop-integration.md](settings-and-desktop-integration.md) |
 | Custom Metrics: RunCat Neo-compatible snapshots | [custom-metrics.md](custom-metrics.md) |
-| Custom Metrics: command sources, packages, icons, groups, reload | [custom-metrics-commands.md](custom-metrics-commands.md) |
+| Custom Metrics: command sources, packages, icons, groups, reload, manual refresh | [custom-metrics-commands.md](custom-metrics-commands.md) |
 | Claude Code integration | [integration-claude-code.md](integration-claude-code.md) |
 | Codex integration | [integration-codex.md](integration-codex.md) |
 | Metrics Bar | [metrics-bar.md](metrics-bar.md) |
@@ -94,3 +94,5 @@ Commit messages, code comments and the documents themselves refer to the
 | v2F1.3 Custom Metric execution warnings | 2.1.3 | custom-metrics-commands.md §9 |
 | v2F1.4 optional `display.showBar` | 2.1.4 | custom-metrics-commands.md §10 |
 | v2F1.5 Custom Metric groups and JSON inheritance | 2.1.5 | custom-metrics-commands.md §11 |
+| v2F1.6 Custom Metrics reload and warnings | 2.1.6 | custom-metrics-commands.md §12 |
+| v2F1.7 manual refresh by clicking metric icons | 2.1.7 | custom-metrics-commands.md §13 |

@@ -7,6 +7,7 @@
 #include <QDBusServiceWatcher>
 #include <QElapsedTimer>
 #include <QHash>
+#include <QSet>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QStringList>
@@ -55,6 +56,10 @@ public:
     // v2F1.6: asynchronous ReloadCustomMetrics (never blocks the GUI); a
     // request made while one is pending shares its answer.
     void reloadConfigurations() override;
+    // v2F1.7: asynchronous RefreshCustomMetric; a second request for a
+    // metric whose request is still pending is dropped (the backend
+    // coalesces the rest).
+    void refreshMetric(const QString &sourceId) override;
 
 signals:
     void systemSnapshot(const aqtruncat::metrics::SystemMetricsSnapshot &snapshot);
@@ -89,6 +94,7 @@ private:
     bool m_synced = false;
     bool m_requesting = false;
     bool m_reloading = false;
+    QSet<QString> m_refreshing;
     quint64 m_generation = 0;
     QJsonArray m_metrics;
     QJsonObject m_runner;

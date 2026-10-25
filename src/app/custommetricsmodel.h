@@ -5,6 +5,7 @@
 #include <QList>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 namespace aqtruncat::custommetrics {
 
@@ -33,6 +34,21 @@ struct ReloadReport {
     QList<ReloadEntry> errors;
     QList<ReloadEntry> warnings;
     int unchanged = 0;
+};
+
+// v2F1.7: the answer to a manual refresh (a metric's or a group's icon
+// clicked). Accepted: started lists the source ids whose command was
+// started for it, coalesced those already running or refreshed less than a
+// second ago (no second process: they keep their current run or result).
+// A group with no enabled executable descendant is Accepted with both
+// empty. Otherwise nothing ran and error says why.
+enum class RefreshStatus { Accepted, Invalid, NotFound, Disabled, NotRunnable };
+
+struct RefreshResult {
+    RefreshStatus status = RefreshStatus::NotRunnable;
+    QString error;
+    QStringList started;
+    QStringList coalesced;
 };
 
 // One line for Settings and aqtruncatctl: "Custom Metrics reloaded: 1
@@ -67,8 +83,14 @@ public:
     // never blocks the GUI); requests made while one is pending share its
     // answer.
     virtual void reloadConfigurations() = 0;
+    // v2F1.7: requests a fresh sample of a command source (Source::id) or
+    // of a group's enabled executable descendants, through the engine's own
+    // scheduler (never a second process of a running command). The answer
+    // arrives with refreshFinished, possibly later.
+    virtual void refreshMetric(const QString &sourceId) = 0;
 
 signals:
     void sourcesChanged(const QList<aqtruncat::custommetrics::Source> &sources);
     void reloadFinished(const aqtruncat::custommetrics::ReloadReport &report);
+    void refreshFinished(const QString &sourceId, const aqtruncat::custommetrics::RefreshResult &result);
 };

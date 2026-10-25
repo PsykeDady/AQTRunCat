@@ -1,7 +1,7 @@
 # Build: packaging/make-source-tarball.sh ~/rpmbuild/SOURCES
 #        rpmbuild -ba packaging/rpm/aqtruncat.spec
 Name:           aqtruncat
-Version:        2.1.6
+Version:        2.1.7
 Release:        1%{?dist}
 Summary:        A Cute Run Cat for Linux
 
@@ -66,6 +66,13 @@ export QT_QPA_PLATFORM=offscreen
 %{_docdir}/%{name}/
 
 %changelog
+* Sat Oct 24 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.1.7-1
+- 2.1.7 (v2F1): Manual refresh of Custom Metrics: clicking a metric's icon
+  in the Dashboard or the Plasma widget (a group's: all its enabled
+  metrics), a Metrics Bar item's middle click or "Refresh Now", and
+  "aqtruncatctl custom refresh" sample it now through the backend's
+  scheduler; a running metric is never started twice. Completes v2F1.
+
 * Sat Oct 24 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.1.6-1
 - 2.1.6 (v2F1): Reload Custom Metrics without restarting: Settings, the
   Plasma widget and "aqtruncatctl custom reload" rescan the files and apply

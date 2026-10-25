@@ -33,6 +33,7 @@ public:
         ++toolTips;
     }
     void click() { emit activated(); }
+    void middleClick() { emit secondaryActivated(); }
 
     QMenu *menu = nullptr;
     QList<FakeTrayItem *> *registry = nullptr;
@@ -198,6 +199,34 @@ private slots:
         QCOMPARE(settings.count(), 1);
         actions[0]->trigger();
         QCOMPARE(dashboard.count(), 2);
+    }
+
+    // v2F1.7: a Custom Metric's item refreshes on a middle click or its
+    // menu's first action; the left click still toggles the Dashboard and
+    // built-in items have no refresh at all.
+    void middleClickAndMenuRefreshCustomItems()
+    {
+        Fixture f;
+        QSignalSpy refresh(&f.presenter, &MetricsBarPresenter::refreshRequested);
+        QSignalSpy dashboard(&f.presenter, &MetricsBarPresenter::dashboardToggleRequested);
+        f.presenter.setItems({item(QStringLiteral("cpu"), QStringLiteral("23%")),
+                              item(QStringLiteral("custom:/metrics/a.json"), QStringLiteral("7"))});
+        f.trays[0]->middleClick();
+        QCOMPARE(refresh.count(), 0);
+        QCOMPARE(f.trays[0]->menu->actions()[0]->text(), QStringLiteral("Show Dashboard"));
+
+        f.trays[1]->middleClick();
+        QCOMPARE(refresh.count(), 1);
+        QCOMPARE(refresh.at(0).at(0).toString(), QStringLiteral("/metrics/a.json"));
+        QCOMPARE(dashboard.count(), 0);
+        QAction *action = f.trays[1]->menu->actions()[0];
+        QCOMPARE(action->text(), QStringLiteral("Refresh Now"));
+        action->trigger();
+        QCOMPARE(refresh.count(), 2);
+        QCOMPARE(refresh.at(1).at(0).toString(), QStringLiteral("/metrics/a.json"));
+        f.trays[1]->click();
+        QCOMPARE(dashboard.count(), 1);
+        QCOMPARE(refresh.count(), 2);
     }
 
     void runnerMenuShowsTheVersion()

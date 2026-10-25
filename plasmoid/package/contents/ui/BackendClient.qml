@@ -212,6 +212,26 @@ Item {
         });
     }
 
+    // v2F1.7 (schema 7): a fresh sample of a Custom Metric, or of a group's
+    // enabled metrics ("custom:<path>"), through the backend's scheduler;
+    // the reply says what started (Logic.refreshSummary), the values come
+    // as MetricsChanged. A request for an id still waiting is dropped.
+    property var _refreshing: ({})
+    function refreshCustomMetric(id) {
+        if (!connected) {
+            replied("RefreshCustomMetric", false, "The AQTRunCat backend is not running.");
+            return;
+        }
+        if (_refreshing[id])
+            return;
+        _refreshing[id] = true;
+        call("RefreshCustomMetric", [new DBus.string(id)], "(s)", (ok, result, reply) => {
+            if (client)
+                delete client._refreshing[id];
+            replied("RefreshCustomMetric", ok, ok ? Logic.refreshSummary(Logic.parse(result)) : Logic.errorText(reply));
+        });
+    }
+
     function unregisterCustomMetric(path) {
         call("UnregisterCustomMetric", [new DBus.string(path)], "(s)",
              (ok, result, reply) => replied("UnregisterCustomMetric", ok, ok ? "" : Logic.errorText(reply)));

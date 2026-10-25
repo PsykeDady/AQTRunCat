@@ -1,6 +1,7 @@
 #include "backendclient.h"
 
 #include "apischema.h"
+#include "app/metricsbarids.h"
 
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
@@ -305,6 +306,33 @@ void BackendClient::reloadConfigurations()
         else
             report = aqtruncat::api::reloadReportFromJson(parseObject(reply.value()));
         emit reloadFinished(report);
+    });
+}
+
+void BackendClient::refreshMetric(const QString &sourceId)
+{
+    if (m_refreshing.contains(sourceId))
+        return;
+    m_refreshing.insert(sourceId);
+    QDBusMessage call = QDBusMessage::createMethodCall(aqtruncat::api::ServiceName, aqtruncat::api::ObjectPath,
+                                                       aqtruncat::api::InterfaceName, QStringLiteral("RefreshCustomMetric"));
+    call << aqtruncat::metricsbar::customId(sourceId);
+    auto *watcher = new QDBusPendingCallWatcher(m_options.connection.asyncCall(call), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, sourceId](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        m_refreshing.remove(sourceId);
+        const QDBusPendingReply<QString> reply = *w;
+        aqtruncat::custommetrics::RefreshResult result;
+        if (reply.isError()) {
+            const QString name = reply.error().name();
+            result.status = name == aqtruncat::api::ErrorNotFound ? aqtruncat::custommetrics::RefreshStatus::NotFound
+                : name == aqtruncat::api::ErrorInvalidArgument  ? aqtruncat::custommetrics::RefreshStatus::Invalid
+                                                                : aqtruncat::custommetrics::RefreshStatus::NotRunnable;
+            result.error = reply.error().message().isEmpty() ? name : reply.error().message();
+        } else {
+            result = aqtruncat::api::refreshResultFromJson(parseObject(reply.value()));
+        }
+        emit refreshFinished(sourceId, result);
     });
 }
 

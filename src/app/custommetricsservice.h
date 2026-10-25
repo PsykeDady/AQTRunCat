@@ -35,6 +35,10 @@ public:
     // reloadNow answers at once, reloadConfigurations also emits it.
     void reloadConfigurations() override;
     aqtruncat::custommetrics::ReloadReport reloadNow();
+    // v2F1.7: a manual refresh (an icon clicked; D-Bus RefreshCustomMetric):
+    // refreshNow answers at once, refreshMetric also emits it.
+    void refreshMetric(const QString &sourceId) override;
+    aqtruncat::custommetrics::RefreshResult refreshNow(const QString &sourceId);
 
 public slots:
     void start();
@@ -53,6 +57,9 @@ private:
     void scheduleCommandWake();
     void processCommandWake();
     void startCommand(const QString &id);
+    // v2F1.7: starts a manual run of a command source unless it is running
+    // or ran less than ManualRefreshSpacing ago (then it is coalesced).
+    void requestRun(const QString &id, aqtruncat::custommetrics::RefreshResult &result);
     // run: the job's run the call belongs to; a call for an earlier run (a
     // replaced or removed job) is ignored.
     CommandJob *runningJob(const QString &id, quint64 run);

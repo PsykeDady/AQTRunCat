@@ -49,6 +49,24 @@ PlasmaExtras.Representation {
     }
     Component.onCompleted: sync()
 
+    // v2F1.7: what an icon click asked, briefly in the header (the new
+    // values arrive in the list by themselves).
+    property string refreshMessage: ""
+    Connections {
+        target: full.client
+        function onReplied(member, ok, message) {
+            if (member !== "RefreshCustomMetric")
+                return;
+            full.refreshMessage = message;
+            refreshMessageTimer.restart();
+        }
+    }
+    Timer {
+        id: refreshMessageTimer
+        interval: 3000
+        onTriggered: full.refreshMessage = ""
+    }
+
     ListModel { id: metricModel }
 
     header: PlasmaExtras.PlasmoidHeading {
@@ -64,7 +82,11 @@ PlasmaExtras.Representation {
                 elide: Text.ElideRight
             }
             PlasmaComponents.Label {
-                text: full.client.connected && full.runner
+                objectName: "headerStatus"
+                Layout.maximumWidth: Kirigami.Units.gridUnit * 14
+                elide: Text.ElideRight
+                text: full.refreshMessage.length > 0 ? full.refreshMessage
+                      : full.client.connected && full.runner
                       ? full.runner.displayName + " · " + (Number(full.client.runner.fps) || 0) + " fps"
                       : ""
                 visible: text.length > 0
@@ -119,6 +141,7 @@ PlasmaExtras.Representation {
             delegate: MetricDelegate {
                 width: ListView.view.width - ListView.view.leftMargin - ListView.view.rightMargin
                 showDetails: full.showDetails
+                onRefreshRequested: id => full.client.refreshCustomMetric(id)
             }
         }
     }

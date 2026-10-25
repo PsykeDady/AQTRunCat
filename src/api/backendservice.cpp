@@ -343,7 +343,8 @@ QJsonArray BackendService::capabilities() const
 {
     QJsonArray list{QStringLiteral("metrics"), QStringLiteral("metrics-delta"), QStringLiteral("runner"),
                     QStringLiteral("settings"), QStringLiteral("set-setting"), QStringLiteral("custom-metrics"),
-                    QStringLiteral("integrations"), QStringLiteral("custom-metrics-reload")};
+                    QStringLiteral("integrations"), QStringLiteral("custom-metrics-reload"),
+                    QStringLiteral("custom-metrics-refresh")};
     if (m_config.runnerCatalog)
         list.append(QStringLiteral("runners"));
     return list;
@@ -560,6 +561,35 @@ QString BackendService::ReloadCustomMetrics()
     m_coalesce.stop();
     publishMetrics();
     return compact(aqtruncat::api::reloadReport(report));
+}
+
+QString BackendService::RefreshCustomMetric(const QString &id)
+{
+    using aqtruncat::custommetrics::RefreshStatus;
+    if (!aqtruncat::metricsbar::isCustomId(id)) {
+        fail(aqtruncat::api::ErrorInvalidArgument,
+             m_metricsById.contains(id)
+                 ? QStringLiteral("%1 is a built-in metric: the backend samples it on its own schedule").arg(id)
+                 : QStringLiteral("\"%1\" is not a Custom Metric id (custom:<path>)").arg(id));
+        return {};
+    }
+    const aqtruncat::custommetrics::RefreshResult result
+        = m_custom->refreshNow(aqtruncat::metricsbar::sourceIdFromCustomId(id));
+    switch (result.status) {
+    case RefreshStatus::Accepted:
+        return compact(aqtruncat::api::refreshResult(id, result));
+    case RefreshStatus::NotFound:
+        fail(aqtruncat::api::ErrorNotFound, result.error);
+        break;
+    case RefreshStatus::Invalid:
+    case RefreshStatus::Disabled:
+        fail(aqtruncat::api::ErrorInvalidArgument, result.error);
+        break;
+    case RefreshStatus::NotRunnable:
+        fail(aqtruncat::api::ErrorFailed, result.error);
+        break;
+    }
+    return {};
 }
 
 ProviderIntegration *BackendService::integration(const QString &id) const

@@ -107,7 +107,7 @@ private slots:
         const QHash<QString, QString> files = packageFiles();
         for (const QString &type : {QStringLiteral("BackendClient"), QStringLiteral("RunnerView"),
                                     QStringLiteral("CompactRepresentation"), QStringLiteral("FullRepresentation"),
-                                    QStringLiteral("MetricDelegate")})
+                                    QStringLiteral("MetricDelegate"), QStringLiteral("RefreshArea")})
             QVERIFY2(files.contains(QStringLiteral("contents/ui/%1.qml").arg(type)), qPrintable(type));
         // Only QML, JavaScript, JSON and XML: nothing to build, no binaries.
         for (auto it = files.cbegin(); it != files.cend(); ++it) {
@@ -183,7 +183,8 @@ private slots:
                                    QStringLiteral("SetSetting"), QStringLiteral("SetIntegrationEnabled"),
                                    QStringLiteral("SetIntegrationLiveUpdates"), QStringLiteral("RegisterCustomMetric"),
                                    QStringLiteral("UnregisterCustomMetric"), QStringLiteral("SetCustomMetricEnabled"),
-                                   QStringLiteral("ReloadCustomMetrics")}; // v2F1.6
+                                   QStringLiteral("ReloadCustomMetrics"), // v2F1.6
+                                   QStringLiteral("RefreshCustomMetric")}; // v2F1.7
         QVERIFY(!members.isEmpty());
         for (const QString &member : members)
             QVERIFY2(api.contains(member), qPrintable(member));

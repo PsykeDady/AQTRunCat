@@ -879,3 +879,157 @@ nessun processo rimasto.
 Da verificare nella sessione reale (non eseguito qui): il pulsante nella
 finestra Settings del tray installato e quello della configurazione del
 widget dopo il riavvio di plasmashell.
+
+## 13. v2F1.7 — Aggiornamento manuale dall'icona (2.1.7)
+
+Stato: **completata** il 2026-10-24, versione **2.1.7**. Branch
+`feature/v2/f1.7`. Ultima sotto-funzione di v2F1: con questa **v2F1 —
+Custom Metrics v3 è completa**.
+
+Un clic sull'icona di una Custom Metric chiede subito un nuovo campione,
+senza aspettare l'intervallo. È un'occasione in più di esecuzione, non una
+ricarica della configurazione (§12): non rilegge i file e non cambia
+l'intervallo configurato.
+
+### Dove si clicca
+
+- **Dashboard Qt**: l'icona della card di una metrica, quella di un
+  gruppo e l'icona propria di un figlio nella cella del gruppo (un figlio
+  che usa l'icona del gruppo non ne ha una sua: si aggiorna con quella del
+  gruppo). Cursore a mano e suggerimento "Refresh now" / "Refresh the group
+  now"; solo il tasto sinistro. L'esito compare per 2,5 s come suggerimento
+  sotto l'icona ("Refreshing…", "Already running or just refreshed",
+  "Nothing to refresh: no enabled metric" o il motivo del rifiuto). Nessuna
+  finestra di dialogo; layout e aspetto dell'icona invariati.
+- **Metrics Bar**: ogni voce è un'icona del vassoio il cui clic sinistro
+  apre/chiude la Dashboard (invariato). Per non cambiarlo, l'aggiornamento
+  è sul **clic centrale** della voce e sulla prima voce del suo menu,
+  **Refresh Now**. Solo le voci Custom Metrics; i gruppi non sono voci della
+  barra (§11), quindi il bersaglio è sempre la singola metrica. Nessun
+  riscontro visivo oltre al nuovo valore.
+- **Widget Plasma**: icona della riga nel popup, del gruppo e propria del
+  figlio, come nella Dashboard; esito per 3 s nell'intestazione del popup
+  (`docs/plasma-widget.md` §15c). Pannello invariato.
+- **CLI**: `aqtruncatctl custom refresh ID|PATH` (id `custom:<percorso>`
+  oppure il percorso del file; `--json` = la risposta dell'API; uscita 4 se
+  rifiutata).
+- **D-Bus**: `RefreshCustomMetric(s id) → s` (schema 7, capability
+  `custom-metrics-refresh`; `docs/backend-dbus-api-cli.md` §5.1).
+
+Tutti i frontend usano lo stesso metodo del backend; nessuno esegue script.
+Built-in e file snapshot (RunCat Neo, riletti quando cambiano) non hanno
+nulla da aggiornare: le loro icone non sono cliccabili. Una metrica senza
+icona (o con il solo simbolo testuale legacy) non ha un'icona da cliccare
+nella Dashboard e nel widget: resta la Metrics Bar o la CLI.
+
+### Backend
+
+`CustomMetricsService::refreshNow(sourceId)` (e `refreshMetric`, che emette
+`refreshFinished`; `BackendService::RefreshCustomMetric` lo espone):
+
+1. Risolve l'id nel registro attivo (`m_sources`).
+2. **Metrica**: deve essere un comando abilitato con un job (configurazione
+   valida). **Gruppo**: i discendenti eseguibili abilitati, gruppi annidati
+   compresi, nell'ordine del servizio (i figli seguono il loro gruppo); un
+   gruppo annidato disabilitato esclude i suoi figli (che sono comunque
+   disabilitati per ereditarietà). Il gruppo non esegue nulla di suo; ogni
+   figlio gira con il **proprio** job: comando, argomenti, timeout e stato
+   suoi, anche se ereditati dallo stesso eseguibile.
+3. Per ogni metrica chiama `startCommand`, lo stesso avvio dello scheduler
+   periodico: processo nel suo gruppo, limiti di output, timeout, uscita 69
+   → Unavailable, errori → Error, risultato che cancella l'errore
+   precedente, log solo sulle transizioni. Non c'è un secondo percorso di
+   esecuzione.
+
+Risposta immediata (D-Bus non attende lo script): `started` (avviate ora) e
+`coalesced` (vedi sotto). Lo stato passa a Pending ("Command is running.")
+e il valore arriva con le notifiche di sempre (`sourcesChanged` →
+`MetricsChanged`) a tutti i frontend collegati. La Dashboard e il widget,
+come per ogni corsa periodica, continuano a mostrare l'ultimo stato stabile
+durante la corsa (nessun valore inventato, nessun salto della card).
+
+Rifiuti (`RefreshStatus` → errore D-Bus): id vuoto, id non `custom:` o file
+snapshot → Invalid (`InvalidArgument`); id sconosciuto (anche una metrica
+rimossa) → NotFound; metrica, figlio o gruppo disabilitato → Disabled
+(`InvalidArgument`, "… is disabled."); comando o gruppo con configurazione
+non valida, servizio fermo → NotRunnable (`Failed`). Gruppo abilitato senza
+figli abilitati: accettato, liste vuote, nessuna esecuzione.
+
+### Concorrenza: politica scelta
+
+- **Mai due processi della stessa metrica.** Se la metrica è in esecuzione
+  (`job.process`), la richiesta è **accorpata** (`coalesced`) a quella
+  corsa: nessuna coda.
+- **Spaziatura di 1 s** (`ManualRefreshSpacingMilliseconds`): una richiesta
+  per una metrica terminata da meno di un secondo è accorpata a quel
+  risultato, appena prodotto. Clic ripetuti quindi non possono produrre più
+  di una corsa per (durata + 1 s), né una raffica di processi uno dopo
+  l'altro. Conseguenza: una metrica con intervallo di 1 s risulta quasi
+  sempre "già aggiornata".
+- **Nessuna coda illimitata**: niente viene messo in attesa; ogni richiesta
+  ha subito la sua risposta. Il client Qt e il widget inviano una sola
+  richiesta per id alla volta; le altre vengono scartate finché arriva la
+  risposta.
+- **Limite globale**: AQTRunCat non ha un tetto globale di processi oltre a
+  "un processo per metrica" (già così dalla F1); il refresh di un gruppo
+  avvia al massimo un processo per figlio abilitato, e clic ripetuti sul
+  gruppo non ne aggiungono altri.
+- Timeout, SIGTERM/SIGKILL al gruppo di processi e pulizia allo stop
+  restano quelli di F1/§12.
+
+### Rapporto con lo scheduler periodico
+
+Scelta: il refresh **sposta la prossima scadenza** della metrica
+aggiornata, che diventa un intervallo dopo la fine di questa corsa
+(`finishCommand`, come dopo ogni corsa). È il cambiamento minimo: nessun
+timer nuovo o permanente (il risveglio unico dello scheduler viene solo
+ricalcolato per la scadenza del timeout), nessuna corsa periodica subito
+dopo quella manuale, nessun altro job toccato. Una corsa periodica e un
+clic quasi simultanei non si sovrappongono: chi arriva secondo trova il
+processo (o il risultato di meno di 1 s) e non avvia nulla.
+
+### Ricarica e rimozione durante un refresh
+
+Restano le garanzie di §12: una modifica di sola presentazione o di
+pianificazione non tocca la corsa in atto (il suo risultato arriva); una
+modifica di esecuzione la termina e riparte, e il risultato della corsa
+sostituita non compare mai (id della corsa); una metrica rimossa ferma il
+processo, i suoi callback vengono ignorati e un nuovo refresh risponde
+NotFound.
+
+### Test
+
+`custommetricsrefresh` (nuova, 11 casi): metrica singola (solo lei, valore
+nuovo, nessuna corsa extra subito dopo, l'altra metrica non toccata),
+figlio di un gruppo (solo quel figlio), gruppo con discendenti annidati
+(figlio disabilitato e figli di un gruppo annidato disabilitato mai
+eseguiti, metrica fuori dal gruppo non toccata, gruppo annidato da solo),
+bersagli disabilitati (metrica, gruppo, figlio di gruppo disabilitato,
+figlio disabilitato; gruppo senza figli abilitati: nessuna esecuzione), id
+sconosciuto, vuoto, snapshot, configurazione non valida e servizio fermo,
+nessuna sovrapposizione (clic ogni 20 ms per 3 s contro un intervallo di
+1 s, con l'helper che registra ogni sovrapposizione), gruppo con 4 figli e
+10 clic (al massimo 4 processi), timeout, uscita 69, errore e ritorno a
+Available, ricarica durante il refresh (presentazione: stessa corsa;
+esecuzione: valore vecchio mai visto), rimozione durante il refresh,
+icone della Dashboard (metrica, gruppo, icona propria del figlio, tasto
+destro ignorato, card snapshot senza nulla di cliccabile, esiti). Inoltre:
+`backendipc` (`refreshThroughTheApi`), `apischema` (`refreshResult`,
+schema 7), `metricsbarpresenter` (clic centrale e "Refresh Now" solo sulle
+voci Custom, clic sinistro invariato), `plasmoidlogic` (`refreshable`,
+`refreshSummary`, `metricId` delle celle), `plasmoiddelegate` (nuovo:
+`MetricDelegate` reale con qmltestrunner; registrato solo se i moduli QML
+di Plasma sono installati), `plasmoidclient` (`refreshCustomMetric` contro
+il backend reale), `plasmoidpackage` (metodo consentito, `RefreshArea`).
+Nessun test esegue gli script reali dell'utente: solo
+`custommetric_test_helper` in cartelle temporanee.
+
+Build pulita in una cartella nuova: 0 warning; ctest **57/57** (nuove
+`custommetricsrefresh` e `plasmoiddelegate`); `packaging-versions` 2.1.7;
+`git diff --check` pulito; nessuno script shell modificato.
+
+Da verificare nella sessione reale (non eseguito qui): clic sulle icone
+nella Dashboard del tray installato, clic centrale e "Refresh Now" sulle
+voci della Metrics Bar (dipende dall'host SNI: Plasma invia il clic centrale
+come SecondaryActivate), clic sulle icone nel popup del widget dopo il
+riavvio di plasmashell.

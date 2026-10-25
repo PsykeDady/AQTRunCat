@@ -67,6 +67,7 @@ public:
     void unregisterFile(const QString &) override {}
     bool setEnabled(const QString &, bool, QString * = nullptr) override { return false; }
     void reloadConfigurations() override { ++requests; }
+    void refreshMetric(const QString &) override {}
     int requests = 0;
 
 private:

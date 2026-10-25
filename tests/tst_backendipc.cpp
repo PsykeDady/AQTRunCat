@@ -548,6 +548,127 @@ private slots:
         QFile::remove(a);
     }
 
+    // v2F1.7 (schema 7): RefreshCustomMetric through D-Bus, the Qt client
+    // and aqtruncatctl: a metric and a group accepted (what started, what
+    // was coalesced), the values following as MetricsChanged; built-in,
+    // malformed, unknown and disabled targets refused with their D-Bus error.
+    void refreshThroughTheApi()
+    {
+        const QString helper = QCoreApplication::applicationDirPath() + QStringLiteral("/custommetric_test_helper");
+        auto commandJson = [&](const QString &id, const QJsonArray &arguments, bool enabled = true) {
+            return QJsonDocument(QJsonObject{{QStringLiteral("id"), id}, {QStringLiteral("title"), id.toUpper()},
+                                             {QStringLiteral("enabled"), enabled},
+                                             {QStringLiteral("source"), QJsonObject{{QStringLiteral("type"), QStringLiteral("command")},
+                                                                                    {QStringLiteral("executable"), helper},
+                                                                                    {QStringLiteral("arguments"), arguments},
+                                                                                    {QStringLiteral("intervalSeconds"), 3600}}}}).toJson();
+        };
+        const QString a = m_metricsDir + QStringLiteral("/refresh-a.json");
+        const QString off = m_metricsDir + QStringLiteral("/refresh-off.json");
+        const QString group = m_metricsDir + QStringLiteral("/refresh-group");
+        writeFile(a, commandJson(QStringLiteral("a"), {QStringLiteral("counter"), m_root.filePath(QStringLiteral("refresh-a.count"))}));
+        writeFile(off, commandJson(QStringLiteral("off"), {QStringLiteral("value"), QStringLiteral("0")}, false));
+        writeFile(group + QStringLiteral("/metric.json"),
+                  QJsonDocument(QJsonObject{{QStringLiteral("id"), QStringLiteral("g")}, {QStringLiteral("title"), QStringLiteral("G")},
+                                            {QStringLiteral("source"), QJsonObject{{QStringLiteral("type"), QStringLiteral("group")},
+                                                                                   {QStringLiteral("executable"), helper},
+                                                                                   {QStringLiteral("intervalSeconds"), 3600}}}}).toJson());
+        writeFile(group + QStringLiteral("/x/metric.json"),
+                  QJsonDocument(QJsonObject{{QStringLiteral("title"), QStringLiteral("X")},
+                                            {QStringLiteral("source"), QJsonObject{
+                                                 {QStringLiteral("type"), QStringLiteral("command")},
+                                                 {QStringLiteral("arguments"), QJsonArray{QStringLiteral("counter"),
+                                                                                          m_root.filePath(QStringLiteral("refresh-x.count"))}}}}}).toJson());
+        startBackend();
+        const QJsonObject info = callObject(QStringLiteral("GetInfo"));
+        QVERIFY(info.value(QStringLiteral("capabilities")).toArray().contains(QStringLiteral("custom-metrics-refresh")));
+        QCOMPARE(info.value(QStringLiteral("schema")).toInt(), 7);
+        const QString aId = aqtruncat::metricsbar::customId(QFileInfo(a).canonicalFilePath());
+        const QString gId = aqtruncat::metricsbar::customId(QFileInfo(group + QStringLiteral("/metric.json")).canonicalFilePath());
+        const QString xId = aqtruncat::metricsbar::customId(QFileInfo(group + QStringLiteral("/x/metric.json")).canonicalFilePath());
+        auto metrics = [&] { return callObject(QStringLiteral("GetMetrics")).value(QStringLiteral("metrics")).toArray(); };
+        auto value = [&](const QString &id) { return metricById(metrics(), id).value(QStringLiteral("formattedValue")).toString(); };
+        QTRY_VERIFY_WITH_TIMEOUT(value(aId) == QLatin1String("1") && value(xId) == QLatin1String("1"), 10000);
+        QTest::qWait(1100); // past the spacing after a run
+
+        SignalLog log;
+        log.subscribe();
+        QDBusMessage reply = call(QStringLiteral("RefreshCustomMetric"), {aId});
+        QVERIFY2(reply.type() == QDBusMessage::ReplyMessage, qPrintable(reply.errorMessage()));
+        QJsonObject result = object(reply.arguments().value(0).toString());
+        QCOMPARE(result.value(QStringLiteral("id")).toString(), aId);
+        QCOMPARE(result.value(QStringLiteral("started")).toArray(), QJsonArray{aId});
+        QCOMPARE(result.value(QStringLiteral("coalesced")).toArray(), QJsonArray());
+        reply = call(QStringLiteral("RefreshCustomMetric"), {aId}); // while it runs or right after
+        result = object(reply.arguments().value(0).toString());
+        QCOMPARE(result.value(QStringLiteral("started")).toArray(), QJsonArray());
+        QCOMPARE(result.value(QStringLiteral("coalesced")).toArray(), QJsonArray{aId});
+        QTRY_COMPARE_WITH_TIMEOUT(value(aId), QStringLiteral("2"), 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(std::any_of(log.deltas.cbegin(), log.deltas.cend(), [&](const QJsonObject &delta) {
+            const QJsonArray changed = delta.value(QStringLiteral("metrics")).toArray();
+            return std::any_of(changed.cbegin(), changed.cend(), [&](const QJsonValue &v) {
+                return v[QStringLiteral("id")] == aId && v[QStringLiteral("formattedValue")] == QLatin1String("2");
+            });
+        }), 5000);
+
+        // A group: its enabled descendants.
+        reply = call(QStringLiteral("RefreshCustomMetric"), {gId});
+        QVERIFY2(reply.type() == QDBusMessage::ReplyMessage, qPrintable(reply.errorMessage()));
+        QCOMPARE(object(reply.arguments().value(0).toString()).value(QStringLiteral("started")).toArray(), QJsonArray{xId});
+        QTRY_COMPARE_WITH_TIMEOUT(value(xId), QStringLiteral("2"), 10000);
+
+        // Refused requests.
+        const auto refused = [&](const QString &id, const QString &error, const char *text) {
+            const QDBusMessage answer = call(QStringLiteral("RefreshCustomMetric"), {id});
+            QCOMPARE(answer.type(), QDBusMessage::ErrorMessage);
+            QCOMPARE(answer.errorName(), error);
+            QVERIFY2(answer.errorMessage().contains(QLatin1String(text)), qPrintable(answer.errorMessage()));
+        };
+        refused(QStringLiteral("cpu"), aqtruncat::api::ErrorInvalidArgument, "built-in");
+        refused(QStringLiteral("nonsense"), aqtruncat::api::ErrorInvalidArgument, "not a Custom Metric id");
+        refused(QStringLiteral("custom:") + m_metricsDir + QStringLiteral("/missing.json"), aqtruncat::api::ErrorNotFound, "missing.json");
+        refused(aqtruncat::metricsbar::customId(QFileInfo(off).canonicalFilePath()), aqtruncat::api::ErrorInvalidArgument, "disabled");
+
+        // The Qt client: asynchronous; a repeated request while one is
+        // pending is dropped; a refusal comes back with its reason.
+        BackendClient client(BackendClient::Options{});
+        client.start();
+        QTRY_VERIFY_WITH_TIMEOUT(client.connected(), 10000);
+        QSignalSpy finished(&client, &CustomMetricsModel::refreshFinished);
+        const QString aSource = aqtruncat::metricsbar::sourceIdFromCustomId(aId);
+        client.refreshMetric(aSource);
+        client.refreshMetric(aSource);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 10000);
+        QTest::qWait(200);
+        QCOMPARE(finished.size(), 1);
+        QCOMPARE(finished.at(0).at(0).toString(), aSource);
+        auto clientResult = finished.at(0).at(1).value<aqtruncat::custommetrics::RefreshResult>();
+        QCOMPARE(clientResult.status, aqtruncat::custommetrics::RefreshStatus::Accepted);
+        QCOMPARE(clientResult.started.size() + clientResult.coalesced.size(), qsizetype(1));
+        client.refreshMetric(m_metricsDir + QStringLiteral("/missing.json"));
+        QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 2, 10000);
+        clientResult = finished.at(1).at(1).value<aqtruncat::custommetrics::RefreshResult>();
+        QCOMPARE(clientResult.status, aqtruncat::custommetrics::RefreshStatus::NotFound);
+        QVERIFY(clientResult.error.contains(QLatin1String("missing.json")));
+
+        // The command-line client: by path or id.
+        QTest::qWait(1100);
+        Run r = ctl({QStringLiteral("custom"), QStringLiteral("refresh"), a});
+        QCOMPARE(r.exitCode, 0);
+        QVERIFY2(r.out.startsWith("Refresh requested: 1 started, 0 already running or just refreshed.\n  started: " + aId.toUtf8()),
+                 r.out.constData());
+        r = ctl({QStringLiteral("--json"), QStringLiteral("custom"), QStringLiteral("refresh"), aId});
+        QCOMPARE(r.exitCode, 0);
+        QCOMPARE(QJsonDocument::fromJson(r.out).object().value(QStringLiteral("coalesced")).toArray(), QJsonArray{aId});
+        r = ctl({QStringLiteral("custom"), QStringLiteral("refresh"), m_metricsDir + QStringLiteral("/missing.json")});
+        QCOMPARE(r.exitCode, 4);
+        QVERIFY(r.err.contains("missing.json"));
+        QCOMPARE(ctl({QStringLiteral("custom"), QStringLiteral("refresh")}).exitCode, 2);
+        QFile::remove(a);
+        QFile::remove(off);
+        QDir(group).removeRecursively();
+    }
+
     void customMetricsAndIntegrationsAreClassified()
     {
         writeFile(m_metricsDir + QStringLiteral("/sensors.json"),

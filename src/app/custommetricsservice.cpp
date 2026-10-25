@@ -55,6 +55,9 @@ constexpr int RecoveryMilliseconds = 5000;
 // pace instead of spinning on an already expired deadline.
 constexpr int KillGraceMilliseconds = 1000;
 constexpr int StopWaitMilliseconds = 250;
+// v2F1.7: a manual refresh of a command that ended less than this ago is
+// coalesced with that run: repeated clicks never queue runs back to back.
+constexpr int ManualRefreshSpacingMilliseconds = 1000;
 
 // Every command runs as the leader of its own process group, so a timeout,
 // an output overflow or shutdown also reaches helpers spawned by a script.
@@ -263,6 +266,81 @@ ReloadReport CustomMetricsService::reloadNow()
     if (report.ok)
         qCInfo(lcCustomMetrics).noquote() << reloadSummary(report);
     return report;
+}
+
+void CustomMetricsService::refreshMetric(const QString &sourceId)
+{
+    const RefreshResult result = refreshNow(sourceId);
+    emit refreshFinished(sourceId, result);
+}
+
+RefreshResult CustomMetricsService::refreshNow(const QString &sourceId)
+{
+    RefreshResult result;
+    const auto refuse = [&result](RefreshStatus status, const QString &error) {
+        result.status = status;
+        result.error = error;
+        return result;
+    };
+    if (!m_active)
+        return refuse(RefreshStatus::NotRunnable, tr("Custom Metrics are not running."));
+    if (sourceId.trimmed().isEmpty())
+        return refuse(RefreshStatus::Invalid, tr("The metric id is empty."));
+    const Source *target = sourceFor(sourceId);
+    if (!target)
+        return refuse(RefreshStatus::NotFound, tr("%1 is not a Custom Metrics source.").arg(sourceId));
+    const QString name = target->configuredId.isEmpty() ? target->path : target->configuredId;
+    if (!target->enabled)
+        return refuse(RefreshStatus::Disabled, tr("%1 is disabled.").arg(name));
+    if (target->type == SourceType::Snapshot)
+        return refuse(RefreshStatus::Invalid,
+                      tr("%1 is not a command: its file is read again whenever it changes.").arg(name));
+    if (target->type == SourceType::Group) {
+        if (target->state == State::Error)
+            return refuse(RefreshStatus::NotRunnable, tr("%1 cannot run: %2").arg(name, target->message));
+        // Its enabled executable descendants, nested groups included (the
+        // children follow their group in m_sources); a disabled nested
+        // group's children are disabled too.
+        result.status = RefreshStatus::Accepted;
+        QStringList groups{target->id};
+        QStringList members;
+        for (const Source &source : std::as_const(m_sources)) {
+            if (!groups.contains(source.parentId) || !source.enabled)
+                continue;
+            if (source.type == SourceType::Group)
+                groups.append(source.id);
+            else
+                members.append(source.id);
+        }
+        // Each one in its own job: its own command, arguments and timeout.
+        for (const QString &member : std::as_const(members))
+            requestRun(member, result);
+    } else {
+        if (m_commandJobs.find(target->id) == m_commandJobs.end())
+            return refuse(RefreshStatus::NotRunnable, tr("%1 cannot run: %2").arg(name, target->message));
+        result.status = RefreshStatus::Accepted;
+        requestRun(target->id, result);
+    }
+    if (!result.started.isEmpty())
+        scheduleCommandWake(); // the new runs' deadlines
+    return result;
+}
+
+void CustomMetricsService::requestRun(const QString &id, RefreshResult &result)
+{
+    const auto found = m_commandJobs.find(id);
+    if (found == m_commandJobs.end())
+        return; // a configuration error: nothing that could run
+    const CommandJob &job = *found->second;
+    if (job.process || (job.finishedMilliseconds >= 0
+                        && m_clock.elapsed() - job.finishedMilliseconds < ManualRefreshSpacingMilliseconds)) {
+        result.coalesced.append(id);
+        return;
+    }
+    // The scheduler's own run: the next periodic one is due an interval
+    // after this one ends (finishCommand), as after any run.
+    startCommand(id);
+    result.started.append(id);
 }
 
 void CustomMetricsService::scheduleReload()

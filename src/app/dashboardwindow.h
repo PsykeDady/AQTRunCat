@@ -2,6 +2,7 @@
 
 #include "metrics/systemmetrics.h"
 #include "custommetrics/custommetric.h"
+#include "custommetricsmodel.h"
 
 #include <QHash>
 #include <QLabel>
@@ -28,14 +29,23 @@ public:
 public slots:
     void updateSnapshot(const aqtruncat::metrics::SystemMetricsSnapshot &snapshot);
     void updateCustomMetrics(const QList<aqtruncat::custommetrics::Source> &sources);
+    // v2F1.7: the answer to a refreshRequested, shown briefly as a tooltip
+    // where the icon was clicked (refreshFeedback keeps the text).
+    void showRefreshResult(const QString &sourceId, const aqtruncat::custommetrics::RefreshResult &result);
+
+public:
+    QString refreshFeedback() const { return m_refreshFeedback; }
 
 signals:
     void visibilityChanged(bool visible);
+    // v2F1.7: a Custom Metric's or a group's icon was clicked (Source::id).
+    void refreshRequested(const QString &sourceId);
 
 protected:
     void closeEvent(QCloseEvent *event) override;
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     struct StorageRow {
@@ -87,6 +97,8 @@ private:
     aqtruncat::custommetrics::State presentedState(const aqtruncat::custommetrics::Source &source,
                                                    QString *message) const;
     QString customCardKey(const aqtruncat::custommetrics::Source &source) const;
+    // v2F1.7: makes a card's (or a cell's) icon request a refresh of source.
+    void makeRefreshTarget(QLabel *icon, const aqtruncat::custommetrics::Source &source);
 
     std::string m_homePath;
     QVBoxLayout *m_layout = nullptr;
@@ -124,6 +136,9 @@ private:
         QString message;
     };
     QHash<QString, SettledState> m_customSettled;
+    // v2F1.7: where the last refresh was requested, and its answer.
+    QPoint m_refreshPoint;
+    QString m_refreshFeedback;
 
     QLabel *m_cpuValue = nullptr;
     QLabel *m_cpuDetail = nullptr;

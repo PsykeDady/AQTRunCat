@@ -597,4 +597,41 @@ TestCase {
         compare(Logic.reloadFailure("Cannot read the directory /m."),
                 "Custom Metrics not reloaded: Cannot read the directory /m. The active configuration is unchanged.");
     }
+
+    // v2F1.7 (schema 7): which icons ask for a fresh sample, and what the
+    // answer says. Commands and groups of Custom Metrics and integrations;
+    // never a built-in metric, a snapshot file or a disabled metric.
+    function test_refreshable() {
+        const command = metric({ id: "custom:/m/a.json", category: "custom", kind: "command", enabled: true,
+                                 items: [{ title: "A", formattedValue: "1" }] });
+        verify(Logic.refreshable(command));
+        verify(Logic.refreshable(Object.assign({}, command, { category: "integration" })));
+        verify(Logic.refreshable(Object.assign({}, command, { kind: "group" })));
+        verify(!Logic.refreshable(Object.assign({}, command, { kind: "snapshot" })));
+        verify(!Logic.refreshable(Object.assign({}, command, { enabled: false })));
+        verify(!Logic.refreshable(metric()));
+        verify(!Logic.refreshable(null));
+        compare(Logic.metricRow(command).refreshable, true);
+        compare(Logic.metricRow(metric()).refreshable, false);
+
+        const g = "/m/g/metric.json";
+        const group = metric({ id: "custom:" + g, category: "custom", kind: "group", title: "G", items: [],
+                               data: { sourceId: g, groupId: "" } });
+        const child = metric({ id: "custom:/m/g/x/metric.json", category: "custom", kind: "command", title: "X",
+                               items: [{ title: "X", formattedValue: "2" }], data: { sourceId: "/m/g/x/metric.json", groupId: g } });
+        const rows = Logic.metricRows([group, child]);
+        compare(rows[0].refreshable, true);
+        const cells = JSON.parse(rows[0].itemsJson);
+        compare(cells[0].metricId, "custom:/m/g/x/metric.json");
+        compare(cells[0].refreshable, true);
+    }
+
+    function test_refreshSummary() {
+        compare(Logic.refreshSummary({ id: "custom:/a", started: ["custom:/a"], coalesced: [] }), "Refreshing…");
+        compare(Logic.refreshSummary({ id: "custom:/g", started: ["custom:/x"], coalesced: ["custom:/y"] }), "Refreshing…");
+        compare(Logic.refreshSummary({ id: "custom:/a", started: [], coalesced: ["custom:/a"] }),
+                "Already running or just refreshed");
+        compare(Logic.refreshSummary({ id: "custom:/g", started: [], coalesced: [] }), "Nothing to refresh: no enabled metric");
+        compare(Logic.refreshSummary(null), "Nothing to refresh: no enabled metric");
+    }
 }

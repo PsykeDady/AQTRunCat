@@ -777,6 +777,34 @@ QList<custommetrics::ReloadEntry> reloadEntriesFromJson(const QJsonValue &value)
 }
 }
 
+QJsonObject refreshResult(const QString &metricId, const custommetrics::RefreshResult &result)
+{
+    const auto ids = [](const QStringList &sources) {
+        QJsonArray array;
+        for (const QString &source : sources)
+            array.append(metricsbar::customId(source));
+        return array;
+    };
+    return QJsonObject{{QStringLiteral("id"), metricId},
+                       {QStringLiteral("started"), ids(result.started)},
+                       {QStringLiteral("coalesced"), ids(result.coalesced)}};
+}
+
+custommetrics::RefreshResult refreshResultFromJson(const QJsonObject &object)
+{
+    const auto sources = [](const QJsonValue &value) {
+        QStringList list;
+        for (const QJsonValue &id : value.toArray())
+            list.append(metricsbar::sourceIdFromCustomId(id.toString()));
+        return list;
+    };
+    custommetrics::RefreshResult result;
+    result.status = custommetrics::RefreshStatus::Accepted;
+    result.started = sources(object.value(QStringLiteral("started")));
+    result.coalesced = sources(object.value(QStringLiteral("coalesced")));
+    return result;
+}
+
 QJsonObject reloadReport(const custommetrics::ReloadReport &report)
 {
     return QJsonObject{{QStringLiteral("added"), reloadEntries(report.added)},

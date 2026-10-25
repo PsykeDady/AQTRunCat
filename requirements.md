@@ -15,7 +15,7 @@ normative summaries of the 1.x features are in
 [docs/feature-reference.md](docs/feature-reference.md).
 
     2.0.0  Consolidation baseline (1.x complete)            COMPLETE
-    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       IN PROGRESS (2.1.6 done)
+    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       COMPLETE (2.1.7)
     v2F2   Independent Autostart + new runner   2.2.x       PLANNED
     v2F3   Standalone Settings + new runner     2.3.x       PLANNED
     v2F4   Dependency Advisor + new runner      2.4.x       PLANNED
@@ -113,8 +113,8 @@ Requirements for every v2 runner:
 
 ## v2F1 — Custom Metrics v3 + Rickroll
 
-Status: IN PROGRESS. Version family **2.1.x**; current version **2.1.6**
-(2.1.0–2.1.6 COMPLETE, 2.1.7 PLANNED).
+Status: COMPLETE (2026-10-24). Version family **2.1.x**; current version
+**2.1.7** (2.1.0–2.1.7 COMPLETE).
 
 Extends Custom Metrics v2 (command and snapshot sources,
 [docs/custom-metrics-commands.md](docs/custom-metrics-commands.md)) without
@@ -361,6 +361,17 @@ the established policy (the source stays, in Error, listed in the report).
 - Reloading the configuration is distinct from refreshing values.
 
 ### 2.1.7 — Manual Refresh by Clicking Metric Icons
+
+Status: COMPLETE (2026-10-24). Record:
+[docs/custom-metrics-commands.md](docs/custom-metrics-commands.md) §13.
+Entry points: the metric's (or group's, or child's own) icon in the
+Dashboard and in the Plasma widget's popup; a Metrics Bar item's middle
+click or its menu's "Refresh Now" (its left click keeps opening the
+Dashboard); `aqtruncatctl custom refresh`; D-Bus `RefreshCustomMetric`
+(schema 7). Concurrency policy: a request for a running metric, or for one
+whose last run ended less than one second ago, is coalesced with it (never
+queued, never a second process). The refreshed metric's next periodic run
+is one interval after the manual run.
 
 - Clicking a metric's icon requests a fresh sample immediately.
 - A child's icon refreshes only that child; a group's icon refreshes all

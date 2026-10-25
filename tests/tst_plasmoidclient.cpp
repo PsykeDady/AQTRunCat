@@ -336,6 +336,59 @@ private slots:
                  qPrintable(replied.at(2).at(2).toString()));
     }
 
+    // v2F1.7 (schema 7): the widget's refresh goes through RefreshCustomMetric;
+    // the reply's summary, then the new value as a MetricsChanged delta; a
+    // refused request comes back with the backend's reason.
+    void refreshesCustomMetrics()
+    {
+        auto client = createClient();
+        QTRY_COMPARE_WITH_TIMEOUT(status(client.get()), QStringLiteral("connected"), 15000);
+        const QString metricsDir = testHome() + QStringLiteral("/data/AQTRunCat/metrics");
+        const QString helper = QCoreApplication::applicationDirPath() + QStringLiteral("/custommetric_test_helper");
+        const QString counter = testHome() + QStringLiteral("/refresh.count");
+        QFile::remove(counter);
+        QFile file(metricsDir + QStringLiteral("/refresh.json"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(QJsonDocument(QJsonObject{{QStringLiteral("id"), QStringLiteral("refresh")}, {QStringLiteral("title"), QStringLiteral("Refresh")},
+                                             {QStringLiteral("source"), QJsonObject{{QStringLiteral("type"), QStringLiteral("command")},
+                                                                                    {QStringLiteral("executable"), helper},
+                                                                                    {QStringLiteral("arguments"), QJsonArray{QStringLiteral("counter"), counter}},
+                                                                                    {QStringLiteral("intervalSeconds"), 3600}}}}).toJson());
+        file.close();
+        const QString id = QStringLiteral("custom:") + QFileInfo(file.fileName()).canonicalFilePath();
+        auto value = [&] {
+            for (const QJsonValue &m : jsonProperty(client.get(), "metrics").toArray()) {
+                if (m[QStringLiteral("id")] == id)
+                    return m[QStringLiteral("formattedValue")].toString();
+            }
+            return QString();
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(value(), QStringLiteral("1"), 10000);
+        QTest::qWait(1100); // past the spacing after a run
+
+        QSignalSpy replied(client.get(), SIGNAL(replied(QString,bool,QString)));
+        QVERIFY(QMetaObject::invokeMethod(client.get(), "refreshCustomMetric", Q_ARG(QVariant, id)));
+        QVERIFY(QMetaObject::invokeMethod(client.get(), "refreshCustomMetric", Q_ARG(QVariant, id))); // pending: dropped
+        QTRY_COMPARE_WITH_TIMEOUT(replied.size(), 1, 10000);
+        QCOMPARE(replied.at(0).at(0).toString(), QStringLiteral("RefreshCustomMetric"));
+        QVERIFY(replied.at(0).at(1).toBool());
+        QCOMPARE(replied.at(0).at(2).toString(), QStringLiteral("Refreshing…"));
+        QTRY_COMPARE_WITH_TIMEOUT(value(), QStringLiteral("2"), 10000);
+        QTest::qWait(200);
+        QCOMPARE(replied.size(), 1);
+
+        QVERIFY(QMetaObject::invokeMethod(client.get(), "refreshCustomMetric", Q_ARG(QVariant, id)));
+        QTRY_COMPARE_WITH_TIMEOUT(replied.size(), 2, 10000);
+        QCOMPARE(replied.at(1).at(2).toString(), QStringLiteral("Already running or just refreshed"));
+
+        QVERIFY(QMetaObject::invokeMethod(client.get(), "refreshCustomMetric", Q_ARG(QVariant, QStringLiteral("custom:/nowhere.json"))));
+        QTRY_COMPARE_WITH_TIMEOUT(replied.size(), 3, 10000);
+        QVERIFY(!replied.at(2).at(1).toBool());
+        QVERIFY2(replied.at(2).at(2).toString().contains(QLatin1String("nowhere.json")), qPrintable(replied.at(2).at(2).toString()));
+        QVERIFY(QFile::remove(file.fileName()));
+        QFile::remove(counter);
+    }
+
     void followsDeltasLikeTheBackend()
     {
         auto client = createClient();

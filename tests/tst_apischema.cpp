@@ -481,7 +481,7 @@ private slots:
     // Schema 6 (2.1.6): the ReloadCustomMetrics report, both ways.
     void reloadReport()
     {
-        QCOMPARE(api::SchemaVersion, 6);
+        QVERIFY(api::SchemaVersion >= 6); // ReloadCustomMetrics since schema 6
         custommetrics::ReloadReport report;
         report.ok = true;
         report.added = {{QStringLiteral("/m/a.json"), QStringLiteral("a"), {}}};
@@ -519,6 +519,26 @@ private slots:
 
     // Schema 5 (2.1.5): groups, both ways: kind "group", data.groupId on
     // children, data.configuredEnabled next to the effective "enabled".
+    // v2F1.7 (schema 7): RefreshCustomMetric's answer, metric ids out and
+    // source ids back.
+    void refreshResult()
+    {
+        QCOMPARE(api::SchemaVersion, 7);
+        custommetrics::RefreshResult result;
+        result.status = custommetrics::RefreshStatus::Accepted;
+        result.started = {QStringLiteral("/m/g/a/metric.json")};
+        result.coalesced = {QStringLiteral("/m/g/b/metric.json")};
+        const QJsonObject json = api::refreshResult(QStringLiteral("custom:/m/g/metric.json"), result);
+        QCOMPARE(json.value(QStringLiteral("id")).toString(), QStringLiteral("custom:/m/g/metric.json"));
+        QCOMPARE(json.value(QStringLiteral("started")).toArray(), QJsonArray{QStringLiteral("custom:/m/g/a/metric.json")});
+        QCOMPARE(json.value(QStringLiteral("coalesced")).toArray(), QJsonArray{QStringLiteral("custom:/m/g/b/metric.json")});
+        const custommetrics::RefreshResult back = api::refreshResultFromJson(json);
+        QCOMPARE(back.status, custommetrics::RefreshStatus::Accepted);
+        QCOMPARE(back.started, result.started);
+        QCOMPARE(back.coalesced, result.coalesced);
+        QVERIFY(api::refreshResultFromJson(QJsonObject{{QStringLiteral("id"), QStringLiteral("custom:/x")}}).started.isEmpty());
+    }
+
     void customMetricGroups()
     {
         QVERIFY(api::SchemaVersion >= 5);

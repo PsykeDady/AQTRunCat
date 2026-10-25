@@ -136,6 +136,16 @@ function iconSource(metric) {
     return "";
 }
 
+// v2F1.7 (schema 7): a Custom Metric (or integration) command, or a group,
+// whose icon asks the backend for a fresh sample (RefreshCustomMetric).
+// Snapshot files have nothing to run; disabled metrics never run.
+function refreshable(metric) {
+    if (!metric || metric.enabled === false)
+        return false;
+    var category = categoryOf(metric);
+    return (category === "custom" || category === "integration") && (metric.kind === "command" || metric.kind === "group");
+}
+
 // One flat row per metric for a ListModel. Nested items travel as JSON
 // text, so that an unchanged metric compares equal and its delegate stays.
 function metricRow(metric) {
@@ -153,7 +163,8 @@ function metricRow(metric) {
         icon: iconSource(metric),
         itemsJson: "[]",
         group: false,
-        warnings: sourceWarnings(metric).join("\n")
+        warnings: sourceWarnings(metric).join("\n"),
+        refreshable: refreshable(metric)
     };
     var items = itemRows(metric);
     if (items.length === 1 && row.state === "ok") {
@@ -264,6 +275,8 @@ function groupCells(group, metrics) {
         // A child's own icon (not the group's) is shown in its cell.
         var icon = iconSource(metric);
         cells.push({
+            metricId: String(metric.id),
+            refreshable: refreshable(metric),
             icon: icon !== iconSource(group) ? icon : "",
             title: typeof metric.title === "string" ? metric.title : "",
             value: value,
@@ -599,4 +612,16 @@ function reloadSummary(report) {
 // A refused reload: the backend's reason; nothing was changed.
 function reloadFailure(message) {
     return "Custom Metrics not reloaded: " + message + " The active configuration is unchanged.";
+}
+
+// v2F1.7 (schema 7): the line shown after RefreshCustomMetric. The new
+// values arrive as MetricsChanged; this only says what was asked.
+function refreshSummary(result) {
+    var started = result && Array.isArray(result.started) ? result.started.length : 0;
+    var coalesced = result && Array.isArray(result.coalesced) ? result.coalesced.length : 0;
+    if (started > 0)
+        return "Refreshing…";
+    if (coalesced > 0)
+        return "Already running or just refreshed";
+    return "Nothing to refresh: no enabled metric";
 }

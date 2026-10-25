@@ -30,6 +30,8 @@ public:
 
 signals:
     void activated();
+    // v2F1.7: a middle click (SNI SecondaryActivate).
+    void secondaryActivated();
 };
 
 using MetricsBarTrayItemFactory = std::function<std::unique_ptr<MetricsBarTrayItem>(QMenu *menu)>;
@@ -64,6 +66,10 @@ public slots:
 signals:
     void dashboardToggleRequested();
     void settingsRequested();
+    // v2F1.7: a Custom Metric's item was middle-clicked, or its menu's
+    // "Refresh Now" chosen (Source::id). A left click keeps toggling the
+    // Dashboard; built-in items have neither.
+    void refreshRequested(const QString &sourceId);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -72,6 +78,7 @@ private:
     struct Entry {
         QString id;
         std::unique_ptr<QMenu> menu;
+        std::unique_ptr<QAction> refresh; // Custom Metrics only
         std::unique_ptr<MetricsBarTrayItem> tray;
         aqtruncat::metricsbar::IconContent content;
         QString toolTip;

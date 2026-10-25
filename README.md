@@ -220,6 +220,7 @@ aqtruncatctl watch                           # follow changes (Ctrl+C)
 aqtruncatctl settings set speedMode slow-down
 aqtruncatctl integration enable codex
 aqtruncatctl custom reload                   # re-read the Custom Metrics files
+aqtruncatctl custom refresh ~/.local/share/AQTRunCat/metrics/dice/metric.json  # sample now
 ```
 
 Exit status: 0 success, 1 backend failure, 2 invalid command line, 3 backend
@@ -314,6 +315,15 @@ the Plasma widget's configuration), or run `aqtruncatctl custom reload`.
 Added, changed and removed metrics and groups are applied without a restart;
 unchanged commands keep running with their current values; if a directory
 cannot be read, nothing changes and the reason is shown.
+
+To sample a command metric now instead of waiting for its interval (since
+2.1.7), click its icon in the Dashboard or in the Plasma widget's popup; a
+group's icon refreshes all its enabled metrics. In the Metrics Bar, middle-
+click the item or choose **Refresh Now** in its menu (a left click still
+opens the Dashboard); from a terminal, `aqtruncatctl custom refresh FILE`.
+The backend runs it with its usual command, timeout and limits: a metric
+that is already running is never started twice, and its next periodic run
+follows its interval from this one.
 
 A command-backed metric uses an explicit executable and argument array—never
 an implicit shell—and reads one UTF-8 scalar line from standard output:

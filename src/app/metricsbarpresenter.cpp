@@ -27,6 +27,8 @@ public:
             // Same rule as the runner item: a normal left click is Trigger.
             if (reason == QSystemTrayIcon::Trigger)
                 emit activated();
+            else if (reason == QSystemTrayIcon::MiddleClick)
+                emit secondaryActivated();
         });
     }
 
@@ -136,6 +138,14 @@ std::unique_ptr<MetricsBarPresenter::Entry> MetricsBarPresenter::createEntry(con
     auto entry = std::make_unique<Entry>();
     entry->id = id;
     entry->menu = std::make_unique<QMenu>();
+    const QString source = sourceIdFromCustomId(id);
+    if (!source.isEmpty()) {
+        // v2F1.7: the item's own action first; the shared ones follow.
+        entry->refresh = std::make_unique<QAction>(QIcon::fromTheme(QStringLiteral("view-refresh")), tr("Refresh Now"));
+        connect(entry->refresh.get(), &QAction::triggered, this, [this, source] { emit refreshRequested(source); });
+        entry->menu->addAction(entry->refresh.get());
+        entry->menu->addSeparator();
+    }
     entry->menu->addAction(&m_dashboardAction);
     entry->menu->addAction(&m_settingsAction);
     entry->menu->addSeparator();
@@ -143,6 +153,8 @@ std::unique_ptr<MetricsBarPresenter::Entry> MetricsBarPresenter::createEntry(con
     entry->menu->addAction(&m_quitAction);
     entry->tray = m_factory(entry->menu.get());
     connect(entry->tray.get(), &MetricsBarTrayItem::activated, this, &MetricsBarPresenter::dashboardToggleRequested);
+    if (!source.isEmpty())
+        connect(entry->tray.get(), &MetricsBarTrayItem::secondaryActivated, this, [this, source] { emit refreshRequested(source); });
     ++m_itemsCreated;
     return entry;
 }

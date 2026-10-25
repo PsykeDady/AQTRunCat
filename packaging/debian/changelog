@@ -1,3 +1,13 @@
+aqtruncat (2.1.7-1) unstable; urgency=medium
+
+  * 2.1.7 (v2F1): Manual refresh of Custom Metrics: clicking a metric's icon
+    in the Dashboard or the Plasma widget (a group's: all its enabled
+    metrics), a Metrics Bar item's middle click or "Refresh Now", and
+    "aqtruncatctl custom refresh" sample it now through the backend's
+    scheduler; a running metric is never started twice. Completes v2F1.
+
+ -- AQTRunCat maintainers <maintainers@aqtruncat.invalid>  Sat, 24 Oct 2026 18:00:00 +0200
+
 aqtruncat (2.1.6-1) unstable; urgency=medium
 
   * 2.1.6 (v2F1): Reload Custom Metrics without restarting: Settings, the

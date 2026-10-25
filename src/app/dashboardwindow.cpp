@@ -17,6 +17,8 @@
 #include <QScrollBar>
 #include <QFileInfo>
 #include <QLocale>
+#include <QMouseEvent>
+#include <QToolTip>
 
 #include <algorithm>
 
@@ -736,6 +738,7 @@ QWidget *DashboardWindow::customCard(const aqtruncat::custommetrics::Source &sou
         auto *iconLabel = new QLabel(headingRow);
         iconLabel->setObjectName(QStringLiteral("customIcon_%1").arg(index));
         iconLabel->setPixmap(icon.pixmap(16, 16));
+        makeRefreshTarget(iconLabel, source);
         headingLayout->addWidget(iconLabel);
     }
     auto *title = label(heading, card);
@@ -872,6 +875,7 @@ QWidget *DashboardWindow::customGroupCard(const aqtruncat::custommetrics::Source
         auto *iconLabel = new QLabel(headingRow);
         iconLabel->setObjectName(QStringLiteral("customIcon_%1").arg(index));
         iconLabel->setPixmap(icon.pixmap(16, 16));
+        makeRefreshTarget(iconLabel, group);
         headingLayout->addWidget(iconLabel);
     } else if (group.snapshot && !customSymbolText(group.snapshot->symbol).isEmpty()) {
         heading = customSymbolText(group.snapshot->symbol) + QStringLiteral("  ") + heading;
@@ -944,6 +948,7 @@ QWidget *DashboardWindow::customGroupCard(const aqtruncat::custommetrics::Source
                     iconLabel->setPixmap(childIcon.pixmap(14, 14));
                 else
                     iconLabel->setText(symbol);
+                makeRefreshTarget(iconLabel, *member);
                 row->addWidget(iconLabel);
             }
         }
@@ -1043,6 +1048,51 @@ void DashboardWindow::toggleVisible()
         raise();
         activateWindow();
     }
+}
+
+void DashboardWindow::makeRefreshTarget(QLabel *icon, const aqtruncat::custommetrics::Source &source)
+{
+    // A command or a group (its enabled metrics); a snapshot file has
+    // nothing to run. Disabled sources are not on the Dashboard.
+    if (source.type == aqtruncat::custommetrics::SourceType::Snapshot)
+        return;
+    icon->setProperty("refreshSource", source.id);
+    icon->setCursor(Qt::PointingHandCursor);
+    icon->setToolTip(source.type == aqtruncat::custommetrics::SourceType::Group ? tr("Refresh the group now")
+                                                                                : tr("Refresh now"));
+    icon->setAccessibleDescription(icon->toolTip());
+    icon->installEventFilter(this);
+}
+
+bool DashboardWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::MouseButtonRelease) {
+        auto *icon = qobject_cast<QLabel *>(watched);
+        const auto *mouse = static_cast<QMouseEvent *>(event);
+        const QString source = icon ? icon->property("refreshSource").toString() : QString();
+        if (!source.isEmpty() && mouse->button() == Qt::LeftButton && icon->rect().contains(mouse->position().toPoint())) {
+            m_refreshPoint = icon->mapToGlobal(QPoint(0, icon->height()));
+            emit refreshRequested(source);
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+void DashboardWindow::showRefreshResult(const QString &sourceId, const aqtruncat::custommetrics::RefreshResult &result)
+{
+    Q_UNUSED(sourceId);
+    if (result.status != aqtruncat::custommetrics::RefreshStatus::Accepted)
+        m_refreshFeedback = result.error;
+    else if (!result.started.isEmpty())
+        m_refreshFeedback = tr("Refreshing…");
+    else if (!result.coalesced.isEmpty())
+        m_refreshFeedback = tr("Already running or just refreshed");
+    else
+        m_refreshFeedback = tr("Nothing to refresh: no enabled metric");
+    // Subtle and transient: the new values arrive on the card by themselves.
+    if (isVisible())
+        QToolTip::showText(m_refreshPoint, m_refreshFeedback, this, {}, 2500);
 }
 
 void DashboardWindow::closeEvent(QCloseEvent *event)

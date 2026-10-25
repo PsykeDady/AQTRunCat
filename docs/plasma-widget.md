@@ -483,6 +483,24 @@ cella); la pagina di configurazione li elenca sotto ogni file
 (`Logic.metricWarnings`, anche i valori fuori range). Vedi
 `docs/custom-metrics-commands.md` §12, "Avvisi".
 
+## 15c. Aggiornamento manuale dall'icona (2.1.7)
+
+Nel popup l'icona di una Custom Metric (o integrazione) di tipo comando, di
+un gruppo, e l'icona propria di un figlio nella cella del gruppo sono
+cliccabili (`RefreshArea.qml`: solo l'icona, solo il tasto sinistro,
+cursore a mano e suggerimento "Refresh now" / "Refresh the group now"). Il
+clic chiama `BackendClient.refreshCustomMetric(id)` → `RefreshCustomMetric`
+(una richiesta per id alla volta; senza backend: risposta immediata di
+errore, nessuna chiamata). L'esito (`Logic.refreshSummary`: "Refreshing…",
+"Already running or just refreshed", "Nothing to refresh: no enabled
+metric", oppure il motivo del rifiuto) compare per 3 s nell'intestazione
+del popup al posto di runner e fps; il nuovo valore arriva con il normale
+delta. Built-in, snapshot e metriche disabilitate non hanno l'area
+(`Logic.refreshable`). La rappresentazione compatta nel pannello (il solo
+runner) non cambia: trascinamento, apertura del popup e suggerimento
+restano come prima. Il widget non esegue mai script: vedi
+`docs/custom-metrics-commands.md` §13.
+
 ## 16. Limitazioni note
 
 - Il widget dipende dalla D-Bus activation (nessun ripiego di avvio dal

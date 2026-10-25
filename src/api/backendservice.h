@@ -100,6 +100,13 @@ public slots:
     // report (apischema reloadReport). Failed when it cannot be applied: the
     // active configuration is then unchanged.
     Q_SCRIPTABLE QString ReloadCustomMetrics();
+    // v2F1.7 (schema 7): a fresh sample of a Custom Metric ("custom:<path>")
+    // now, or of every enabled executable descendant of a group, through the
+    // engine's scheduler (CustomMetricsService::refreshNow). Returns at once
+    // (apischema refreshResult); the values follow as MetricsChanged.
+    // InvalidArgument for another id, a snapshot file or a disabled
+    // metric, NotFound for an unknown one, Failed when it cannot run.
+    Q_SCRIPTABLE QString RefreshCustomMetric(const QString &id);
     Q_SCRIPTABLE QString SetIntegrationEnabled(const QString &id, bool enabled);
     Q_SCRIPTABLE QString SetIntegrationLiveUpdates(const QString &id, bool on);
 
