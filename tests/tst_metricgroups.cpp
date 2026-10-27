@@ -216,6 +216,25 @@ private slots:
         service.stop();
     }
 
+    void groupInsidePlainContainerKeepsGroupSemantics()
+    {
+        QTemporaryDir temporary;
+        const QString discovery = temporary.filePath(QStringLiteral("metrics"));
+        const QString collection = discovery + QStringLiteral("/ExampleMetrics");
+        const QString group = writeDice(collection);
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
+        CustomMetricsService service(&settings, discovery);
+        service.start();
+
+        QCOMPARE(service.sources().size(), 4);
+        QCOMPARE(service.sources().first().path, group + QStringLiteral("/metric.json"));
+        QCOMPARE(service.sources().first().type, SourceType::Group);
+        QCOMPARE(service.sources().first().configuredId, QStringLiteral("dice-metrics"));
+        for (const int sides : {6, 20, 100})
+            QVERIFY(byConfiguredId(service, QStringLiteral("dice-metrics/d%1").arg(sides)));
+        service.stop();
+    }
+
     // enabled: a disabled group disables every child (even enabled: true),
     // its files untouched; enabling it again keeps a child's own false.
     void enabledInheritance()

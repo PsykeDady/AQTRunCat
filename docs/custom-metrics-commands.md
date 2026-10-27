@@ -110,10 +110,13 @@ configurazione. Il processo usa la stessa directory come working directory.
 Anche le icone `file` relative seguono questa regola, mai il working directory
 dal quale è stato avviato AQTRunCat.
 
-La discovery M6 dei file standalone resta non ricorsiva. F1 aggiunge soltanto
-un livello package: per ogni directory immediatamente contenuta in
-`$XDG_DATA_HOME/AQTRunCat/metrics/` viene cercato `metric.json`. È quindi
-supportata questa struttura autosufficiente:
+I file standalone e i package sono scoperti anche dentro cartelle puramente
+organizzative. Una directory senza `metric.json` viene attraversata
+ricorsivamente; una directory che contiene `metric.json` è invece il confine
+di un package e la discovery generale non scende al suo interno. Le sue
+sottocartelle diventano figli soltanto se quel file dichiara esplicitamente
+`source.type: "group"` (§11). Sono quindi supportate sia una struttura
+autosufficiente diretta:
 
 ```text
 ~/.local/share/AQTRunCat/metrics/my-metric/
@@ -121,6 +124,19 @@ supportata questa struttura autosufficiente:
 ├── metric-executable
 └── icons/
     └── metric.svg
+```
+
+sia raccolte che non introducono implicitamente un gruppo:
+
+```text
+~/.local/share/AQTRunCat/metrics/ExampleMetrics/   contenitore organizzativo
+├── random-metric.sh
+├── d10-metric/
+│   └── metric.json                               package normale
+└── dice-metrics/
+    ├── metric.json                               vero gruppo (type: group)
+    ├── d6/metric.json
+    └── d20/metric.json
 ```
 
 I simboli `theme` usano `QIcon::fromTheme`; i simboli `file` usano i formati
@@ -1033,3 +1049,26 @@ nella Dashboard del tray installato, clic centrale e "Refresh Now" sulle
 voci della Metrics Bar (dipende dall'host SNI: Plasma invia il clic centrale
 come SecondaryActivate), clic sulle icone nel popup del widget dopo il
 riavvio di plasmashell.
+
+## 14. Discovery ricorsiva e cartelle organizzative (2.1.8)
+
+Stato: **completata** il 2026-10-27, versione **2.1.8**.
+
+La discovery attraversa ricorsivamente le directory prive di `metric.json`:
+queste sono semplici contenitori e non producono una sorgente, una card o un
+livello nell'albero delle impostazioni. Appena trova `metric.json`, registra
+quel package e interrompe lì la discovery generale. Se il file è un gruppo,
+l'espansione dei figli continua esclusivamente attraverso la logica di §11;
+un package normale non espone eventuali `metric.json` contenuti al suo interno
+come metriche indipendenti.
+
+Tutte le directory organizzative attraversate vengono osservate dal watcher,
+incluse quelle ancora vuote: aggiungere in seguito un `metric.json` viene
+rilevato senza riavvio. Identità canoniche impediscono che alias o cicli di
+symlink vengano visitati più volte. Una directory attraversata ma illeggibile
+mantiene la garanzia della 2.1.6: la ricarica non viene applicata e la
+configurazione attiva resta invariata.
+
+I test `custommetricsservice`, `metricgroups` e `custommetricsreload` coprono
+rispettivamente raccolte annidate e watcher, distinzione tra contenitore e
+gruppo, e directory organizzative illeggibili.

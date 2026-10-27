@@ -480,13 +480,15 @@ private slots:
         Fixture f;
         writeJson(f.path(QStringLiteral("a.json")), command(QStringLiteral("a"), QStringLiteral("A"), {QStringLiteral("value"), QStringLiteral("a")}));
         const QString group = writeCounterGroup(f.discovery, {QStringLiteral("x")});
+        const QString collection = f.discovery + QStringLiteral("/ExampleMetrics");
+        QDir().mkpath(collection + QStringLiteral("/empty"));
         CustomMetricsService service(&f.settings, f.discovery);
         service.start();
         QTRY_VERIFY_WITH_TIMEOUT(settled(service, QStringLiteral("a")) && settled(service, QStringLiteral("counters/x")), 5000);
         const QStringList ids = sourceIds(service);
         QSignalSpy published(&service, &CustomMetricsModel::sourcesChanged);
 
-        for (const QString &directory : {f.discovery, group, group + QStringLiteral("/x")}) {
+        for (const QString &directory : {f.discovery, collection, group, group + QStringLiteral("/x")}) {
             const QFile::Permissions permissions = QFile::permissions(directory);
             QVERIFY(QFile::setPermissions(directory, QFile::WriteOwner));
             const ReloadReport report = service.reloadNow();

@@ -307,6 +307,12 @@ The Claude Code object above is only an example of the snapshot format that
 an external producer writes; it is not how the Claude Code metric works (see
 [Claude Code metric](#claude-code-metric) below).
 
+Metrics may also be organised in nested collection directories, for example
+`metrics/ExampleMetrics/temperature/metric.json`. A directory without its own
+`metric.json` is only a container. A directory with `metric.json` is a metric
+package; its subdirectories become child metrics only when it explicitly uses
+`"source": {"type": "group"}`.
+
 Files are watched: updates (including atomic replace) appear immediately,
 and a broken or missing file only affects its own card. To re-read the whole
 configuration on demand — for example after copying a new group package or

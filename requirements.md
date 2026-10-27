@@ -15,7 +15,7 @@ normative summaries of the 1.x features are in
 [docs/feature-reference.md](docs/feature-reference.md).
 
     2.0.0  Consolidation baseline (1.x complete)            COMPLETE
-    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       COMPLETE (2.1.7)
+    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       COMPLETE (2.1.8)
     v2F2   Independent Autostart + new runner   2.2.x       PLANNED
     v2F3   Standalone Settings + new runner     2.3.x       PLANNED
     v2F4   Dependency Advisor + new runner      2.4.x       PLANNED
@@ -113,8 +113,8 @@ Requirements for every v2 runner:
 
 ## v2F1 — Custom Metrics v3 + Rickroll
 
-Status: COMPLETE (2026-10-24). Version family **2.1.x**; current version
-**2.1.7** (2.1.0–2.1.7 COMPLETE).
+Status: COMPLETE (2026-10-27). Version family **2.1.x**; current version
+**2.1.8** (2.1.0–2.1.8 COMPLETE).
 
 Extends Custom Metrics v2 (command and snapshot sources,
 [docs/custom-metrics-commands.md](docs/custom-metrics-commands.md)) without
@@ -129,6 +129,7 @@ absence keeps the 2.0.0 behaviour. Opens with the Rickroll runner.
     2.1.5  Optional metric groups and JSON inheritance
     2.1.6  Reload / rescan Custom Metrics
     2.1.7  Manual refresh by clicking metric icons
+    2.1.8  Recursive discovery through organisational directories
 
 ### 2.1.0 — v2F1 Baseline
 
@@ -380,6 +381,21 @@ is one interval after the manual run.
 - The request goes through the shared backend; every connected frontend
   receives the result.
 - The periodic schedule continues as before.
+
+### 2.1.8 — Recursive Custom Metric Discovery
+
+Status: COMPLETE (2026-10-27). Record:
+[docs/custom-metrics-commands.md](docs/custom-metrics-commands.md) §14.
+
+- Discovery recursively traverses directories that do not contain a
+  `metric.json`, allowing collections such as
+  `metrics/ExampleMetrics/<package>/metric.json`.
+- A directory containing `metric.json` is a package boundary and is not
+  traversed by general discovery. Its subdirectories are children only when
+  that configuration explicitly declares `source.type: "group"`.
+- Traversed container directories are watched, so adding a package is noticed
+  without restarting AQTRunCat. Symlink aliases and loops remain deduplicated
+  by canonical directory identity.
 
 
 ## v2F2 — Independent Autostart + New Runner

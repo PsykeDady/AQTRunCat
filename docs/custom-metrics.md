@@ -194,6 +194,7 @@ opzionale: zero warning evitabili. Risultato automatico finale: **26 suite,
   manuale del path.
 - Il mapping SF Symbol → Unicode è volutamente piccolo; nessun asset remoto o
   dipendenza da icone Apple viene introdotto.
-- La discovery è non ricorsiva e considera i soli `*.json` nella directory
-  M6.
+- In M6 la discovery era non ricorsiva e considerava i soli `*.json` nella
+  directory. Dalla 2.1.8 questa limitazione è superata dalla discovery
+  ricorsiva descritta in `custom-metrics-commands.md` §14.
 - Flatpak/document portal e suspend/resume approfonditi restano M8/M9.

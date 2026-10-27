@@ -81,9 +81,12 @@ seconds and is limited to 1–300. `display`, `prefix`, `suffix` and
 
 The process working directory is the configuration file's directory.
 Relative executable and file-icon paths are resolved against that directory.
-Automatic discovery keeps the M6 standalone `metrics/*.json` files and adds
-one package level: `metrics/<package>/metric.json`. Explicit registration
-accepts either source type.
+Automatic discovery keeps the M6 standalone JSON files and metric packages.
+Since 2.1.8, directories without `metric.json` are recursively traversed as
+plain organisational containers. A directory with `metric.json` is a package
+boundary; its subdirectories have group semantics only when the configuration
+declares `source.type: "group"`. Explicit registration accepts either source
+type.
 
 
 ### Command Execution

@@ -59,6 +59,49 @@ constexpr int StopWaitMilliseconds = 250;
 // coalesced with that run: repeated clicks never queue runs back to back.
 constexpr int ManualRefreshSpacingMilliseconds = 1000;
 
+struct DiscoveryScan {
+    QStringList configurations;
+    QStringList directories;
+    QString unreadableDirectory;
+};
+
+// A directory without metric.json is only an organisational container and
+// may be traversed recursively. A directory with metric.json is a package
+// boundary: its contents belong to that metric (and, for type "group", are
+// expanded later by appendChildren), never to top-level discovery.
+void scanDiscoveryDirectory(const QString &path, bool root, QSet<QString> &visited,
+                            DiscoveryScan &result)
+{
+    const QFileInfo info(path);
+    if ((!info.isReadable() || !info.isExecutable()) && result.unreadableDirectory.isEmpty())
+        result.unreadableDirectory = info.absoluteFilePath();
+    if (!info.isDir())
+        return;
+
+    const QString canonical = info.canonicalFilePath();
+    if (canonical.isEmpty() || visited.contains(canonical))
+        return;
+    visited.insert(canonical);
+    result.directories.append(info.absoluteFilePath());
+
+    const QDir directory(info.absoluteFilePath());
+    const QString packageConfiguration = directory.absoluteFilePath(QStringLiteral("metric.json"));
+    if (!root && QFileInfo(packageConfiguration).isFile()) {
+        result.configurations.append(packageConfiguration);
+        return;
+    }
+
+    const QFileInfoList standalone = directory.entryInfoList({QStringLiteral("*.json")},
+        QDir::Files | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase);
+    for (const QFileInfo &configuration : standalone)
+        result.configurations.append(configuration.absoluteFilePath());
+
+    const QFileInfoList children = directory.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot,
+                                                             QDir::Name | QDir::IgnoreCase);
+    for (const QFileInfo &child : children)
+        scanDiscoveryDirectory(child.absoluteFilePath(), false, visited, result);
+}
+
 // Every command runs as the leader of its own process group, so a timeout,
 // an output overflow or shutdown also reaches helpers spawned by a script.
 void signalProcessGroup(const QProcess &process, int signal)
@@ -402,29 +445,13 @@ ReloadReport CustomMetricsService::reload(bool finalAttempt)
         candidates.append({path, registered, true, false});
     }
 
-    QDir discovery(m_discoveryDirectory);
-    const QFileInfoList discovered = discovery.entryInfoList({QStringLiteral("*.json")},
-        QDir::Files | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase);
-    for (const QFileInfo &info : discovered) {
-        const QString path = info.absoluteFilePath();
-        const QString id = identityFor(path);
-        const auto existing = byIdentity.constFind(id);
-        if (existing != byIdentity.cend()) {
-            candidates[*existing].discovered = true;
-            continue;
-        }
-        byIdentity.insert(id, candidates.size());
-        candidates.append({path, {}, false, true});
-    }
-
-    const QFileInfoList packages = discovery.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot,
-                                                            QDir::Name | QDir::IgnoreCase);
-    for (const QFileInfo &directory : packages) {
-        if ((!directory.isReadable() || !directory.isExecutable()) && m_reloadFailure.isEmpty())
-            m_reloadFailure = tr("Cannot read the directory %1.").arg(directory.absoluteFilePath());
-        const QString path = directory.absoluteFilePath() + QStringLiteral("/metric.json");
-        if (!QFileInfo(path).isFile())
-            continue;
+    DiscoveryScan discovery;
+    QSet<QString> visited;
+    if (root.isDir())
+        scanDiscoveryDirectory(m_discoveryDirectory, true, visited, discovery);
+    if (!discovery.unreadableDirectory.isEmpty() && m_reloadFailure.isEmpty())
+        m_reloadFailure = tr("Cannot read the directory %1.").arg(discovery.unreadableDirectory);
+    for (const QString &path : std::as_const(discovery.configurations)) {
         const QString id = identityFor(path);
         const auto existing = byIdentity.constFind(id);
         if (existing != byIdentity.cend()) {
@@ -510,6 +537,7 @@ ReloadReport CustomMetricsService::reload(bool finalAttempt)
         return report;
     }
     m_loggedFailure.clear();
+    m_discoveryDirectories = std::move(discovery.directories);
 
     // What changed, by stable source id.
     report.ok = true;
@@ -604,11 +632,8 @@ void CustomMetricsService::rebuildWatches()
 
     QSet<QString> files;
     QSet<QString> directories{m_discoveryDirectory};
-    // Package directories are watched even before they contain metric.json,
-    // so `mkdir pkg && cp metric.json pkg/` is noticed like a standalone file.
-    const QFileInfoList packages = QDir(m_discoveryDirectory).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
-    for (const QFileInfo &package : packages)
-        directories.insert(package.absoluteFilePath());
+    for (const QString &directory : std::as_const(m_discoveryDirectories))
+        directories.insert(directory);
     for (const Source &source : std::as_const(m_sources)) {
         const QFileInfo info(source.path);
         // An unreadable file cannot be watched (inotify refuses it and Qt warns

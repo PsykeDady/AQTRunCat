@@ -1,11 +1,11 @@
-# MEMORY.md — AQTRunCat maintainer notes (2.1.7)
+# MEMORY.md — AQTRunCat maintainer notes (2.1.8)
 
 > Audience: an AI agent or developer maintaining AQTRunCat without access to
 > earlier conversations. Precedence when sources disagree: **actual
 > code/tests > this file (frozen decisions §5) > docs/ > commit messages**.
 >
-> **State (2026-10-24): AQTRunCat 2.1.7** (manual refresh by clicking metric
-> icons) implemented on branch `feature/v2/f1.7`, uncommitted — the user
+> **State (2026-10-27): AQTRunCat 2.1.8** (recursive Custom Metric discovery
+> through organisational directories) implemented on branch `feature/v2/f2`, uncommitted — the user
 > commits (v2F1: 2.1.1 = 385ceb1, 2.1.2 = 0a72597, 2.1.3 = 613bdbe, 2.1.4 =
 > f3440d6, 2.1.5 = f00da7e, 2.1.6 = ddbe06d + 07ccd3f). **v2F1 — Custom
 > Metrics v3 is complete.** 2.0.0 (commit 61f3a8e) was the consolidation release
@@ -16,7 +16,7 @@
 > `requirements.md` is the **v2 roadmap**: v2F1 Custom Metrics v3 + Rickroll
 > (2.1.x), v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings
 > (2.3.x), v2F4 Dependency Advisor (2.4.x) (summary at the end of §2).
-> Done: 2.1.0–2.1.7 (v2F1 complete). Next: v2F2 Independent Autostart
+> Done: 2.1.0–2.1.8 (v2F1 complete plus maintenance patch). Next: v2F2 Independent Autostart
 > (2.2.x, starting with its 2.2.1 runner, whose artwork the user supplies) —
 > only on the user's explicit instruction, one sub-feature at a time.
 >
@@ -109,7 +109,7 @@
 ## 1. Project identity
 
 - Name **AQTRunCat**, tagline **"A Cute Run Cat for Linux"**, executable
-  **`aqtruncat`**, version **2.1.7** (CMake `PROJECT_VERSION`). History:
+  **`aqtruncat`**, version **2.1.8** (CMake `PROJECT_VERSION`). History:
   1.0.0 = M0–M9; F<n> raised the minor and its sub-features the patch (1.4.2
   = F4.2, 1.5.6 = F5.1–F5.6, 1.6.3 = F6.1–F6.3, 1.7.4 = F7.1–F7.4); 2.0.0 =
   consolidation of 1.7.4. v2 rule (requirements.md "Versioning"): v2F<n>
@@ -172,6 +172,7 @@ F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (party
 2.1.2 DONE    v2F1.2 optional Custom Metrics "enabled" (+ Settings/Plasmoid checkbox, SetCustomMetricEnabled, API schema 3) (docs/custom-metrics-commands.md §8)
 2.1.6 DONE    v2F1.6 Custom Metrics reload + warnings (ReloadCustomMetrics, API schema 6) (docs/custom-metrics-commands.md §12)
 2.1.7 DONE    v2F1.7 manual refresh by clicking metric icons (RefreshCustomMetric, API schema 7) (docs/custom-metrics-commands.md §13) — v2F1 COMPLETE
+2.1.8 DONE    recursive Custom Metric discovery through organisational directories (docs/custom-metrics-commands.md §14); schema remains 7
 NEXT          v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
 ```
 
@@ -694,7 +695,7 @@ Key components:
 | Installer options summary (2026-10-20) | every run (also `--dry-run`) starts with "AQTRunCat installer" and `  key               = value (origin)` lines: action, installation type, rebuild, autostart, dry run, binary, data, manifest, privileges, stop timeout, distribution, running; replaced the old `Action:`/`Autostart:` dry-run plan | user request: see the options in effect at start |
 | Installer build (2026-10-20) | default = from scratch every time in persistent `${XDG_CACHE_HOME:-~/.cache}/aqtruncat/install-build` (marker `.aqtruncat-install-build`; root → root's cache); `--no-build` reuses it only if same source tree + Release + `ninja -n` "no work to do" (`make -q` otherwise), else error, nothing installed; `--build-dir` now builds all targets | user: default must stay a full build; full Release build ≈ 97 s on the dev machine (8 jobs on 4 cores + clamd), `--no-build` ≈ 0.2 s |
 | Installer running instance (F2) | before copy/removal: SIGTERM to the real user's processes whose `/proc/PID/exe` is exactly `BINDIR/aqtruncat` (or "(deleted)"); comm only as prefilter; wait ≤10 s (`AQTRUNCAT_STOP_TIMEOUT` for tests), start time vs PID reuse, zombie = exited; timeout → error, nothing changed, no SIGKILL; preflight (build/stage/manifest/`sudo -v`) first; no restart; other users only reported | user requirement 2026-10-20 |
-| Custom Metrics XDG | non-recursive `$XDG_DATA_HOME/AQTRunCat/metrics/*.json` plus immediate `$XDG_DATA_HOME/AQTRunCat/metrics/<package>/metric.json`; explicit paths persist in INI | package level permits colocated relative executable/icon while preserving M6 standalone discovery |
+| Custom Metrics XDG | recursively traverse directories without `metric.json`; a directory with `metric.json` is a package boundary; only `source.type=group` expands its children; explicit paths persist in INI | collections can be nested without becoming groups, while package-relative executable/icon paths and group semantics remain deterministic |
 | Custom symbols (F1) | legacy string or `{type: theme|file, value}`; file/executable relative paths and command CWD resolve from config directory; invalid icon uses fallback without invalidating metric | deterministic self-contained packages, never process CWD |
 | Custom identity/order | canonical path when resolvable; explicit order first, discovered-only by stable name/path | no duplicate aliases or filesystem-order dependence |
 | Custom failure/retry | last-known-good retained; 100 ms debounce, 3×200 ms retry, shared degraded-only 5 s recovery | atomic saves do not flash errors; no healthy-state polling |
@@ -925,6 +926,19 @@ sample on purpose (hot-plug) — caching not needed.
 ---
 
 ## 9. Tests and validation
+
+2.1.8 (2026-10-27, recursive Custom Metric discovery): clean Release build
+in a fresh directory, 0 warnings; ctest **57/57**; `packaging-versions`
+2.1.8; `git diff --check` clean. Extended `custommetricsservice`,
+`metricgroups` and `custommetricsreload` for nested organisational
+containers, watched empty containers, package boundaries, groups below a
+container and unreadable containers. Isolated runtime (private bus and XDG
+profile) with the `AQTRunCat_CustomMetrics` repository copied below
+`metrics/ExampleMetrics`: 8 sources discovered; `ExampleMetrics` produced no
+source/group, `dice-metrics` remained one group with D6/D20/D100, D10 ran,
+and the intentionally wrong icon, executable and range produced their
+expected warning/error. Backend exited cleanly; no real profile or installed
+process touched. Real-session frontend display was not tested.
 
 2.1.7 (2026-10-24, manual refresh): clean build in a fresh directory 0
 warnings; ctest **57/57** (new `custommetricsrefresh`, `plasmoiddelegate`);
@@ -1655,6 +1669,20 @@ time" refers to the state when the feature was finished.
 ---
 
 ## 13b. v2 history (2.1.0 onwards)
+
+### v2F1 maintenance — Recursive Custom Metric discovery (2.1.8, 2026-10-27)
+
+- `CustomMetricsService` recursively scans directories without `metric.json`.
+  A directory containing that file is a terminal package for general
+  discovery; `appendChildren` remains the only path that gives descendants
+  group semantics.
+- Every traversed organisational directory is retained in
+  `m_discoveryDirectories` and watched, including empty containers. Canonical
+  directory identities prevent symlink aliases and loops.
+- An unreadable traversed directory refuses the reload under the existing
+  2.1.6 atomic-reconciliation rule. No D-Bus or JSON schema change (schema 7).
+- Tests extended in `custommetricsservice`, `metricgroups` and
+  `custommetricsreload`; record in `docs/custom-metrics-commands.md` §14.
 
 ### v2F1.7 — Manual refresh by clicking metric icons (2.1.7, 2026-10-24)
 

@@ -1,7 +1,7 @@
 # Build: packaging/make-source-tarball.sh ~/rpmbuild/SOURCES
 #        rpmbuild -ba packaging/rpm/aqtruncat.spec
 Name:           aqtruncat
-Version:        2.1.7
+Version:        2.1.8
 Release:        1%{?dist}
 Summary:        A Cute Run Cat for Linux
 
@@ -66,6 +66,11 @@ export QT_QPA_PLATFORM=offscreen
 %{_docdir}/%{name}/
 
 %changelog
+* Tue Oct 27 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.1.8-1
+- 2.1.8: Discover Custom Metrics recursively through organisational
+  directories. A directory containing metric.json remains a package boundary;
+  only source.type "group" gives its subdirectories group semantics.
+
 * Sat Oct 24 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.1.7-1
 - 2.1.7 (v2F1): Manual refresh of Custom Metrics: clicking a metric's icon
   in the Dashboard or the Plasma widget (a group's: all its enabled

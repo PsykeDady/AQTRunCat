@@ -1,3 +1,11 @@
+aqtruncat (2.1.8-1) unstable; urgency=medium
+
+  * Discover Custom Metrics recursively through organisational directories.
+    A directory containing metric.json remains a package boundary; only
+    source.type "group" gives its subdirectories group semantics.
+
+ -- AQTRunCat maintainers <maintainers@aqtruncat.invalid>  Tue, 27 Oct 2026 12:00:00 +0100
+
 aqtruncat (2.1.7-1) unstable; urgency=medium
 
   * 2.1.7 (v2F1): Manual refresh of Custom Metrics: clicking a metric's icon

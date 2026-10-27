@@ -107,6 +107,9 @@ private:
     QString m_reloadFailure;
     QString m_loggedFailure;
     quint64 m_nextRun = 0;
+    // Every directory traversed while looking for metric packages. Keeping
+    // containers watched makes a later metric.json visible without a restart.
+    QStringList m_discoveryDirectories;
     // v2F1.6: each source's icon warning (Source::warnings), checked by
     // every reload (an icon installed later is found by the next one).
     QHash<QString, QString> m_iconWarnings;

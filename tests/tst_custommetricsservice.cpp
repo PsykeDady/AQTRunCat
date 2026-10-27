@@ -91,6 +91,38 @@ private slots:
         QTRY_COMPARE(service.sources().size(), 1);
     }
 
+    void recursiveDiscoveryUsesPlainContainerDirectories()
+    {
+        QTemporaryDir temporary;
+        const QString discovery = temporary.filePath(QStringLiteral("metrics"));
+        const QString collection = discovery + QStringLiteral("/ExampleMetrics");
+        const QString standalone = collection + QStringLiteral("/legacy.json");
+        const QString package = collection + QStringLiteral("/d10/metric.json");
+        const QString hiddenByPackage = collection + QStringLiteral("/d10/nested/metric.json");
+        const QString emptyContainer = collection + QStringLiteral("/more/examples");
+        writeFile(standalone, snapshot(QStringLiteral("legacy")));
+        writeFile(package, snapshot(QStringLiteral("d10")));
+        writeFile(hiddenByPackage, snapshot(QStringLiteral("not-top-level")));
+        QDir().mkpath(emptyContainer);
+
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
+        CustomMetricsService service(&settings, discovery);
+        service.start();
+        QCOMPARE(service.sources().size(), 2);
+        QCOMPARE(service.sources().at(0).path, standalone);
+        QCOMPARE(service.sources().at(1).path, package);
+        QVERIFY(service.sources().at(0).discovered);
+        QVERIFY(service.sources().at(1).discovered);
+
+        // Empty organisational directories are watched too: turning one
+        // into a package is detected without a manual reload.
+        const QString added = emptyContainer + QStringLiteral("/metric.json");
+        writeFile(added, snapshot(QStringLiteral("new")));
+        QTRY_COMPARE_WITH_TIMEOUT(service.sources().size(), 3, 1500);
+        QCOMPARE(service.sources().at(2).path, added);
+        service.stop();
+    }
+
     void watchesModifyAtomicReplaceRemoveAndRecreate()
     {
         QTemporaryDir temporary;

@@ -1,6 +1,6 @@
 # AQTRunCat Documentation
 
-Technical documentation of AQTRunCat **2.1.7**, by topic. Users start with
+Technical documentation of AQTRunCat **2.1.8**, by topic. Users start with
 the main [README](../README.md); the v2 roadmap is
 [requirements.md](../requirements.md). The topic documents are design and
 validation records written in Italian; [feature-reference.md](feature-reference.md)
@@ -96,3 +96,4 @@ Commit messages, code comments and the documents themselves refer to the
 | v2F1.5 Custom Metric groups and JSON inheritance | 2.1.5 | custom-metrics-commands.md §11 |
 | v2F1.6 Custom Metrics reload and warnings | 2.1.6 | custom-metrics-commands.md §12 |
 | v2F1.7 manual refresh by clicking metric icons | 2.1.7 | custom-metrics-commands.md §13 |
+| v2F1.8 recursive Custom Metric discovery | 2.1.8 | custom-metrics-commands.md §14 |
