@@ -87,6 +87,16 @@ private slots:
         QVERIFY(all.verbose);
     }
 
+    void settingsCommand()
+    {
+        QCOMPARE(parseOk({QStringLiteral("settings")}).command, Command::Settings);
+        const Invocation help = parseOk({QStringLiteral("settings"), QStringLiteral("--help")});
+        QCOMPARE(help.command, Command::Help);
+        QVERIFY(help.helpText.contains(QStringLiteral("own window and process")));
+        QVERIFY(mainHelp().contains(QStringLiteral("aqtruncat settings")));
+        QVERIFY(!parseCommandLine({QStringLiteral("settings"), QStringLiteral("unexpected")}).invocation);
+    }
+
     void legacyShortForms()
     {
         // M1/M2 forms keep working as aliases.

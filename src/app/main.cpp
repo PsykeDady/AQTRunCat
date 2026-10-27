@@ -5,6 +5,7 @@
 // logic also used by the Settings UI.
 
 #include "appsettings.h"
+#include "settingsapp.h"
 #include "autostartcommand.h"
 #include "autostartmanager.h"
 #include "cli/commandline.h"
@@ -62,6 +63,13 @@ int main(int argc, char *argv[])
         QCoreApplication::setApplicationVersion(QStringLiteral(AQTRUNCAT_VERSION));
         return runTrayApplication(app, runnerService(),
                                   RunOptions{invocation.runnerId, invocation.fps, invocation.verbose, DefaultRunnerId});
+    }
+    case Command::Settings: {
+        QApplication app(argc, argv);
+        QCoreApplication::setOrganizationName(QStringLiteral("AQTRunCat"));
+        QCoreApplication::setApplicationName(QStringLiteral("AQTRunCat Settings"));
+        QCoreApplication::setApplicationVersion(QStringLiteral(AQTRUNCAT_VERSION));
+        return runStandaloneSettings(app, runnerService(), DefaultRunnerId);
     }
     case Command::Metrics: {
         // Plain C++ metrics layer: no QCoreApplication (and no process locale) needed.

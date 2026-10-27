@@ -109,6 +109,8 @@ private slots:
         child<QComboBox>(window, "dashboardRefresh")->setCurrentIndex(2);
         QCOMPARE(settings.dashboardRefreshSeconds(), 5);
         child<QCheckBox>(window, "autostart")->click();
+        QCOMPARE(child<QCheckBox>(window, "autostart")->text(),
+                 QStringLiteral("Start AQTRunCat Tray Plugin automatically on login"));
         QVERIFY(settings.autostartEnabled());
 
         window.close();
@@ -597,6 +599,20 @@ private slots:
         QVERIFY2(warning.contains(QLatin1String("cannot write")), qPrintable(warning));
         QTRY_COMPARE(tree->topLevelItem(0)->checkState(0), Qt::Checked);
         QVERIFY(service.sources().first().enabled);
+    }
+
+    // v2F2: the standalone frontend accepts close and requests its own exit;
+    // tray-owned Settings keep their existing hide-on-close behavior above.
+    void standaloneSettingsCloseIsAccepted()
+    {
+        QTemporaryDir temporary;
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), temporary.filePath(QStringLiteral("settings.ini")));
+        SettingsWindow window(&settings, {});
+        window.setCloseTerminatesApplication(true);
+        window.show();
+        QVERIFY(window.isVisible());
+        QVERIFY(window.close());
+        QVERIFY(!window.isVisible());
     }
 };
 

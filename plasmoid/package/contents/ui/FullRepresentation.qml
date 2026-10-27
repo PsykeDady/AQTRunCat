@@ -11,6 +11,7 @@ import org.kde.plasma.components as PlasmaComponents
 import org.kde.plasma.extras as PlasmaExtras
 import org.kde.plasma.plasmoid
 import org.kde.kirigami as Kirigami
+import org.kde.plasma.workspace.dbus as DBus
 
 import "../code/logic.js" as Logic
 
@@ -52,6 +53,27 @@ PlasmaExtras.Representation {
     // v2F1.7: what an icon click asked, briefly in the header (the new
     // values arrive in the list by themselves).
     property string refreshMessage: ""
+    property var settingsActivationReply: null
+
+    function openApplicationSettings() {
+        const reply = DBus.SessionBus.asyncCall({
+            service: "io.github.psykedady.AQTRunCat.Settings",
+            path: "/io/github/psykedady/AQTRunCat/Settings",
+            iface: "io.github.psykedady.AQTRunCat.Settings",
+            member: "Show",
+            arguments: [],
+            signature: ""
+        });
+        settingsActivationReply = reply;
+        reply.finished.connect(() => {
+            if (settingsActivationReply === reply && reply.isError) {
+                refreshMessage = "Could not open AQTRunCat Settings.";
+                refreshMessageTimer.restart();
+            }
+            if (settingsActivationReply === reply)
+                settingsActivationReply = null;
+        });
+    }
     Connections {
         target: full.client
         function onReplied(member, ok, message) {
@@ -104,6 +126,14 @@ PlasmaExtras.Representation {
                 onClicked: configureAction.trigger()
                 PlasmaComponents.ToolTip.text: text
                 PlasmaComponents.ToolTip.visible: hovered && text.length > 0
+            }
+            PlasmaComponents.ToolButton {
+                icon.name: "configure-shortcuts"
+                display: PlasmaComponents.AbstractButton.IconOnly
+                text: "Open AQTRunCat Settings"
+                onClicked: full.openApplicationSettings()
+                PlasmaComponents.ToolTip.text: text
+                PlasmaComponents.ToolTip.visible: hovered
             }
         }
     }

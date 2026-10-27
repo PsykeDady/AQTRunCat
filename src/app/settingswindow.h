@@ -36,6 +36,7 @@ public:
                    ProviderIntegration *claude = nullptr, ProviderIntegration *codex = nullptr);
 
     void showAndRaise();
+    void setCloseTerminatesApplication(bool enabled) { m_closeTerminatesApplication = enabled; }
     void setActiveRunner(const aqtruncat::Runner &runner);
     void setAvailableInterfaces(const std::vector<aqtruncat::metrics::InterfaceMetrics> &interfaces);
     // F5: the GPUs the backend reports, for the Metrics Bar GPU choice.
@@ -72,6 +73,7 @@ private:
     std::vector<std::pair<std::string, std::string>> m_availableGpus; // id, model
     bool m_rebuilding = false;
     bool m_rebuildingCustomMetrics = false;
+    bool m_closeTerminatesApplication = false;
 
     QComboBox *m_runnerCombo = nullptr;
     RunnerPreviewWidget *m_preview = nullptr;

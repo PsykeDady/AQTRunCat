@@ -97,6 +97,9 @@ private slots:
         QVERIFY(main.contains(QLatin1String("\nPlasmoidItem {")));
         QVERIFY(main.contains(QLatin1String("compactRepresentation:")));
         QVERIFY(main.contains(QLatin1String("fullRepresentation:")));
+        const QString full = QString::fromUtf8(read(QStringLiteral("contents/ui/FullRepresentation.qml")));
+        QVERIFY(full.contains(QLatin1String("Open AQTRunCat Settings")));
+        QVERIFY(full.contains(QLatin1String("io.github.psykedady.AQTRunCat.Settings")));
         // Configuration pages named by config.qml exist.
         const QString config = QString::fromUtf8(read(QStringLiteral("contents/config/config.qml")));
         const QSet<QString> pages = matches(config, QStringLiteral("source:\\s*\"([^\"]+)\""));

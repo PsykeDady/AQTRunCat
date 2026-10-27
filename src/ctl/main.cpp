@@ -63,7 +63,8 @@ const char Help[] =
     "  integrations                   official integrations (Claude Code, Codex)\n"
     "  integration enable|disable ID\n"
     "  integration live-updates ID on|off\n"
-    "  settings                       the shared settings\n"
+    "  settings                       print the shared settings\n"
+    "  settings open                  open the AQTRunCat Settings window\n"
     "  settings set KEY VALUE         e.g. speedMode slow-down, autostart false,\n"
     "                                 metricsBarItems '[\"cpu\",\"memory\"]',\n"
     "                                 gpuDevice auto, fpsSource off,\n"
@@ -490,6 +491,27 @@ int watch(QCoreApplication &app, Client &client, bool json)
     return app.exec();
 }
 
+int openSettingsWindow()
+{
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected()) {
+        err(QStringLiteral("no D-Bus session bus"));
+        return Unavailable;
+    }
+    QDBusMessage message = QDBusMessage::createMethodCall(
+        QStringLiteral("io.github.psykedady.AQTRunCat.Settings"),
+        QStringLiteral("/io/github/psykedady/AQTRunCat/Settings"),
+        QStringLiteral("io.github.psykedady.AQTRunCat.Settings"), QStringLiteral("Show"));
+    message.setAutoStartService(true);
+    const QDBusMessage reply = bus.call(message, QDBus::Block, 15000);
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        err(QStringLiteral("cannot open AQTRunCat Settings: %1").arg(reply.errorMessage()));
+        return Unavailable;
+    }
+    out(QStringLiteral("AQTRunCat Settings opened."));
+    return Ok;
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -544,6 +566,8 @@ int main(int argc, char *argv[])
         return integrations(client, json);
     if (command == QLatin1String("settings") && rest.isEmpty())
         return settings(client, json);
+    if (command == QLatin1String("settings") && rest.size() == 1 && rest.first() == QLatin1String("open"))
+        return openSettingsWindow();
     if (command == QLatin1String("settings") && rest.size() == 3 && rest.at(0) == QLatin1String("set"))
         return simple(client, QStringLiteral("SetSetting"), {rest.at(1), rest.at(2)},
                       QStringLiteral("%1 set").arg(rest.at(1)));

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(AQTRunCat
-    VERSION 2.1.8
+    VERSION 2.2.0
     DESCRIPTION "A Cute Run Cat for Linux"
     LANGUAGES CXX)
 
@@ -47,7 +47,8 @@ endif()
 # Desktop integration and documentation. Bundled runners are compiled into the
 # executable; since F4.2 they are also installed as files (src/CMakeLists.txt)
 # for frontends outside it.
-install(FILES data/aqtruncat.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(FILES data/aqtruncat.desktop data/aqtruncat-settings.desktop
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES data/aqtruncat.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 # F4.1: D-Bus activation of the backend on the session bus (found through
 # $XDG_DATA_DIRS / $XDG_DATA_HOME by dbus-daemon and dbus-broker).
@@ -55,6 +56,11 @@ set(AQTRUNCAT_DBUS_EXEC "${CMAKE_INSTALL_FULL_BINDIR}/aqtruncatd")
 configure_file(data/io.github.psykedady.AQTRunCat.service.in
                ${CMAKE_CURRENT_BINARY_DIR}/io.github.psykedady.AQTRunCat.service @ONLY)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.psykedady.AQTRunCat.service
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services)
+set(AQTRUNCAT_SETTINGS_EXEC "${CMAKE_INSTALL_FULL_BINDIR}/aqtruncat settings")
+configure_file(data/io.github.psykedady.AQTRunCat.Settings.service.in
+               ${CMAKE_CURRENT_BINARY_DIR}/io.github.psykedady.AQTRunCat.Settings.service @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.psykedady.AQTRunCat.Settings.service
         DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services)
 install(DIRECTORY data/icons/hicolor DESTINATION ${CMAKE_INSTALL_DATADIR}/icons)
 # F4.2: the KDE Plasma 6 widget, a QML-only Plasma package (nothing to

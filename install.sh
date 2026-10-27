@@ -51,6 +51,8 @@ Installation (default):
                            DIR/bin/aqtruncatd (backend), aqtruncatctl (command line)
                            DIR/share/dbus-1/services/io.github.psykedady.AQTRunCat.service
                              (starts the backend on demand)
+                           DIR/share/dbus-1/services/io.github.psykedady.AQTRunCat.Settings.service
+                             (opens Settings on demand)
                            DIR/bin/aqtruncat-claude-metric, aqtruncat-codex-metric
                              (optional Claude Code / Codex integrations, off
                              until enabled in Settings > Integrations)
@@ -58,6 +60,7 @@ Installation (default):
                            DIR/share/plasma/plasmoids/io.github.psykedady.aqtruncat/
                              (KDE Plasma 6 widget, see "Plasma widget" below)
                            DIR/share/applications/aqtruncat.desktop
+                           DIR/share/applications/io.github.psykedady.AQTRunCat.Settings.desktop
                            DIR/share/icons/hicolor/*/apps/aqtruncat.{png,svg}
                            DIR/share/man/man1/aqtruncat.1
                            DIR/share/doc/aqtruncat/ (README, licenses)
@@ -1123,21 +1126,24 @@ do_install() {
         rmdir -p -- "$stage/share/plasma/plasmoids" 2> /dev/null || true
     fi
 
-    # Menu entry: start the binary by its full path (bin may not be in PATH).
-    local desktop=$stage/share/applications/aqtruncat.desktop
-    if [[ -f $desktop ]]; then
+    # Menu entries: start the binary by its full path (bin may not be in PATH).
+    local desktop
+    for desktop in "$stage/share/applications/aqtruncat.desktop" \
+                   "$stage/share/applications/aqtruncat-settings.desktop"; do
+      if [[ -f $desktop ]]; then
         local exec_value
         exec_value=$(desktop_exec_value "$installed_bin")
         local escaped=${exec_value//\\/\\\\}
         escaped=${escaped//|/\\|}
         escaped=${escaped//&/\\&}
-        sed -i "s|^Exec=aqtruncat\$|Exec=$escaped|" "$desktop"
+        sed -i "s|^Exec=aqtruncat settings\$|Exec=$escaped settings|; s|^Exec=aqtruncat\$|Exec=$escaped|" "$desktop"
         if [[ $exec_value == "$installed_bin" ]]; then
             sed -i "s|^TryExec=aqtruncat\$|TryExec=$escaped|" "$desktop"
         else
             sed -i '/^TryExec=/d' "$desktop"
         fi
-    fi
+      fi
+    done
     # D-Bus activation file: the backend of this installation, by full path.
     local service=$stage/share/dbus-1/services/io.github.psykedady.AQTRunCat.service
     if [[ -f $service ]]; then
@@ -1147,6 +1153,18 @@ do_install() {
         backend_exec=${backend_exec//|/\\|}
         backend_exec=${backend_exec//&/\\&}
         sed -i "s|^Exec=.*\$|Exec=$backend_exec|" "$service"
+    fi
+    # Settings D-Bus activation runs the same aqtruncat executable in its
+    # standalone mode; keep system and --local launch paths aligned.
+    local settings_service=$stage/share/dbus-1/services/io.github.psykedady.AQTRunCat.Settings.service
+    if [[ -f $settings_service ]]; then
+        local settings_exec
+        settings_exec=$(desktop_exec_value "$installed_bin")
+        settings_exec+=" settings"
+        settings_exec=${settings_exec//\\/\\\\}
+        settings_exec=${settings_exec//|/\\|}
+        settings_exec=${settings_exec//\&/\\\&}
+        sed -i "s|^Exec=.*\$|Exec=$settings_exec|" "$settings_service"
     fi
 
     # Destination of every staged file.

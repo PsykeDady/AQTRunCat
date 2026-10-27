@@ -174,6 +174,10 @@ add_library(aqtruncat_desktop STATIC
     app/runnerpresentation.h
     app/runnerpreviewwidget.cpp
     app/runnerpreviewwidget.h
+    app/settingsactivation.cpp
+    app/settingsactivation.h
+    app/settingsapp.cpp
+    app/settingsapp.h
     app/settingswindow.cpp
     app/settingswindow.h
     app/traypresenter.cpp

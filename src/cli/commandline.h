@@ -34,7 +34,7 @@ enum ExitCode : int {
 };
 
 enum class Command {
-    Run, RunnerList, RunnerImport, RunnerRemove, Metrics,
+    Run, Settings, RunnerList, RunnerImport, RunnerRemove, Metrics,
     AutostartEnable, AutostartDisable, AutostartStatus,
     Help, Version
 };

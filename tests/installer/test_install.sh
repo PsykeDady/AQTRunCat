@@ -328,15 +328,22 @@ check "Codex adapter installed" test -x "$home/.local/bin/aqtruncat-codex-metric
 check "backend installed" test -x "$home/.local/bin/aqtruncatd"
 check "command-line client installed" test -x "$home/.local/bin/aqtruncatctl"
 service_file=$home/.local/share/dbus-1/services/io.github.psykedady.AQTRunCat.service
+settings_service=$home/.local/share/dbus-1/services/io.github.psykedady.AQTRunCat.Settings.service
 check "D-Bus activation file installed" test -f "$service_file"
 check "activation starts this installation's backend" grep -qxF "Exec=$home/.local/bin/aqtruncatd" "$service_file"
 check "activation file names the service" grep -qxF "Name=io.github.psykedady.AQTRunCat" "$service_file"
+check "Settings D-Bus activation file installed" test -f "$settings_service"
+check "Settings activation launches the local frontend" grep -qxF "Exec=$home/.local/bin/aqtruncat settings" "$settings_service"
 check "old Codex package gets its provenance" grep -qF '"integration": "codex"' "$old_codex/metric.json"
 check "old Codex package runs the installed adapter" grep -qF "\"executable\": \"$home/.local/bin/aqtruncat-codex-metric\"" "$old_codex/metric.json"
 check "old Codex package keeps live updates" grep -qF '"--live"' "$old_codex/metric.json"
 check "other Custom Metrics untouched by the upgrade" test "$(cat "$home/.local/share/AQTRunCat/metrics/producer.json")" = "{}"
 check "binary installed" test -x "$bin"
 check "desktop entry installed" test -f "$home/.local/share/applications/aqtruncat.desktop"
+settings_desktop=$home/.local/share/applications/aqtruncat-settings.desktop
+check "Settings launcher installed" test -f "$settings_desktop"
+check "Settings launcher has a clear name" grep -qxF "Name=AQTRunCat Settings" "$settings_desktop"
+check "Settings launcher starts the local Settings mode" grep -qxF "Exec=$home/.local/bin/aqtruncat settings" "$settings_desktop"
 check "scalable icon installed" test -f "$home/.local/share/icons/hicolor/scalable/apps/aqtruncat.svg"
 check "manifest written" test -f "$manifest"
 check "default install enables autostart" test -f "$entry"
@@ -345,6 +352,7 @@ check "menu entry starts the installed binary" grep -qxF "Exec=$bin" "$home/.loc
 check "PATH warning for ~/.local/bin" grep -qF "is not in your PATH" <<< "$out"
 if command -v desktop-file-validate > /dev/null; then
     check "installed desktop entry is valid" desktop-file-validate "$home/.local/share/applications/aqtruncat.desktop"
+    check "installed Settings launcher is valid" desktop-file-validate "$settings_desktop"
     check "autostart entry is valid" desktop-file-validate "$entry"
 fi
 check "installed binary runs" "$bin" --version
@@ -370,6 +378,7 @@ capture --local --uninstall
 check "local uninstall succeeds" test "$rc" -eq 0
 check "binary removed" test ! -e "$bin"
 check "desktop entry removed" test ! -e "$home/.local/share/applications/aqtruncat.desktop"
+check "Settings launcher removed" test ! -e "$settings_desktop"
 check "icons removed" test ! -e "$home/.local/share/icons/hicolor/scalable/apps/aqtruncat.svg"
 check "manifest removed" test ! -e "$manifest"
 check "autostart entry removed" test ! -e "$entry"

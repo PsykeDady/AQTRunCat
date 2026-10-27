@@ -20,6 +20,15 @@ const QString RunHelp = QStringLiteral(
     "  --verbose     log CPU samples and frame rate decisions\n"
     "  -h, --help    show this help\n");
 
+const QString SettingsHelp = QStringLiteral(
+    "Usage: aqtruncat settings\n"
+    "\n"
+    "Open AQTRunCat Settings in its own window and process. The backend is\n"
+    "activated on demand and remains running after Settings closes.\n"
+    "\n"
+    "Options:\n"
+    "  -h, --help    show this help\n");
+
 const QString RunnerHelp = QStringLiteral(
     "Usage: aqtruncat runner <command>\n"
     "\n"
@@ -78,7 +87,7 @@ const QString MetricsHelp = QStringLiteral(
 const QString AutostartHelp = QStringLiteral(
     "Usage: aqtruncat autostart enable|disable|status\n"
     "\n"
-    "Start AQTRunCat automatically when you log in. This is the same per-user\n"
+    "Start the AQTRunCat Tray Plugin automatically when you log in. This is the same per-user\n"
     "preference as Settings > Desktop: it is saved in AQTRunCat.ini and applied\n"
     "as an XDG autostart entry, $XDG_CONFIG_HOME/autostart/aqtruncat.desktop,\n"
     "pointing at this executable. install.sh uses this command.\n"
@@ -328,9 +337,10 @@ QString mainHelp()
         "Usage:\n"
         "  aqtruncat [run options]      start the tray runner (same as \"aqtruncat run\")\n"
         "  aqtruncat run [options]      start the tray runner\n"
+        "  aqtruncat settings           open standalone Settings\n"
         "  aqtruncat runner <command>   list, import or remove runners\n"
         "  aqtruncat metrics [--watch]  show system metrics (CPU, memory, network, disk)\n"
-        "  aqtruncat autostart <cmd>    enable, disable or show start at login\n"
+        "  aqtruncat autostart <cmd>    enable, disable or show Qt Tray Plugin login start\n"
         "\n"
         "Options:\n"
         "  -h, --help      show help; \"aqtruncat <command> --help\" for a command\n"
@@ -370,6 +380,19 @@ ParseResult parseCommandLine(const QStringList &arguments)
         return parseRun(arguments, QStringLiteral("aqtruncat"));
     if (first == QLatin1String("run"))
         return parseRun(arguments.mid(1), QStringLiteral("aqtruncat run"));
+    if (first == QLatin1String("settings")) {
+        const ParsedOptions options = parseOptions(arguments.mid(1), {}, QStringLiteral("aqtruncat settings"));
+        if (!options.error.isEmpty())
+            return usageError(options.error, QStringLiteral("Run \"aqtruncat settings --help\"."));
+        if (options.help)
+            return help(SettingsHelp);
+        if (!options.positionals.isEmpty())
+            return usageError(QStringLiteral("unexpected argument \"%1\"").arg(options.positionals.first()),
+                              QStringLiteral("Run \"aqtruncat settings --help\"."));
+        Invocation invocation;
+        invocation.command = Command::Settings;
+        return ParseResult{invocation, {}, {}};
+    }
     if (first == QLatin1String("runner"))
         return parseRunner(arguments.mid(1));
     if (first == QLatin1String("metrics"))

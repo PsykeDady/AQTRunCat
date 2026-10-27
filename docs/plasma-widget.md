@@ -276,9 +276,10 @@ dettaglio. Nessuna di queste duplica un'impostazione del backend.
 | attivo | aggiunto | entrambi leggono lo stesso backend (un solo `aqtruncatd`) |
 | — | — | il backend parte solo su richiesta (CLI, altri client) |
 
-Installare il widget non abilita il tray e non tocca l'autostart (che
-riguarda solo il tray); abilitare il tray non aggiunge il widget. Il
-Plasmoid non nasconde né disattiva il tray.
+Installare il widget non abilita il tray e non tocca l'autostart, chiamato
+**Start AQTRunCat Tray Plugin automatically on login**: riguarda il frontend
+Qt tray, non il backend o il Plasmoid. Abilitare il tray non aggiunge il
+widget, che Plasma continua a gestire separatamente.
 
 ## 9. Installazione
 

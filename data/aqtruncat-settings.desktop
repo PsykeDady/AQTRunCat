@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=AQTRunCat Settings
+GenericName=Application Settings
+Comment=Configure AQTRunCat
+Exec=aqtruncat settings
+TryExec=aqtruncat
+Icon=aqtruncat
+Terminal=false
+StartupNotify=true
+Categories=Settings;
+Keywords=aqtruncat;settings;configuration;metrics;runner;

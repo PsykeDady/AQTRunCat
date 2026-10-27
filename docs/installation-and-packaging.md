@@ -20,6 +20,14 @@ TESTED**, **NOT APPLICABLE**. Evidenze: **[OSS]** eseguito/misurato,
 > sono stati ricostruiti nei container dopo F4.1. Dettagli:
 > [backend-dbus-api-cli.md](backend-dbus-api-cli.md) §10.
 
+> **Nota v2F2 (2.2.0).** Il pacchetto installa anche
+> `aqtruncat-settings.desktop` e il servizio D-Bus
+> `io.github.psykedady.AQTRunCat.Settings.service`. Il launcher esegue
+> `aqtruncat settings`; tray e Plasmoid attivano lo stesso processo tramite
+> D-Bus. `install.sh` sostituisce i percorsi di esecuzione con quelli
+> dell'installazione system-wide o locale e li registra nel manifest, così
+> upgrade e disinstallazione seguono il meccanismo esistente.
+
 > **Nota F4.2 (2026-10-21).** Da F4.2 c'è anche il widget KDE Plasma 6
 > (`share/plasma/plasmoids/io.github.psykedady.aqtruncat/`, solo QML) e i
 > runner bundled come file (`share/aqtruncat/runners/`). `install.sh` installa
@@ -169,6 +177,11 @@ successiva installazione è riuscita. Senza il plugin Wayland di Qt le
 finestre usano XWayland (la tray è D-Bus e non cambia).
 
 ## 5. Autostart
+
+La preferenza Settings è **Start AQTRunCat Tray Plugin automatically on
+login**: riguarda il frontend Qt tray. Non configura l'avvio del backend
+(`aqtruncatd`), che resta attivato su richiesta via D-Bus, né l'avvio del
+Plasmoid, gestito da Plasma.
 
 - Default **ON** per `install.sh`; `-na`/`--autostart=false` lo disabilitano.
 - È una preferenza **per utente** anche per un'installazione system-wide: la

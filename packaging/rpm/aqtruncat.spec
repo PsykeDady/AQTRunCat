@@ -1,7 +1,7 @@
 # Build: packaging/make-source-tarball.sh ~/rpmbuild/SOURCES
 #        rpmbuild -ba packaging/rpm/aqtruncat.spec
 Name:           aqtruncat
-Version:        2.1.8
+Version:        2.2.0
 Release:        1%{?dist}
 Summary:        A Cute Run Cat for Linux
 
@@ -46,6 +46,7 @@ rm %{buildroot}%{_docdir}/%{name}/LICENSE %{buildroot}%{_docdir}/%{name}/LICENSE
 
 %check
 desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
+desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}-settings.desktop
 export QT_QPA_PLATFORM=offscreen
 %ctest
 
@@ -55,17 +56,24 @@ export QT_QPA_PLATFORM=offscreen
 %{_bindir}/%{name}d
 %{_bindir}/%{name}ctl
 %{_datadir}/dbus-1/services/io.github.psykedady.AQTRunCat.service
+%{_datadir}/dbus-1/services/io.github.psykedady.AQTRunCat.Settings.service
 %{_datadir}/%{name}/
 %{_datadir}/plasma/plasmoids/io.github.psykedady.aqtruncat/
 %{_bindir}/%{name}-claude-metric
 %{_bindir}/%{name}-codex-metric
 %{_datadir}/applications/%{name}.desktop
+%{_datadir}/applications/%{name}-settings.desktop
 %{_datadir}/icons/hicolor/*/apps/%{name}.png
 %{_datadir}/icons/hicolor/scalable/apps/%{name}.svg
 %{_mandir}/man1/%{name}.1*
 %{_docdir}/%{name}/
 
 %changelog
+* Tue Oct 27 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.2.0-1
+- Standalone Settings via aqtruncat settings, a dedicated application-menu
+  entry and tray/Plasmoid activation; D-Bus backend activation is unchanged.
+- Clarify that login autostart starts the Qt Tray Plugin.
+
 * Tue Oct 27 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.1.8-1
 - 2.1.8: Discover Custom Metrics recursively through organisational
   directories. A directory containing metric.json remains a package boundary;

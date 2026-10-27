@@ -520,7 +520,8 @@ Record, API contract and validation: `docs/backend-dbus-api-cli.md`
   CLI, the Qt Settings window or `aqtruncat autostart` reach every client
   through `SettingsChanged`. Writable keys with validation: `runnerId`,
   `speedMode`, `networkMode`, `networkInterfaces`,
-  `dashboardRefreshSeconds`, `autostart`, `metricsBarEnabled`,
+  `dashboardRefreshSeconds`, `autostart` (Start AQTRunCat Tray Plugin
+  automatically on login), `metricsBarEnabled`,
   `metricsBarItems`; `customMetricFiles` only through the register methods.
 - CLI `aqtruncatctl [--json] [--no-start]`: `status`, `metrics [ID...]
   [--category …]`, `watch`, `integrations`, `integration enable|disable
@@ -673,8 +674,10 @@ Record, design and validation: `docs/plasma-widget.md`. Normative:
   Metrics files), immediately, kept in sync by `SettingsChanged`; page
   "Appearance" holds widget-only options in Plasma's configuration
   (`animate`, `showBuiltin`, `showIntegrations`, `showCustom`,
-  `showDetails`). Start at login, Metrics Bar and Dashboard refresh remain
-  tray settings.
+  `showDetails`). Start AQTRunCat Tray Plugin automatically on login, Metrics
+  Bar and Dashboard refresh remain shared app settings. Since 2.2.0, the
+  popup has a separate action to open the shared Qt Settings window; Plasma's
+  Configure action still opens widget configuration.
 - Coexistence: tray and widget are independent clients of one backend;
   installing or adding either never enables the other; autostart concerns
   the tray only.

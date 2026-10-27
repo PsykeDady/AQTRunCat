@@ -1,4 +1,4 @@
-.TH AQTRUNCAT 1 "2026-10-27" "AQTRunCat 2.1.8" "User Commands"
+.TH AQTRUNCAT 1 "2026-10-27" "AQTRunCat 2.2.0" "User Commands"
 .SH NAME
 aqtruncat \- A Cute Run Cat for Linux: CPU\-driven tray runner with system metrics
 .SH SYNOPSIS
@@ -11,6 +11,8 @@ aqtruncat \- A Cute Run Cat for Linux: CPU\-driven tray runner with system metri
 .RB [ \-\-fps
 .IR N ]
 .RB [ \-\-verbose ]
+.br
+.B aqtruncat settings
 .br
 .B aqtruncat runner list
 .br
@@ -38,6 +40,16 @@ follows the CPU load: 10 frames per second when idle, up to 40 at full load,
 or the reverse with "Slow down under load". Left\-click the runner to show or
 hide the Dashboard with CPU, memory, swap, network, storage and disk activity;
 the context menu opens Settings and quits.
+.PP
+Run
+.B aqtruncat settings
+to open the same Settings window in its own process, without starting the tray.
+It can also be opened from the AQTRunCat Settings application-menu entry, the
+tray menu, the Plasma widget popup, or with
+.BR "aqtruncatctl settings open" .
+Closing Settings exits only that window process. The backend is activated on
+demand and remains running after Settings closes; the Qt Tray Plugin and the
+Plasma widget have independent lifecycles.
 .PP
 Custom Metrics may be RunCat Neo compatible JSON snapshots written by other
 programs, or command configurations that periodically run an explicit

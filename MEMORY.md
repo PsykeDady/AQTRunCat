@@ -1,11 +1,11 @@
-# MEMORY.md — AQTRunCat maintainer notes (2.1.8)
+# MEMORY.md — AQTRunCat maintainer notes (2.2.0)
 
 > Audience: an AI agent or developer maintaining AQTRunCat without access to
 > earlier conversations. Precedence when sources disagree: **actual
 > code/tests > this file (frozen decisions §5) > docs/ > commit messages**.
 >
-> **State (2026-10-27): AQTRunCat 2.1.8** (recursive Custom Metric discovery
-> through organisational directories) implemented on branch `feature/v2/f2`, uncommitted — the user
+> **State (2026-10-27): AQTRunCat 2.2.0** (v2F2 standalone Settings)
+> implemented on branch `feature/v2/f2`, uncommitted — the user
 > commits (v2F1: 2.1.1 = 385ceb1, 2.1.2 = 0a72597, 2.1.3 = 613bdbe, 2.1.4 =
 > f3440d6, 2.1.5 = f00da7e, 2.1.6 = ddbe06d + 07ccd3f). **v2F1 — Custom
 > Metrics v3 is complete.** 2.0.0 (commit 61f3a8e) was the consolidation release
@@ -14,11 +14,9 @@
 > complete (summary §2, history §4 and §13, normative summaries in
 > `docs/feature-reference.md`, topic documents indexed by `docs/README.md`).
 > `requirements.md` is the **v2 roadmap**: v2F1 Custom Metrics v3 + Rickroll
-> (2.1.x), v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings
-> (2.3.x), v2F4 Dependency Advisor (2.4.x) (summary at the end of §2).
-> Done: 2.1.0–2.1.8 (v2F1 complete plus maintenance patch). Next: v2F2 Independent Autostart
-> (2.2.x, starting with its 2.2.1 runner, whose artwork the user supplies) —
-> only on the user's explicit instruction, one sub-feature at a time.
+> (2.1.x) COMPLETE; v2F2 Standalone Settings (2.2.0) COMPLETE; v2F3
+> Dependency Advisor (2.3.x) PLANNED, only on instruction. Actual source
+> baseline was 2.1.8; the brief's stated 2.1.7 baseline was stale.
 >
 > The user owns every Git write (branches, commits, merges, tags); read-only
 > Git only. Reports to the user in Italian; code, comments and
@@ -44,7 +42,8 @@
 >   Italian locale (comma): use `LC_ALL=C` in generated fixtures.
 > - The shell sandbox cannot reach the user's AT-SPI bus.
 >
-> Last verified (2.0.0, 2026-10-22): see §9 (clean build, ctest, checks).
+> Last verified (2.2.0, 2026-10-27): see §9 (clean build, full ctest,
+> installer/packaging checks).
 
 ---
 
@@ -109,7 +108,7 @@
 ## 1. Project identity
 
 - Name **AQTRunCat**, tagline **"A Cute Run Cat for Linux"**, executable
-  **`aqtruncat`**, version **2.1.8** (CMake `PROJECT_VERSION`). History:
+  **`aqtruncat`**, version **2.2.0** (CMake `PROJECT_VERSION`). History:
   1.0.0 = M0–M9; F<n> raised the minor and its sub-features the patch (1.4.2
   = F4.2, 1.5.6 = F5.1–F5.6, 1.6.3 = F6.1–F6.3, 1.7.4 = F7.1–F7.4); 2.0.0 =
   consolidation of 1.7.4. v2 rule (requirements.md "Versioning"): v2F<n>
@@ -176,37 +175,33 @@ F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (party
 2.1.6 DONE    v2F1.6 Custom Metrics reload + warnings (ReloadCustomMetrics, API schema 6) (docs/custom-metrics-commands.md §12)
 2.1.7 DONE    v2F1.7 manual refresh by clicking metric icons (RefreshCustomMetric, API schema 7) (docs/custom-metrics-commands.md §13) — v2F1 COMPLETE
 2.1.8 DONE    recursive Custom Metric discovery through organisational directories (docs/custom-metrics-commands.md §14); schema remains 7
-NEXT          v2F2 Independent Autostart (2.2.x), v2F3 Standalone Settings (2.3.x), v2F4 Dependency Advisor (2.4.x): PLANNED, only on instruction
+2.2.0 DONE    v2F2 standalone Settings; CLI, app launcher, tray/Plasmoid entry; single D-Bus-owned window; clarified tray autostart label
+NEXT          v2F3 Dependency Advisor (2.3.x): PLANNED, only on instruction
 ```
 
-v2 roadmap summary (requirements.md is authoritative; added 2026-10-23):
+v2 roadmap summary (requirements.md is authoritative; revised 2026-10-27):
 
-- **Runner-per-feature convention**: every v2F<n> starts with a new
-  official *built-in* animated runner at `2.x.1`, right after the `2.x.0`
-  baseline (requirements + version metadata only); functional sub-features
-  follow from `2.x.2`. The runner reuses the animation architecture, works
-  in tray and Plasmoid, is selectable/persisted through the existing
-  selection, settings and `GetRunners`, and covers assets, packaging,
-  tests, docs and `THIRD_PARTY_NOTICES.md`; existing runners untouched.
-  Artwork is supplied/approved by the user *before* implementation — never
-  download or generate it. v2F1 runner = **Rickroll** (proposed id
-  `rickroll`); v2F2–v2F4 runners are TBD: do not invent names or art.
+- **Runner convention**: v2F1 introduced Rickroll at 2.1.1. v2F2 and
+  planned v2F3 have no new runner; do not add one unless requested.
 - **v2F1** 2.1.0 baseline, 2.1.1 Rickroll, 2.1.2 `enabled`, 2.1.3 execution
   warnings, 2.1.4 `display.showBar`, 2.1.5 groups/inheritance, 2.1.6
   reload/rescan, 2.1.7 click-to-refresh (each shifted +1 patch from the
   2.0.0 draft).
-- **v2F2** 2.2.1 runner, 2.2.2 independent backend/tray autostart (login
-  autostart ≠ D-Bus activation). **v2F3** 2.3.1 runner, 2.3.2 standalone
-  Settings.
-- **v2F4 Dependency Advisor**: 2.4.1 runner, 2.4.2 shared detection model
+- **v2F2 Standalone Settings (2.2.0)** COMPLETE. Reuses `SettingsWindow`
+  in `aqtruncat settings`; a session-bus name coordinates one process/window
+  and clears after crashes. Tray, Plasmoid and `aqtruncatctl settings open`
+  activate it. Shared INI/backend; closing Settings exits only that process.
+  Backend activation/lifetime are unchanged. Autostart label names the Qt
+  Tray Plugin; key/value and XDG behavior are unchanged.
+- **v2F3 Dependency Advisor**: 2.3.1 shared detection model
   (required/optional/missing/available/unsupported; read-only, offline,
   no root, never installs; one model for installer and CLI, consistent
-  with the package recipes' optdepends), 2.4.3 distro-aware installer
+  with the package recipes' optdepends), 2.3.2 distro-aware installer
   recommendations (no automatic installs; keep `--local`, `--dry-run`,
-  `--no-build`), 2.4.4 `checkupdates` preferred on Arch (respect remote
+  `--no-build`), 2.3.3 `checkupdates` preferred on Arch (respect remote
   refresh, never `pacman -Sy`/sudo/pkexec, zero ≠ missing/network/timeout/
   failure; open point: 2.0.0 already uses it when remote is on — decide
-  `pacman -Qu` vs `checkupdates --nosync` when remote is off), 2.4.5
+  `pacman -Qu` vs `checkupdates --nosync` when remote is off), 2.3.4
   `aqtruncatctl --missing-deps` (exit 0 even with missing optionals,
   works without backend/Plasma). `lm_sensors` is not used by 2.0.0: list
   it only if a feature starts using it.
@@ -308,7 +303,7 @@ ProviderIntegrations, exported on the session bus (contract:
 `aqtruncat run` (trayapp) is a client through `BackendClient`
 (`src/api/backendclient.*`, implements `CustomMetricsModel`): it rebuilds
 the system snapshot / sources from JSON for the unchanged Dashboard,
-Metrics Bar and Settings, and animates at the received fps (no sampler, no
+Metrics Bar and animates at the received fps (no sampler, no
 Custom Metrics, no CPU monitor, no autostart in the frontend). The diagram
 below is the pre-F4.1 single-process view: the sampler/CpuMonitor/speed half
 now lives in aqtruncatd, the RunnerAnimator/TrayPresenter half in the tray.
@@ -337,8 +332,8 @@ the Dashboard and the Metrics Bar keep reading one typed snapshot.
                      src/app/main.cpp  (parse → dispatch only)
                               │
         ┌─────────────────────┼──────────────────────────┐
-   run (QApplication)   runner … (QCoreApplication)   metrics (no QCoreApplication)
-   src/app/trayapp.cpp   src/cli/runnercommands.cpp    src/cli/metricscommand.cpp
+   run / settings (QApplication) runner … (QCoreApplication) metrics (no QCoreApplication)
+   trayapp / settingsapp         src/cli/runnercommands.cpp  src/cli/metricscommand.cpp
         │                       │                             │
         │                 RunnerService (src/runner)    SystemMetricsSampler (src/metrics)
         │                                                     │
@@ -365,8 +360,8 @@ Static libraries (see `src/CMakeLists.txt`):
 | `aqtruncat_cli` | `cli/`: commandline (grammar/help/exit codes), runnercommands, metricscommand | runner, metrics |
 | `aqtruncat_engine` (F4.1) | `app/` QtCore part + `custommetrics/`: AppSettings, MetricSampler, CustomMetricsModel/Service/parser, CpuMonitor, RunnerSpeedController, autostart, ProviderIntegration, metricsbarids, storage paths | metrics, Qt6::Core |
 | `aqtruncat_api` (F4.1) | `api/`: apischema, BackendService, BackendClient | engine, Qt6::DBus |
-| `aqtruncat_desktop` | `app/` UI only: trayapp, Dashboard/Settings/preview, Metrics Bar model/renderer/presenter, tray presenter | api, engine, runner, Qt6::Widgets |
-| `aqtruncat` (exe) | `app/`: main, trayapp, logging; bundled runners as qrc | desktop, CLI + Qt6::Widgets |
+| `aqtruncat_desktop` | `app/` UI only: trayapp, settingsapp/activation, Dashboard/Settings/preview, Metrics Bar, tray presenter | api, engine, runner, Qt6::Widgets, Qt6::DBus |
+| `aqtruncat` (exe) | `app/`: main, trayapp, settingsapp, logging; bundled runners as qrc | desktop, CLI + Qt6::Widgets |
 | `aqtruncat_runner_catalog` (F4.2) | `api/runnercatalog`, `app/runnerselection`: GetRunners payload and the start-up runner fallback | api, runner (QtGui) |
 | `aqtruncatd` / `aqtruncatctl` (exe, F4.1) | `daemon/main.cpp`, `ctl/main.cpp` | aqtruncatd: api + runner_catalog (QtCore, QtDBus, QtGui for PNG decoding only, no QGuiApplication); aqtruncatctl: api (QtCore + QtDBus only) |
 
@@ -408,16 +403,23 @@ Key components:
 - **DashboardWindow** (`src/app/dashboardwindow.*`): reusable `Qt::Tool`
   Widgets window; closing hides it; snapshot-driven CPU/memory/swap/network/
   Root+Home/disk presentation with explicit unavailable states.
-- **SettingsWindow** (`src/app/settingswindow.*`): one lazy reusable `Qt::Tool`
+- **SettingsWindow** (`src/app/settingswindow.*`): the existing shared Qt UI
   over `AppSettings`; RunnerService-backed selection, fixed-20-FPS preview,
-  speed/network/refresh/autostart controls and Restore Defaults. Closing hides.
+  speed/network/refresh/autostart controls and Restore Defaults. Tray's menu
+  requests `aqtruncat settings`; standalone close exits that process, while
+  an embedded/hide-on-close use retains hide behavior.
   F2 revision: **Integrations** group (Claude Code) driven by a
   `ProviderIntegration` (`src/app/providerintegration.*`): runs the adapter's
   `status --json` / `enable` / `disable` / `live-updates` asynchronously, one
-  at a time, and watches the files `status` reports; created lazily with the
-  Settings window in `trayapp.cpp` (adapter found next to the running
+  at a time, and watches the files `status` reports; created with standalone
+  Settings (adapter found next to the running
   `aqtruncat`, else in PATH). The integration's package is hidden from the
   Custom Metrics list.
+- **SettingsActivation** (`src/app/settingsactivation.*`): owns
+  `io.github.psykedady.AQTRunCat.Settings` on the session bus and exports
+  `Show`; D-Bus activation, tray, Plasmoid and CLI converge on one process.
+  The bus drops ownership after a crash. It is separate from the backend's
+  D-Bus service name and does not change backend lifetime.
 - **TrayPresenter** (`src/app/traypresenter.*`): builds one `QIcon` per frame
   once per runner (and on `QEvent::ApplicationPaletteChange`); monochrome
   runners tinted with `QPalette::WindowText` (`CompositionMode_SourceIn`),
@@ -688,7 +690,7 @@ Key components:
 | Formatting | binary units, 1 decimal, `std::to_chars` (locale-independent) | QCoreApplication sets the system locale (Italian comma) |
 | Runner precedence | user > bundled; same-root dup id → first in natural order wins + note | |
 | Explicit `--runner` missing/invalid | error, never fallback | default runner may fall back with a warning |
-| Bundled runners | `cat` (default), `coffee`, `walkinggoose`, `partyparrot`, `engine` (F7), `rickroll` (2.1.1) | one new runner per v2 feature at 2.x.1, only with user-supplied/approved art; don't add others without being asked |
+| Bundled runners | `cat` (default), `coffee`, `walkinggoose`, `partyparrot`, `engine` (F7), `rickroll` (2.1.1) | v2F1 added Rickroll; v2F2/v2F3 add no runner; don't add others without being asked |
 | XDG | runners: `$XDG_DATA_HOME/AQTRunCat/runners/`; settings: `$XDG_CONFIG_HOME/AQTRunCat/AQTRunCat.ini`; autostart: `$XDG_CONFIG_HOME/autostart/aqtruncat.desktop` | Qt/XDG standard locations, data and config separate |
 | Custom Metrics snapshot contract (M6, preserved by F1) | external RunCat Neo JSON snapshots; `formattedValue` stays opaque; snapshot sources run no commands/providers/scheduler | compatibility with existing producers; F1 deliberately adds a separate command-backed source while retaining this snapshot contract |
 | Custom Metrics command contract (F1) | explicit `source.type=command`; required `id`, `title`, `executable`; direct executable + ≤256 args, no shell/elevation; scalar UTF-8 stdout; prefix/suffix and optional normalized range | invalid/malformed config is never executed or treated as snapshot |
@@ -735,7 +737,7 @@ Key components:
 | Qt minimum | 6.5 (Ubuntu 24.04 not supported, README warning) | user decision M8 |
 | SNI identity/order | no per-item Id hacks, no ordering hacks; host-defined | M7/M8 investigation |
 | Install layout | CMake install rules only; installer maps staged bin/ share/; manifest-based uninstall; never touches ~/.config/AQTRunCat or ~/.local/share/AQTRunCat | single source of truth, user data safety (M9) |
-| Installer autostart | default ON; always through `aqtruncat autostart enable|disable` as the real user | the backend (since F4.1; the app before) re-applies the INI preference; the entry still starts the frontend `aqtruncat` (M9) |
+| Installer autostart | default ON; always through `aqtruncat autostart enable|disable` as the real user | starts only the Qt Tray Plugin (`aqtruncat`); label is “Start AQTRunCat Tray Plugin automatically on login”; preference/key unchanged; backend remains D-Bus on-demand |
 | Backend process (F4.1) | dedicated `aqtruncatd`, single instance by bus name (DoNotQueue, no replacement), D-Bus activation + start fallback next to the client, lives until logout/SIGTERM, not stopped by the last client | user-approved option B; Plasmoid/CLI need it without a tray |
 | Public API (F4.1) | `io.github.psykedady.AQTRunCat1` at `/io/github/psykedady/AQTRunCat`, JSON strings, api 1 in the interface name, additive changes raise `schema`; deltas with generation+1, clients resync on gaps | stable contract for third-party clients |
 | API safety (F4.1) | no method runs client-supplied commands; integrations take known ids + fixed adapter args; no credentials/provider files/env exposed | security requirement |
@@ -939,6 +941,18 @@ sample on purpose (hot-plug) — caching not needed.
 ---
 
 ## 9. Tests and validation
+
+2.2.0 (2026-10-27, v2F2 standalone Settings): fresh Release configure/build
+in `/tmp/aqtruncat-v2f2.vP6xxt/build`; 0 compiler warnings; ctest **58/58**
+(includes Settings activation/single-instance/backend lifecycle, installer,
+all six official runners, Custom Metrics v3, Dashboard, Metrics Bar and
+Plasmoid); `packaging-versions` 2.2.0; installer test passed; `shellcheck`
+on changed shell scripts passed; `git diff --check` clean. D-Bus and installer
+tests ran outside the sandbox because it blocks private bus sockets and
+cross-process `/proc` inspection. Offscreen Qt reports unsupported raise/
+size-hint notices; real Plasma Wayland focus behavior and launcher/menu
+presentation still require manual validation. No backend lifecycle, tray
+runner or API schema change.
 
 2.1.8 (2026-10-27, recursive Custom Metric discovery): clean Release build
 in a fresh directory, 0 warnings; ctest **57/57**; `packaging-versions`
@@ -1937,7 +1951,7 @@ Last v2F1 sub-feature: **v2F1 complete**.
 ## 14. Important files map
 
 ```text
-requirements.md                v2 roadmap (2.0.0 baseline, v2 runner convention, v2F1 Custom Metrics v3 + Rickroll 2.1.x, v2F2 Independent Autostart 2.2.x, v2F3 Standalone Settings 2.3.x, v2F4 Dependency Advisor 2.4.x), versioning, general principles. Older "requirements §n" references in docs point to the former M0–M9 spec (decisions kept in §5 here)
+requirements.md                v2 roadmap (v2F1 Custom Metrics v3 + Rickroll 2.1.x complete, v2F2 Standalone Settings 2.2.0 complete, v2F3 Dependency Advisor 2.3.x planned), versioning, general principles. Older "requirements §n" references in docs point to the former M0–M9 spec (decisions kept in §5 here)
 docs/README.md                 documentation index: architecture overview, topic documents, milestone → document map
 docs/feature-reference.md      normative summaries of F1–F7 (formerly the body of requirements.md)
 THIRD_PARTY_NOTICES.md         runner frame provenance: RunCat Neo (Apache-2.0); Walking Goose / Party Parrot (Tenor GIFs, licence unknown, user's decision)
@@ -1969,7 +1983,7 @@ src/runner/                    Runner model, loader, natural sort, catalog/XDG, 
 src/metrics/                   Qt-free metrics: parsers, CounterRateTracker, SystemMetricsSampler, formatter
 src/custommetrics/             shared Snapshot/Source model, bounded M6 parser, F1 command config/scalar parser
 src/cli/                       commandline (grammar/help/exit codes), runnercommands, metricscommand
-src/app/                       runtime/UI: AppSettings, MetricSampler, CustomMetricsService, CPU controller, Dashboard, Settings/preview, autostart
+src/app/                       runtime/UI: AppSettings, MetricSampler, CustomMetricsService, CPU controller, Dashboard, standalone/tray Settings, D-Bus activation, autostart
 src/providers/claude/          F2 Claude Code adapter (aqtruncat_claude lib: claudecode context/collect, claudeusage quotas, statuslinebridge settings.json edit; aqtruncat-claude-metric exe + icon); not linked by the core
 src/providers/common/          shared provider code (aqtruncat_provider_common: quota judgement/item format, package helpers)
 src/providers/codex/           F3 Codex adapter (aqtruncat_codex lib: codexusage local/live/state/collect; aqtruncat-codex-metric exe + icon); not linked by the core
@@ -1978,6 +1992,7 @@ src/app/providerintegration.*  Settings-side driver of an official integration's
 src/api/                       F4.1 public API: apischema (identity, versions, JSON schema both ways), backendservice (D-Bus object), backendclient (Qt client, CustomMetricsModel)
 src/daemon/main.cpp, src/ctl/main.cpp   F4.1 aqtruncatd backend and aqtruncatctl CLI
 data/io.github.psykedady.AQTRunCat.service.in   D-Bus activation file template (Exec=@AQTRUNCAT_DBUS_EXEC@)
+data/aqtruncat-settings.desktop, data/io.github.psykedady.AQTRunCat.Settings.service.in   standalone Settings launcher and D-Bus activation endpoint
 docs/backend-dbus-api-cli.md   F4.1 architecture, lifecycle, complete API contract, CLI, security, performance, limits (+ Python client example dir)
 plasmoid/package/              F4.2 KDE Plasma 6 widget (QML only): metadata.json, contents/code/logic.js (pure, tested), contents/config/{main.xml,config.qml}, contents/ui/{main,BackendClient,CompactRepresentation,RunnerView,FullRepresentation,MetricDelegate,configGeneral,configAppearance}.qml
 src/api/runnercatalog.*        F4.2 GetRunners payload (lib aqtruncat_runner_catalog with app/runnerselection.*; QtGui; linked by aqtruncatd and the tray only)

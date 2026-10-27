@@ -117,9 +117,10 @@ Plasmoid e altri client fino al logout.
 | — | — | il backend parte solo su richiesta (CLI, altri client) |
 
 Installare o abilitare un frontend non abilita mai l'altro. L'autostart
-(Settings › Start at login, oppure `autostart true`) resta quello di M9:
-avvia il frontend `aqtruncat`, che porta con sé il backend. Senza tray non
-serve un autostart del backend, perché l'attivazione su richiesta basta.
+(Settings › **Start AQTRunCat Tray Plugin automatically on login**, oppure
+`autostart true`) avvia il frontend `aqtruncat`. Il backend continua ad
+avviarsi su richiesta via D-Bus e resta attivo dopo la chiusura dei client;
+Settings autonomo non cambia queste regole.
 
 **Crash o riavvio del backend.** I client seguono il nome con
 `QDBusServiceWatcher`. Il frontend, quando il nome perde il proprietario:
@@ -436,6 +437,7 @@ aqtruncatctl [--json] [--no-start] COMMAND
   integrations
   integration enable|disable ID
   integration live-updates ID on|off
+  settings open                  apre o attiva la finestra Settings
   settings
   settings set KEY VALUE
   custom add|remove PATH
@@ -478,6 +480,8 @@ $ aqtruncatctl settings set metricsBarItems '["cpu","memory"]'
 metricsBarItems set
 $ aqtruncatctl settings set speedMode fast
 aqtruncatctl: speedMode must be "normal" or "slow-down"      (exit 4)
+$ aqtruncatctl settings open
+AQTRunCat Settings opened.
 $ aqtruncatctl --no-start status
 aqtruncatctl: the AQTRunCat backend is not running           (exit 3)
 ```
@@ -512,9 +516,9 @@ mostrati; in `--json` ci sono.
 
 | Meccanismo | Cosa installa |
 |---|---|
-| CMake `install` | `bin/aqtruncat`, `bin/aqtruncatd`, `bin/aqtruncatctl`, `share/dbus-1/services/io.github.psykedady.AQTRunCat.service` (generato da `data/…service.in`) |
-| `install.sh` (sistema) | come sopra sotto `/usr/local`; manifest; `Exec=` del file di servizio = `bindir/aqtruncatd` |
-| `install.sh --local` | `~/.local/bin` e `~/.local/share/dbus-1/services` |
+| CMake `install` | `bin/aqtruncat`, `bin/aqtruncatd`, `bin/aqtruncatctl`, `aqtruncat-settings.desktop`, backend e Settings D-Bus service files |
+| `install.sh` (sistema) | come sopra sotto `/usr/local`; manifest; activation `Exec=` paths target the installation's binaries |
+| `install.sh --local` | `~/.local/bin`, `~/.local/share/applications` e i due D-Bus service file |
 | PKGBUILD | `depends` + `dbus` |
 | Debian | `Depends: … default-dbus-session-bus \| dbus-session-bus` |
 | RPM | `%files` con backend, CLI e file di servizio; `Requires: dbus` |

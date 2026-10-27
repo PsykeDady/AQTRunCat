@@ -1,6 +1,6 @@
 # AQTRunCat Documentation
 
-Technical documentation of AQTRunCat **2.1.8**, by topic. Users start with
+Technical documentation of AQTRunCat **2.2.0**, by topic. Users start with
 the main [README](../README.md); the v2 roadmap is
 [requirements.md](../requirements.md). The topic documents are design and
 validation records written in Italian; [feature-reference.md](feature-reference.md)
@@ -19,9 +19,9 @@ validation records written in Italian; [feature-reference.md](feature-reference.
                  │
    ┌─────────────┼───────────────────────┬──────────────────────────┐
 aqtruncat (Qt tray)          KDE Plasma widget (QML)        aqtruncatctl / any client
-runner animation, tooltip,   runner, tooltip, popup,        status, metrics, watch,
-Dashboard, Settings,         configuration pages            settings, integrations
-Metrics Bar
+runner, Dashboard, Bar       runner, tooltip, popup,        status, metrics, watch,
+                             widget configuration           settings, integrations
+aqtruncat settings (Qt Widgets, independent process; shared SettingsWindow)
 ```
 
 Static libraries: `aqtruncat_core` (CPU, smoothing, speed curve),
@@ -97,3 +97,4 @@ Commit messages, code comments and the documents themselves refer to the
 | v2F1.6 Custom Metrics reload and warnings | 2.1.6 | custom-metrics-commands.md §12 |
 | v2F1.7 manual refresh by clicking metric icons | 2.1.7 | custom-metrics-commands.md §13 |
 | v2F1.8 recursive Custom Metric discovery | 2.1.8 | custom-metrics-commands.md §14 |
+| v2F2 standalone Settings | 2.2.0 | settings-and-desktop-integration.md §11 |

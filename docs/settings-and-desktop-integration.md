@@ -215,4 +215,35 @@ processo mai aperto. Rimane un solo sampler di sistema.
   Metrics/Metrics Bar; M5 configura rete e frequenza Dashboard senza anticiparle.
 - Entry `.desktop` installabile e icona propria restano M9 packaging.
 
-M6 non è iniziata.
+## 11. v2F2 — Settings autonomo (2.2.0)
+
+`aqtruncat settings` apre questa stessa `SettingsWindow` in un processo Qt
+Widgets autonomo: non crea icone tray, Dashboard o Metrics Bar e non richiede
+che il tray o il widget Plasma siano già attivi. La voce applicativa
+**AQTRunCat Settings** e il pulsante nel popup Plasmoid usano lo stesso
+endpoint D-Bus di sessione, con un solo processo Settings per sessione; una
+seconda richiesta mostra la finestra esistente. Se il processo termina
+inaspettatamente, il bus libera il nome e la richiesta successiva avvia una
+nuova istanza.
+
+Il tray mantiene la voce Settings nel menu, che delega all'istanza autonoma.
+Il widget Plasma offre una seconda azione **Open AQTRunCat Settings** accanto
+alla propria configurazione nativa: la configurazione Plasma resta distinta e
+Plasma continua a gestire il ciclo di vita del Plasmoid.
+
+Entrambe le finestre leggono e scrivono lo stesso INI e usano il backend
+esistente per metriche, Custom Metrics, gruppi, integrazioni e aggiornamento
+della configurazione. Settings attiva il backend quando si avvia; il backend
+resta attivo dopo la chiusura di Settings e conserva la propria durata fino al
+logout o a SIGTERM/SIGINT. La chiusura di Settings non chiude il tray o il
+Plasmoid. L'attivazione backend D-Bus e il suo ripiego per i client restano
+invariati.
+
+La checkbox Desktop ha ora il testo esatto **“Start AQTRunCat Tray Plugin
+automatically on login”**. La preferenza continua a scrivere
+`desktop/autostart` e la voce XDG `aqtruncat.desktop` con `Exec=aqtruncat`;
+valore e migrazione non cambiano. È riferita solo al frontend Qt tray. Plasma
+continua a gestire separatamente il widget.
+
+Il comando `aqtruncatctl settings open` apre o attiva la medesima finestra;
+`aqtruncatctl settings` continua a mostrare la configurazione condivisa.

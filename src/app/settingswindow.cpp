@@ -9,6 +9,7 @@
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDialogButtonBox>
 #include <QFileInfo>
 #include <QDir>
@@ -357,7 +358,7 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
     m_refresh->addItem(tr("Every 2 seconds"), 2);
     m_refresh->addItem(tr("Every 5 seconds"), 5);
     desktopForm->addRow(tr("Dashboard refresh:"), m_refresh);
-    m_autostart = new QCheckBox(tr("Start AQTRunCat automatically on login"), desktopBox);
+    m_autostart = new QCheckBox(tr("Start AQTRunCat Tray Plugin automatically on login"), desktopBox);
     m_autostart->setObjectName(QStringLiteral("autostart"));
     desktopForm->addRow(m_autostart);
     root->addWidget(desktopBox);
@@ -1133,6 +1134,11 @@ void SettingsWindow::moveMetricsBarItem(int delta)
 
 void SettingsWindow::closeEvent(QCloseEvent *event)
 {
+    if (m_closeTerminatesApplication) {
+        event->accept();
+        QCoreApplication::quit();
+        return;
+    }
     hide();
     event->ignore();
 }

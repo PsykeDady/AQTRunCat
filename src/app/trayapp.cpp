@@ -14,6 +14,7 @@
 #include "runpreferences.h"
 #include "runnerselection.h"
 #include "settingswindow.h"
+#include "settingsactivation.h"
 #include "snapshotthrottle.h"
 #include "traypresenter.h"
 
@@ -160,46 +161,10 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
                      &dashboardUpdates, &SnapshotThrottle::setIntervalSeconds);
     // Network selection and autostart are applied by the backend.
 
-    // Created with the (lazy) Settings window, destroyed after it.
-    std::unique_ptr<ProviderIntegration> claudeIntegration;
-    std::unique_ptr<ProviderIntegration> codexIntegration;
-    std::unique_ptr<SettingsWindow> settingsWindow;
-    std::vector<aqtruncat::metrics::InterfaceMetrics> latestInterfaces;
-    std::vector<aqtruncat::metrics::GpuDevice> latestGpus;
-    QObject::connect(&backend, &BackendClient::systemSnapshot, &app,
-                     [&](const aqtruncat::metrics::SystemMetricsSnapshot &snapshot) {
-                         latestInterfaces = snapshot.network.interfaces;
-                         if (snapshot.gpu.status.state != aqtruncat::metrics::MetricState::Pending)
-                             latestGpus = snapshot.gpu.devices;
-                         if (settingsWindow) {
-                             settingsWindow->setAvailableInterfaces(latestInterfaces);
-                             settingsWindow->setAvailableGpus(latestGpus);
-                         }
-                     });
-    auto openSettings = [&] {
-        if (!settingsWindow) {
-            QList<RunnerOption> options;
-            for (const aqtruncat::ListedRunner &listed : runners.list()) {
-                if (listed.result.runner) {
-                    options.append({listed.result.runner->id, listed.result.runner->displayName,
-                                    listed.result.runner->source});
-                }
-            }
-            if (std::none_of(options.cbegin(), options.cend(), [&](const RunnerOption &item) {
-                    return item.id == activeRunner.id;
-                }))
-                options.append({activeRunner.id, activeRunner.displayName, activeRunner.source});
-            claudeIntegration = std::make_unique<ProviderIntegration>(
-                QStringLiteral("claude-code"), ProviderIntegration::findAdapter(QStringLiteral("aqtruncat-claude-metric")));
-            codexIntegration = std::make_unique<ProviderIntegration>(
-                QStringLiteral("codex"), ProviderIntegration::findAdapter(QStringLiteral("aqtruncat-codex-metric")));
-            settingsWindow = std::make_unique<SettingsWindow>(&settings, std::move(options), &backend, nullptr,
-                                                              claudeIntegration.get(), codexIntegration.get());
-            settingsWindow->setActiveRunner(activeRunner);
-            settingsWindow->setAvailableInterfaces(latestInterfaces);
-            settingsWindow->setAvailableGpus(latestGpus);
-        }
-        settingsWindow->showAndRaise();
+    auto openSettings = [] {
+        QString error;
+        if (!aqtruncat::settings::requestShow(&error))
+            qWarning().noquote() << QStringLiteral("cannot open AQTRunCat Settings: %1").arg(error);
     };
     QObject::connect(&tray, &TrayPresenter::settingsRequested, &app, openSettings);
     QObject::connect(&metricsBarTray, &MetricsBarPresenter::settingsRequested, &app, openSettings);
@@ -213,8 +178,6 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
         activeRunner = std::move(*next.runner);
         tray.setRunner(activeRunner);
         animator.setSequence(activeRunner.sequence);
-        if (settingsWindow)
-            settingsWindow->setActiveRunner(activeRunner);
     });
 
     if (preferences.fpsFromCommandLine) {

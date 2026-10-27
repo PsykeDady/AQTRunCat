@@ -38,7 +38,9 @@ the primary target is KDE Plasma 6 on Wayland.
   widget) to see CPU, RAM and swap without opening the Dashboard.
 - **Metrics Bar** (off by default): up to 3 compact values, built-in or
   custom, as extra tray icons next to the runner.
-- **Settings** window, start at login, and a command line (`aqtruncat --help`).
+- **Settings** window available independently with `aqtruncat settings`, in
+  the application menu, from the tray, or from the Plasma widget. Its login
+  option starts the Qt Tray Plugin.
 - **Backend and API**: the metrics run once per session in a small background
   service (`aqtruncatd`) that the tray, the `aqtruncatctl` command line and
   other programs share through a documented D-Bus API.
@@ -76,7 +78,7 @@ AppIndicator extension.
 From the source tree, as your normal user:
 
 ```bash
-./install.sh            # system-wide into /usr/local, start at login
+./install.sh            # system-wide into /usr/local, start the Qt Tray Plugin at login
 ./install.sh --local    # only for you, no root: ~/.local/bin, ~/.local/share
 ```
 
@@ -98,8 +100,8 @@ updates the installation in place.
 |---|---|
 | *(none)* | install system-wide (`--prefix=DIR`, default `/usr/local`) |
 | `--local` | install for the current user (XDG directories, no root) |
-| `-A`, `--autostart=true` | start at login (**the default**) |
-| `-na`, `--autostart=false` | do not start at login |
+| `-A`, `--autostart=true` | start the Qt Tray Plugin at login (**the default**) |
+| `-na`, `--autostart=false` | do not start the Qt Tray Plugin at login |
 | `-U`, `--uninstall` | uninstall (add `--local` for a local installation) |
 | `--plasmoid` / `--no-plasmoid` | install the KDE Plasma 6 widget even outside Plasma (fails, with the packages to install, if Plasma 6's QML modules are missing) / never install it; by default it is installed when Plasma 6 is found |
 | `--restart-plasma` / `--no-restart-plasma` | after updating an installed widget while Plasma runs: restart Plasma so that it loads the new version / leave Plasma alone; by default the installer asks on a terminal (N) and does not restart without one |
@@ -107,9 +109,12 @@ updates the installation in place.
 | `--dry-run` | show what would happen (every run starts with a summary of the effective options) |
 | `-h`, `--help` | full help |
 
-Start at login is a per-user preference, also for a system-wide install: it is
+**Start AQTRunCat Tray Plugin automatically on login** is a per-user preference, also for a system-wide install: it is
 the XDG entry `~/.config/autostart/aqtruncat.desktop`, the same one the
 Settings window and `aqtruncat autostart enable|disable` manage.
+It starts the Qt Tray Plugin (`aqtruncat`); the backend (`aqtruncatd`) starts
+on demand through D-Bus and remains running after Settings closes. Plasma
+manages the native widget separately.
 
 Uninstalling removes exactly the files the installer recorded, plus your
 autostart entry if it starts that installation. **Your settings
@@ -199,6 +204,7 @@ aqtruncat                       # start the tray runner
 aqtruncat runner list           # bundled and user runners
 aqtruncat runner import beagle-frames.zip
 aqtruncat metrics --watch       # metrics on the terminal
+aqtruncat settings              # standalone Settings (also in the app menu)
 aqtruncat autostart status      # enable | disable | status
 aqtruncat -v                    # version (also aqtruncatd, aqtruncatctl, adapters)
 ```
@@ -214,6 +220,7 @@ backend from a terminal or a script:
 
 ```bash
 aqtruncatctl status                          # backend, runner, integrations
+aqtruncatctl settings open                   # open or raise AQTRunCat Settings
 aqtruncatctl metrics                         # every metric, human-readable
 aqtruncatctl --json metrics cpu memory       # the API's JSON, for scripts
 aqtruncatctl watch                           # follow changes (Ctrl+C)
@@ -544,9 +551,10 @@ The runner itself is always there and is not counted.
 - Game FPS needs MangoHud logging to a file; Intel GPUs show activity
   (time out of RC6), not per-engine utilization; update counts are only as
   fresh as the package metadata (an "out of date" note says so).
-- The Plasma widget starts the backend only through D-Bus activation; it
-  cannot open the tray's Settings window (start at login, Metrics Bar and
-  Dashboard refresh are set there or with `aqtruncatctl`).
+- The Plasma widget starts the backend only through D-Bus activation. Its
+  popup opens the shared AQTRunCat Settings window; the separate Plasma
+  Configure action still edits widget-only options. The Qt Tray Plugin login
+  preference and Metrics Bar/Dashboard settings are shared app settings.
 
 Details: [docs/desktop-compatibility.md](docs/desktop-compatibility.md).
 
@@ -566,5 +574,5 @@ AQTRunCat icon is original artwork.
   widget, desktop compatibility, installation and packaging) and the
   normative feature reference
 - [requirements.md](requirements.md): the v2 roadmap (Custom Metrics v3,
-  independent autostart, standalone Settings)
+  standalone Settings)
 - [`tools/`](tools/): diagnostic scripts for developers (not needed by users)

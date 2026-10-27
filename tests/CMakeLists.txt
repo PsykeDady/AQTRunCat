@@ -95,6 +95,24 @@ foreach(name runnerpreview settingswindow)
     set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endforeach()
 
+# v2F2: Settings activation is per-session D-Bus ownership, independent from
+# the tray and backend names. Run on a private session bus.
+find_program(AQTRUNCAT_DBUS_RUN_SESSION dbus-run-session)
+qt_add_executable(tst_settingsactivation tst_settingsactivation.cpp)
+target_link_libraries(tst_settingsactivation PRIVATE aqtruncat_desktop Qt6::Test Qt6::Widgets Qt6::DBus)
+target_compile_options(tst_settingsactivation PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_definitions(tst_settingsactivation PRIVATE
+    AQTRUNCAT_CTL="$<TARGET_FILE:aqtruncatctl>"
+    AQTRUNCAT_APP="$<TARGET_FILE:aqtruncat>")
+add_dependencies(tst_settingsactivation aqtruncatctl aqtruncat)
+if(AQTRUNCAT_DBUS_RUN_SESSION)
+    add_test(NAME settingsactivation COMMAND ${AQTRUNCAT_DBUS_RUN_SESSION} -- $<TARGET_FILE:tst_settingsactivation>)
+else()
+    add_test(NAME settingsactivation COMMAND tst_settingsactivation)
+endif()
+set_tests_properties(settingsactivation PROPERTIES ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen;HOME=${CMAKE_CURRENT_BINARY_DIR}/settingsactivation-home;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/settingsactivation-config;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/settingsactivation-data")
+
 # M6 RunCat Neo-compatible JSON parsing and application-owned registry/watcher.
 foreach(name custommetric custommetricsservice)
     qt_add_executable(tst_${name} tst_${name}.cpp)

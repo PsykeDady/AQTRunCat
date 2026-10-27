@@ -366,8 +366,8 @@ KCM.SimpleKCM {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
             opacity: 0.7
-            text: "Start at login, the Metrics Bar and the Dashboard refresh belong to the AQTRunCat tray application: "
-                  + "change them in its Settings window or with \"aqtruncatctl settings set\"."
+            text: "Start AQTRunCat Tray Plugin automatically on login, the Metrics Bar and Dashboard refresh belong to the Qt tray application: "
+                  + "change them in AQTRunCat Settings or with \"aqtruncatctl settings set\". Plasma manages this widget separately."
         }
     }
 }

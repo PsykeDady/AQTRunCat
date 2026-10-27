@@ -6,8 +6,8 @@ nothing below the 2.0.0 baseline is implemented until its section says so.
 - **2.0.0** is the consolidation baseline: the complete 1.x application
   (M0–M9, then F1–F7) released as one version, without new runtime
   functionality.
-- **v2F1 – v2F4** are planned features. Each one begins with a new official
-  built-in animated runner ([v2 Runner Convention](#v2-runner-convention)).
+- **v2F1** is complete. v2F2 is Standalone Settings; v2F3 is the planned
+  Dependency Advisor.
 
 The behaviour shipped in 2.0.0 is documented in [README.md](README.md) and in
 the topic documents indexed by [docs/README.md](docs/README.md); the
@@ -16,9 +16,8 @@ normative summaries of the 1.x features are in
 
     2.0.0  Consolidation baseline (1.x complete)            COMPLETE
     v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       COMPLETE (2.1.8)
-    v2F2   Independent Autostart + new runner   2.2.x       PLANNED
-    v2F3   Standalone Settings + new runner     2.3.x       PLANNED
-    v2F4   Dependency Advisor + new runner      2.4.x       PLANNED
+    v2F2   Standalone Settings                   2.2.0       COMPLETE
+    v2F3   Dependency Advisor                    2.3.x       PLANNED
 
 
 ## Versioning
@@ -32,12 +31,8 @@ Plasmoid's `metadata.json` carry the same value (checked by the
 - 1.0.0 was the M0–M9 roadmap; F1–F7 raised the minor version and their
   sub-features the patch (last 1.x: 1.7.4).
 - 2.0.0 consolidates 1.7.4.
-- Each v2 feature raises the **minor** version (v2F1 → 2.1.x, v2F2 → 2.2.x,
-  v2F3 → 2.3.x, v2F4 → 2.4.x); each completed sub-feature raises the
-  **patch** within it.
-- `2.x.0` is always the feature baseline (requirements, documentation and
-  version metadata only); `2.x.1` is always the feature's new official
-  built-in runner; the functional sub-features follow from `2.x.2`.
+- v2F1 used 2.1.x; v2F2 is released directly as 2.2.0; v2F3 uses 2.3.x.
+  New v2 features do not require a new runner.
 - The application version is independent of the D-Bus API version
   (`io.github.psykedady.AQTRunCat1`, api 1), of the API payload `schema`
   and of configuration formats: those change only when their contract
@@ -70,23 +65,18 @@ Settings, user runners and Custom Metrics configured with 1.x keep working
 unchanged.
 
 
-## v2 Runner Convention
-
-Every major v2 feature (v2F1, v2F2, v2F3, v2F4) begins with the addition of
-a new official built-in animated runner, delivered as the first
-implementation milestone after the feature baseline (`2.x.1`).
+## v2F1 Runner Record
 
 | Feature | Version | Runner | Proposed id |
 |---------|---------|--------|-------------|
 | v2F1 | 2.1.1 | Rickroll | `rickroll` |
-| v2F2 | 2.2.1 | TBD | TBD |
-| v2F3 | 2.3.1 | TBD | TBD |
-| v2F4 | 2.4.1 | TBD | TBD |
+| v2F2 | — | None | — |
+| v2F3 | — | None currently planned | — |
 
-Names and artwork of the TBD runners are decided by the user; they are not
-to be invented.
+Rickroll is the only runner introduced by v2F1. Its art and provenance
+requirements remain recorded in [docs/built-in-runners.md](docs/built-in-runners.md).
 
-Requirements for every v2 runner:
+The completed v2F1 runner followed these requirements:
 
 - It is a **built-in** runner (bundled like the F7 runners, see
   [docs/built-in-runners.md](docs/built-in-runners.md)), not a Custom
@@ -398,93 +388,37 @@ Status: COMPLETE (2026-10-27). Record:
   by canonical directory identity.
 
 
-## v2F2 — Independent Autostart + New Runner
+## v2F2 — Standalone Settings
 
-Status: PLANNED. Version family **2.2.x**.
+Status: COMPLETE (2.2.0).
 
-    2.2.0  Feature baseline (requirements, version metadata)
-    2.2.1  New official built-in runner (TBD)
-    2.2.2  Independent backend and Qt tray autostart settings
-
-### 2.2.1 — New Runner (TBD)
-
-Name, id and artwork to be decided by the user; follows the
-[v2 Runner Convention](#v2-runner-convention).
-
-### 2.2.2 — Independent Autostart
-
-The current single "Start AQTRunCat at login" setting is ambiguous since
-the backend and the tray became separate programs (it starts the tray, which
-starts the backend). Provide independent autostart controls for:
-
-1. the backend (`aqtruncatd`);
-2. the Qt system tray frontend (`aqtruncat`).
-
-Requirements:
-
-- Each component is clearly identified in Settings.
-- Either can start at login without the other.
-- D-Bus activation of the backend keeps working; explicit login autostart
-  is distinguished from on-demand activation.
-- No duplicate instances.
-- Migration from the previous single setting.
-- System-wide and `--local` installations and the existing desktop
-  integration are respected.
+The existing Settings window launches independently with `aqtruncat settings`,
+from the AQTRunCat Settings application-menu entry, from the Qt tray menu, or
+from the native Plasma widget popup. It reuses the existing SettingsWindow,
+AppSettings and backend API. A dedicated session-bus name coordinates a
+single process per user session and recovers automatically when it exits.
+Closing standalone Settings exits that frontend only; the backend keeps its
+existing on-demand activation and session lifetime. The login preference is
+still the existing Qt Tray Plugin autostart setting, with its stored key and
+value unchanged. Plasma continues to manage the widget's lifecycle and
+configuration separately.
 
 
-## v2F3 — Standalone Settings + New Runner
+## v2F3 — Dependency Advisor
 
 Status: PLANNED. Version family **2.3.x**.
 
-    2.3.0  Feature baseline (requirements, version metadata)
-    2.3.1  New official built-in runner (TBD)
-    2.3.2  Standalone Settings entry point
-
-### 2.3.1 — New Runner (TBD)
-
-Name, id and artwork to be decided by the user; follows the
-[v2 Runner Convention](#v2-runner-convention).
-
-### 2.3.2 — Standalone Settings
-
-The Settings window can be opened without the tray frontend or the Plasma
-widget.
-
-Requirements:
-
-- A standalone launch mechanism (a dedicated executable or a command-line
-  option).
-- The tray runner need not be running; no tray icon is created only to show
-  Settings; no Plasma widget is needed.
-- Reuses the existing Settings implementation and the shared configuration;
-  no duplicate backend process or configuration logic.
-- Settings stays reachable from the tray and the Plasma widget as today.
-- Changes reach the running components as they do now.
-- The entry point is integrated with installation and packaging where
-  appropriate (e.g. a desktop entry).
-
-
-## v2F4 — Dependency Advisor + New Runner
-
-Status: PLANNED. Version family **2.4.x**.
-
-    2.4.0  Feature baseline (requirements, version metadata)
-    2.4.1  New official built-in runner (TBD)
-    2.4.2  Dependency detection model
-    2.4.3  Distribution-aware recommendations in the installer
-    2.4.4  `checkupdates` as the preferred Arch Linux update provider
-    2.4.5  `aqtruncatctl --missing-deps`
+    2.3.0  Feature baseline
+    2.3.1  Dependency detection model
+    2.3.2  Distribution-aware recommendations in the installer
+    2.3.3  `checkupdates` as the preferred Arch Linux update provider
+    2.3.4  `aqtruncatctl --missing-deps`
 
 The advisor reports the external tools AQTRunCat's **actual** functionality
 uses, which of them are present, and how to install the missing ones. It
 never installs anything.
 
-### 2.4.1 — New Runner (TBD)
-
-Name, id and artwork to be decided by the user; follows the
-[v2 Runner Convention](#v2-runner-convention).
-
-### 2.4.2 — Dependency Detection Model
+### 2.3.1 — Dependency Detection Model
 
 Detect required, optional, missing, available and unsupported
 dependencies.
@@ -497,7 +431,7 @@ time):
 | Claude Code CLI | Claude Code integration (F2) | optional |
 | Codex CLI | Codex integration (F3) | optional |
 | MangoHud | FPS metric (F5) | optional |
-| `pacman-contrib` (`checkupdates`) | Arch package updates metric (F5, 2.4.4) | optional, Arch only |
+| `pacman-contrib` (`checkupdates`) | Arch package updates metric (F5, 2.3.3) | optional, Arch only |
 | Flatpak | Flatpak updates metric (F5) | optional |
 | `lm_sensors` | hardware sensors | only if actually used; not used by 2.0.0 |
 | other distribution-specific utilities | — | only when verified against existing code |
@@ -521,7 +455,7 @@ Requirements:
 - Installation suggestions are distribution-specific when known; packages
   unrelated to supported features are never recommended.
 
-### 2.4.3 — Installer Recommendations
+### 2.3.2 — Installer Recommendations
 
 - During installation, `install.sh` shows the relevant optional
   dependencies and distribution-aware recommendations, using the shared
@@ -531,7 +465,7 @@ Requirements:
   distributions, dry-run behaviour, the existing installer options and the
   cached-build installation (`--no-build`).
 
-### 2.4.4 — Arch Linux Updates via `checkupdates`
+### 2.3.3 — Arch Linux Updates via `checkupdates`
 
 `checkupdates` (from `pacman-contrib`) is the preferred Arch Linux package
 update provider.
@@ -549,11 +483,11 @@ Note for the implementation: 2.0.0 already runs `checkupdates` when remote
 refresh is enabled and it is installed, and `pacman -Qu` on the local
 databases otherwise (`src/metrics/packageupdates.cpp`). Because
 `checkupdates` normally syncs a temporary database copy (network access),
-2.4.4 must decide, without breaking the rule above, what "preferred" means
+2.3.3 must decide, without breaking the rule above, what "preferred" means
 with remote refresh disabled (keep `pacman -Qu`, or `checkupdates
 --nosync` if it reads only already-synced data).
 
-### 2.4.5 — `aqtruncatctl --missing-deps`
+### 2.3.4 — `aqtruncatctl --missing-deps`
 
 ```bash
 aqtruncatctl --missing-deps
