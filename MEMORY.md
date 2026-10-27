@@ -1,11 +1,11 @@
-# MEMORY.md — AQTRunCat maintainer notes (2.2.0)
+# MEMORY.md — AQTRunCat maintainer notes (2.3.0)
 
 > Audience: an AI agent or developer maintaining AQTRunCat without access to
 > earlier conversations. Precedence when sources disagree: **actual
 > code/tests > this file (frozen decisions §5) > docs/ > commit messages**.
 >
-> **State (2026-10-27): AQTRunCat 2.2.0** (v2F2 standalone Settings)
-> implemented on branch `feature/v2/f2`, uncommitted — the user
+> **State (2026-10-27): AQTRunCat 2.3.0** (v2F3 phase initialization;
+> version/docs/roadmap only, no functional changes), branch `feature/v2/f3` — the user
 > commits (v2F1: 2.1.1 = 385ceb1, 2.1.2 = 0a72597, 2.1.3 = 613bdbe, 2.1.4 =
 > f3440d6, 2.1.5 = f00da7e, 2.1.6 = ddbe06d + 07ccd3f). **v2F1 — Custom
 > Metrics v3 is complete.** 2.0.0 (commit 61f3a8e) was the consolidation release
@@ -13,10 +13,11 @@
 > without functional change from 1.7.4. All 1.x features are
 > complete (summary §2, history §4 and §13, normative summaries in
 > `docs/feature-reference.md`, topic documents indexed by `docs/README.md`).
-> `requirements.md` is the **v2 roadmap**: v2F1 Custom Metrics v3 + Rickroll
-> (2.1.x) COMPLETE; v2F2 Standalone Settings (2.2.0) COMPLETE; v2F3
-> Dependency Advisor (2.3.x) PLANNED, only on instruction. Actual source
-> baseline was 2.1.8; the brief's stated 2.1.7 baseline was stale.
+> `requirements.md` is the **v2 roadmap**: v2F1 complete through 2.1.7,
+> recursive discovery shipped in 2.1.8; v2F2 Standalone Settings (2.2.0)
+> COMPLETE; v2F3 Dependency Advisor & Hardware Monitoring initialized at
+> 2.3.0. Next implementation checkpoint: 2.3.1 Arch Updates via
+> `checkupdates`. See the roadmap for all four checkpoints.
 >
 > The user owns every Git write (branches, commits, merges, tags); read-only
 > Git only. Reports to the user in Italian; code, comments and
@@ -42,7 +43,7 @@
 >   Italian locale (comma): use `LC_ALL=C` in generated fixtures.
 > - The shell sandbox cannot reach the user's AT-SPI bus.
 >
-> Last verified (2.2.0, 2026-10-27): see §9 (clean build, full ctest,
+> Last verified (2.3.0, 2026-10-27): see §9 (clean build, full ctest,
 > installer/packaging checks).
 
 ---
@@ -108,7 +109,7 @@
 ## 1. Project identity
 
 - Name **AQTRunCat**, tagline **"A Cute Run Cat for Linux"**, executable
-  **`aqtruncat`**, version **2.2.0** (CMake `PROJECT_VERSION`). History:
+  **`aqtruncat`**, version **2.3.0** (CMake `PROJECT_VERSION`). History:
   1.0.0 = M0–M9; F<n> raised the minor and its sub-features the patch (1.4.2
   = F4.2, 1.5.6 = F5.1–F5.6, 1.6.3 = F6.1–F6.3, 1.7.4 = F7.1–F7.4); 2.0.0 =
   consolidation of 1.7.4. v2 rule (requirements.md "Versioning"): v2F<n>
@@ -176,7 +177,8 @@ F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (party
 2.1.7 DONE    v2F1.7 manual refresh by clicking metric icons (RefreshCustomMetric, API schema 7) (docs/custom-metrics-commands.md §13) — v2F1 COMPLETE
 2.1.8 DONE    recursive Custom Metric discovery through organisational directories (docs/custom-metrics-commands.md §14); schema remains 7
 2.2.0 DONE    v2F2 standalone Settings; CLI, app launcher, tray/Plasmoid entry; single D-Bus-owned window; clarified tray autostart label
-NEXT          v2F3 Dependency Advisor (2.3.x): PLANNED, only on instruction
+2.3.0 CURRENT v2F3 phase initialization; version/docs/roadmap only, no new functionality
+NEXT          2.3.1 Arch Updates via checkupdates
 ```
 
 v2 roadmap summary (requirements.md is authoritative; revised 2026-10-27):
@@ -193,18 +195,11 @@ v2 roadmap summary (requirements.md is authoritative; revised 2026-10-27):
   activate it. Shared INI/backend; closing Settings exits only that process.
   Backend activation/lifetime are unchanged. Autostart label names the Qt
   Tray Plugin; key/value and XDG behavior are unchanged.
-- **v2F3 Dependency Advisor**: 2.3.1 shared detection model
-  (required/optional/missing/available/unsupported; read-only, offline,
-  no root, never installs; one model for installer and CLI, consistent
-  with the package recipes' optdepends), 2.3.2 distro-aware installer
-  recommendations (no automatic installs; keep `--local`, `--dry-run`,
-  `--no-build`), 2.3.3 `checkupdates` preferred on Arch (respect remote
-  refresh, never `pacman -Sy`/sudo/pkexec, zero ≠ missing/network/timeout/
-  failure; open point: 2.0.0 already uses it when remote is on — decide
-  `pacman -Qu` vs `checkupdates --nosync` when remote is off), 2.3.4
-  `aqtruncatctl --missing-deps` (exit 0 even with missing optionals,
-  works without backend/Plasma). `lm_sensors` is not used by 2.0.0: list
-  it only if a feature starts using it.
+- **v2F3 Dependency Advisor & Hardware Monitoring**: current 2.3.0 is
+  initialization only; next 2.3.1 replaces Arch update detection with
+  `checkupdates`; 2.3.2 adds CPU temperature sensors; 2.3.3 adds the
+  Dependency Advisor. Full requirements and constraints are in
+  `requirements.md`; do not implement ahead of the requested checkpoint.
 
 - Build: `cmake -S . -B build && cmake --build build && ctest --test-dir build`.
   Clean build: **0 warnings** (`-Wall -Wextra -Wpedantic` on all targets).
@@ -941,6 +936,14 @@ sample on purpose (hot-plug) — caching not needed.
 ---
 
 ## 9. Tests and validation
+
+2.3.0 (2026-10-27, v2F3 initialization): fresh Release configure/build in
+`/tmp/aqtruncat-v2f3.4aihKc/build` (359 build steps; no warnings); ctest
+**58/58** passed (217.32 s), including installer and packaging-versions;
+explicit package-version script passed and all five executables reported
+2.3.0; `git diff --check` clean. No source/runtime, test, installer or
+dependency behavior changed. Real Plasma validation is not applicable to this
+documentation/version-only checkpoint.
 
 2.2.0 (2026-10-27, v2F2 standalone Settings): fresh Release configure/build
 in `/tmp/aqtruncat-v2f2.vP6xxt/build`; 0 compiler warnings; ctest **58/58**
@@ -1951,7 +1954,7 @@ Last v2F1 sub-feature: **v2F1 complete**.
 ## 14. Important files map
 
 ```text
-requirements.md                v2 roadmap (v2F1 Custom Metrics v3 + Rickroll 2.1.x complete, v2F2 Standalone Settings 2.2.0 complete, v2F3 Dependency Advisor 2.3.x planned), versioning, general principles. Older "requirements §n" references in docs point to the former M0–M9 spec (decisions kept in §5 here)
+requirements.md                v2 roadmap (v2F1 through 2.1.7 complete; recursive discovery 2.1.8; v2F2 Settings 2.2.0 complete; v2F3 checkpoints 2.3.0–2.3.3), versioning, general principles. Older "requirements §n" references in docs point to the former M0–M9 spec (decisions kept in §5 here)
 docs/README.md                 documentation index: architecture overview, topic documents, milestone → document map
 docs/feature-reference.md      normative summaries of F1–F7 (formerly the body of requirements.md)
 THIRD_PARTY_NOTICES.md         runner frame provenance: RunCat Neo (Apache-2.0); Walking Goose / Party Parrot (Tenor GIFs, licence unknown, user's decision)

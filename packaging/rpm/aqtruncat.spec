@@ -1,7 +1,7 @@
 # Build: packaging/make-source-tarball.sh ~/rpmbuild/SOURCES
 #        rpmbuild -ba packaging/rpm/aqtruncat.spec
 Name:           aqtruncat
-Version:        2.2.0
+Version:        2.3.0
 Release:        1%{?dist}
 Summary:        A Cute Run Cat for Linux
 
@@ -69,6 +69,9 @@ export QT_QPA_PLATFORM=offscreen
 %{_docdir}/%{name}/
 
 %changelog
+* Tue Oct 27 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.3.0-1
+- Initialize v2F3 Dependency Advisor & Hardware Monitoring; no functional changes.
+
 * Tue Oct 27 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.2.0-1
 - Standalone Settings via aqtruncat settings, a dedicated application-menu
   entry and tray/Plasmoid activation; D-Bus backend activation is unchanged.

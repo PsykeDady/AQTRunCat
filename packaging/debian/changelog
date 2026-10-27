@@ -1,3 +1,10 @@
+aqtruncat (2.3.0-1) unstable; urgency=medium
+
+  * Initialize v2F3 Dependency Advisor & Hardware Monitoring. Version and
+    roadmap documentation only; no functional changes.
+
+ -- AQTRunCat maintainers <maintainers@aqtruncat.invalid>  Tue, 27 Oct 2026 18:00:00 +0100
+
 aqtruncat (2.2.0-1) unstable; urgency=medium
 
   * Standalone Settings: launch with aqtruncat settings, from the application

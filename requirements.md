@@ -6,8 +6,9 @@ nothing below the 2.0.0 baseline is implemented until its section says so.
 - **2.0.0** is the consolidation baseline: the complete 1.x application
   (M0–M9, then F1–F7) released as one version, without new runtime
   functionality.
-- **v2F1** is complete. v2F2 is Standalone Settings; v2F3 is the planned
-  Dependency Advisor.
+- **v2F1** (Custom Metrics v3) and **v2F2** (Standalone Settings) are
+  complete. **v2F3 — Dependency Advisor & Hardware Monitoring** is initialized
+  at 2.3.0; its next implementation checkpoint is 2.3.1.
 
 The behaviour shipped in 2.0.0 is documented in [README.md](README.md) and in
 the topic documents indexed by [docs/README.md](docs/README.md); the
@@ -15,9 +16,12 @@ normative summaries of the 1.x features are in
 [docs/feature-reference.md](docs/feature-reference.md).
 
     2.0.0  Consolidation baseline (1.x complete)            COMPLETE
-    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       COMPLETE (2.1.8)
+    v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       COMPLETE (2.1.7)
     v2F2   Standalone Settings                   2.2.0       COMPLETE
-    v2F3   Dependency Advisor                    2.3.x       PLANNED
+    v2F3   Dependency Advisor & Hardware Monitoring 2.3.x    CURRENT (2.3.0)
+
+2.1.8 recursive Custom Metrics discovery, allowing complete repositories to
+be cloned inside the metrics directory, was completed after v2F1.
 
 
 ## Versioning
@@ -32,7 +36,8 @@ Plasmoid's `metadata.json` carry the same value (checked by the
   sub-features the patch (last 1.x: 1.7.4).
 - 2.0.0 consolidates 1.7.4.
 - v2F1 used 2.1.x; v2F2 is released directly as 2.2.0; v2F3 uses 2.3.x.
-  New v2 features do not require a new runner.
+  Version 2.3.0 is documentation/version initialization only. New v2 features
+  do not require a new runner.
 - The application version is independent of the D-Bus API version
   (`io.github.psykedady.AQTRunCat1`, api 1), of the API payload `schema`
   and of configuration formats: those change only when their contract
@@ -71,7 +76,7 @@ unchanged.
 |---------|---------|--------|-------------|
 | v2F1 | 2.1.1 | Rickroll | `rickroll` |
 | v2F2 | — | None | — |
-| v2F3 | — | None currently planned | — |
+| v2F3 | — | None | — |
 
 Rickroll is the only runner introduced by v2F1. Its art and provenance
 requirements remain recorded in [docs/built-in-runners.md](docs/built-in-runners.md).
@@ -404,90 +409,95 @@ value unchanged. Plasma continues to manage the widget's lifecycle and
 configuration separately.
 
 
-## v2F3 — Dependency Advisor
+## v2F3 — Dependency Advisor & Hardware Monitoring
 
-Status: PLANNED. Version family **2.3.x**.
+Status: CURRENT CHECKPOINT: **2.3.0 — Phase Initialization**. Version family
+**2.3.x**. The feature checkpoints below are prospective; 2.3.0 adds no
+functionality.
 
-    2.3.0  Feature baseline
-    2.3.1  Dependency detection model
-    2.3.2  Distribution-aware recommendations in the installer
-    2.3.3  `checkupdates` as the preferred Arch Linux update provider
-    2.3.4  `aqtruncatctl --missing-deps`
+    2.3.0  Phase Initialization
+    2.3.1  Arch Updates via checkupdates
+    2.3.2  CPU Temperature Sensors
+    2.3.3  Dependency Advisor
 
-The advisor reports the external tools AQTRunCat's **actual** functionality
-uses, which of them are present, and how to install the missing ones. It
-never installs anything.
+### 2.3.0 — Phase Initialization
 
-### 2.3.1 — Dependency Detection Model
+Status: CURRENT CHECKPOINT.
 
-Detect required, optional, missing, available and unsupported
-dependencies.
+- Initialize version 2.3.0, update roadmap and documentation, establish the
+  v2F3 development baseline, and preserve existing behavior.
+- No functional changes.
 
-Initial candidates (each to be verified against the code at implementation
-time):
+### 2.3.1 — Arch Updates via `checkupdates`
+
+Future checkpoint; replace the existing Arch Linux update-detection
+implementation with `checkupdates`, provided by `pacman-contrib`.
+
+- Inspect the existing update-detection architecture first. Use
+  `checkupdates` as the authoritative source for official repository updates
+  on Arch and compatible derivatives; preserve other distributions and the
+  metric's public semantics/integrations where possible.
+- Do not run `pacman -Sy` or unnecessarily modify primary sync databases;
+  do not require root. Distinguish no updates, missing command, errors and
+  timeouts. Document that AUR updates are out of scope.
+- Handle missing `checkupdates` gracefully until Dependency Advisor exists.
+- Do not implement this checkpoint in 2.3.0.
+
+Note for implementation: the current implementation already has Arch update
+provider/fallback behavior. Inspect it at 2.3.1 and preserve the configured
+remote-refresh policy; do not add silent network access.
+
+### 2.3.2 — CPU Temperature Sensors
+
+Future checkpoint; do not implement in 2.3.0.
+
+- Inspect existing metric collection and hardware-monitoring infrastructure.
+- Detect available CPU temperature sensors, preferring kernel interfaces such
+  as `/sys/class/hwmon` where appropriate.
+- Evaluate `lm_sensors` and `sensors -j` as supporting or fallback mechanisms.
+- Provide a reliably identifiable primary CPU/package temperature in °C and
+  per-core readings where available and architecturally appropriate.
+- Integrate with the existing backend, Dashboard, Metrics Bar and native
+  Plasma Plasmoid while preserving metric transport/configuration conventions.
+- Handle missing sensors, unsupported hardware and unreadable values
+  gracefully; do not invent values or misidentify motherboard/GPU sensors.
+- Never run `sensors-detect` automatically. `lm_sensors` is optional, not a
+  requirement for starting AQTRunCat. Avoid unnecessary polling overhead.
+
+### 2.3.3 — Dependency Advisor
+
+Future checkpoint; do not implement in 2.3.0.
+
+Detect required, optional, missing, available and unsupported dependencies.
+
+Initial dependency candidates (verify each against actual code at
+implementation time):
 
 | Dependency | Enables | Notes |
 |------------|---------|-------|
 | Claude Code CLI | Claude Code integration (F2) | optional |
 | Codex CLI | Codex integration (F3) | optional |
 | MangoHud | FPS metric (F5) | optional |
-| `pacman-contrib` (`checkupdates`) | Arch package updates metric (F5, 2.3.3) | optional, Arch only |
+| `pacman-contrib` (`checkupdates`) | Arch package updates metric (F5, 2.3.1) | optional, Arch only |
 | Flatpak | Flatpak updates metric (F5) | optional |
-| `lm_sensors` | hardware sensors | only if actually used; not used by 2.0.0 |
-| other distribution-specific utilities | — | only when verified against existing code |
+| `lm_sensors` | CPU temperature sensors (2.3.2) | optional where used |
+| other distribution-specific utilities | — | only when verified against actual code |
 
-The package recipes already list optional dependencies (PKGBUILD
-`optdepends`, Debian/RPM `Suggests`/`Recommends`: e.g. `qt6-wayland`,
-`plasma-workspace`, `hwdata`, `flatpak`, `pacman-contrib`, `mangohud`); the
-advisor's list and these recipes must stay consistent.
+Keep the advisor consistent with package-recipe optional dependencies
+(PKGBUILD `optdepends`, Debian/RPM `Suggests` or `Recommends`).
 
 Requirements:
 
 - A dependency is **required** only if the core application cannot work
-  without it; being useful for an optional feature makes it optional.
-- One shared detection model is used by the installer and the CLI: no
-  separate, inconsistent lists or duplicated detection rules.
-- Checks are read-only, work offline, need no root privileges and never
-  install anything.
-- Missing (the tool could be installed) is distinguished from unsupported
-  (the functionality does not apply to this system, e.g. `checkupdates` on
-  a non-Arch distribution).
-- Installation suggestions are distribution-specific when known; packages
-  unrelated to supported features are never recommended.
+  without it; dependencies for optional features remain optional.
+- Use one shared detection model for installer and CLI rather than duplicate,
+  potentially inconsistent rules.
+- Checks are read-only, offline-capable, require no root, and never install.
+- Distinguish missing tools from unsupported features/hardware.
+- Give distribution-specific installation suggestions when known; don't
+  recommend packages unrelated to AQTRunCat functionality.
 
-### 2.3.2 — Installer Recommendations
-
-- During installation, `install.sh` shows the relevant optional
-  dependencies and distribution-aware recommendations, using the shared
-  detection model.
-- It never runs package installation commands automatically.
-- Preserved: system-wide and `--local` installation, the supported
-  distributions, dry-run behaviour, the existing installer options and the
-  cached-build installation (`--no-build`).
-
-### 2.3.3 — Arch Linux Updates via `checkupdates`
-
-`checkupdates` (from `pacman-contrib`) is the preferred Arch Linux package
-update provider.
-
-- The existing remote-refresh setting is respected: no network access is
-  introduced silently when remote refresh is disabled.
-- Never run `pacman -Sy` on the live package database; never require
-  `sudo` or `pkexec` for update checks.
-- Zero available updates is distinguished from a missing dependency, a
-  network error, a timeout and an execution failure.
-- The existing package update metric semantics stay compatible.
-- Execution is bounded, and checks never overlap.
-
-Note for the implementation: 2.0.0 already runs `checkupdates` when remote
-refresh is enabled and it is installed, and `pacman -Qu` on the local
-databases otherwise (`src/metrics/packageupdates.cpp`). Because
-`checkupdates` normally syncs a temporary database copy (network access),
-2.3.3 must decide, without breaking the rule above, what "preferred" means
-with remote refresh disabled (keep `pacman -Qu`, or `checkupdates
---nosync` if it reads only already-synced data).
-
-### 2.3.4 — `aqtruncatctl --missing-deps`
+Dependency Advisor requirements:
 
 ```bash
 aqtruncatctl --missing-deps
@@ -504,6 +514,18 @@ aqtruncatctl --missing-deps
   missing; nonzero only for genuine command failures.
 - CLI documentation (help, man page, docs) and automated tests are part of
   the implementation.
+- Inspect actual runtime/optional dependencies; explain the AQTRunCat feature
+  each enables and provide distribution-aware suggestions.
+- Include `checkupdates`/`pacman-contrib` and `lm_sensors` where applicable.
+- Support declarative dependencies in Custom Metrics JSON and recursive
+  discovery, without executing or arbitrarily parsing metric scripts.
+- Distinguish missing dependencies from unsupported hardware and other
+  execution failures. Never auto-install or request administrator privileges.
+- Integrate in standalone Settings where appropriate; reuse existing
+  architecture instead of adding an unnecessary background service.
+- Do not add mandatory `pacman-contrib` or `lm_sensors` dependencies during
+  the 2.3.0 initialization.
+- Do not implement this checkpoint in 2.3.0.
 
 
 ## General Principles

@@ -12,6 +12,9 @@ affiliated with RunCat Neo. It uses the
 standard StatusNotifierItem tray, so it needs no desktop-specific components;
 the primary target is KDE Plasma 6 on Wayland.
 
+**Version 2.3.0** initializes the v2F3 roadmap; it contains no functional
+changes from 2.2.0.
+
 ![Runner and Metrics Bar in the Plasma tray](docs/metrics-bar/metrics-bar-basic.png)
 
 ![Settings and Dashboard](docs/desktop-compatibility/windows-100.png)
