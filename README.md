@@ -313,6 +313,12 @@ Metrics may also be organised in nested collection directories, for example
 package; its subdirectories become child metrics only when it explicitly uses
 `"source": {"type": "group"}`.
 
+Ready-to-run examples, including dice metrics and intentionally broken cases
+for testing warnings and errors, are available in the separate
+[AQTRunCat Custom Metrics](https://github.com/PsykeDady/AQTRunCat_CustomMetrics)
+repository. Its README explains how to install the collection under
+`metrics/ExampleMetrics` without replacing the built-in integrations.
+
 Files are watched: updates (including atomic replace) appear immediately,
 and a broken or missing file only affects its own card. To re-read the whole
 configuration on demand — for example after copying a new group package or

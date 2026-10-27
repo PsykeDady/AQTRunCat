@@ -123,6 +123,9 @@
   CMAKE_PROJECT_VERSION) with the sources and asks "Install the previous
   version X (y) or build the new version Y (N)? [y/N]" (N default, also
   without a terminal).
+- The local source checkout is `~/Codici/bash/AQTRunCat`, matching the GitHub
+  project name. It was previously named `AQTCatRun`; that old local name is
+  obsolete and must not be used in commands, examples or maintenance notes.
 - Goal: bring the RunCat Neo (macOS) experience to Linux — an animated tray
   runner whose speed follows CPU load, plus system metrics, dashboard, custom
   metrics, metrics bar — as a *proper Linux/Qt application*, not a mechanical
@@ -254,6 +257,16 @@ v2 roadmap summary (requirements.md is authoritative; added 2026-10-23):
   the same Snapshot/Source model for Dashboard and Metrics Bar (§13 and
   `docs/custom-metrics-commands.md`). F2 adds `source.output: "snapshot"`
   (multi-value command output) and exit 69 → Unavailable.
+- Companion examples live in the separate
+  [AQTRunCat_CustomMetrics](https://github.com/PsykeDady/AQTRunCat_CustomMetrics)
+  repository; they are not bundled metrics or test fixtures owned by this
+  source tree. With AQTRunCat 2.1.8+, clone it below
+  `~/.local/share/AQTRunCat/metrics/ExampleMetrics`: `ExampleMetrics` is a
+  plain organisational container, while only configurations declaring
+  `source.type: "group"` (currently `dice-metrics`) have group semantics.
+  The repository intentionally includes valid examples and broken icon,
+  executable and range cases for exercising warnings and errors. Its own
+  README is authoritative for installation and its current contents.
 - Claude Code integration (F2, revised 2026-10-20): separate QtCore
   executable `aqtruncat-claude-metric` (lib `aqtruncat_claude`, not linked by
   the core) run as a normal F1 command; primary values = plan usage quotas
@@ -695,7 +708,7 @@ Key components:
 | Installer options summary (2026-10-20) | every run (also `--dry-run`) starts with "AQTRunCat installer" and `  key               = value (origin)` lines: action, installation type, rebuild, autostart, dry run, binary, data, manifest, privileges, stop timeout, distribution, running; replaced the old `Action:`/`Autostart:` dry-run plan | user request: see the options in effect at start |
 | Installer build (2026-10-20) | default = from scratch every time in persistent `${XDG_CACHE_HOME:-~/.cache}/aqtruncat/install-build` (marker `.aqtruncat-install-build`; root → root's cache); `--no-build` reuses it only if same source tree + Release + `ninja -n` "no work to do" (`make -q` otherwise), else error, nothing installed; `--build-dir` now builds all targets | user: default must stay a full build; full Release build ≈ 97 s on the dev machine (8 jobs on 4 cores + clamd), `--no-build` ≈ 0.2 s |
 | Installer running instance (F2) | before copy/removal: SIGTERM to the real user's processes whose `/proc/PID/exe` is exactly `BINDIR/aqtruncat` (or "(deleted)"); comm only as prefilter; wait ≤10 s (`AQTRUNCAT_STOP_TIMEOUT` for tests), start time vs PID reuse, zombie = exited; timeout → error, nothing changed, no SIGKILL; preflight (build/stage/manifest/`sudo -v`) first; no restart; other users only reported | user requirement 2026-10-20 |
-| Custom Metrics XDG | recursively traverse directories without `metric.json`; a directory with `metric.json` is a package boundary; only `source.type=group` expands its children; explicit paths persist in INI | collections can be nested without becoming groups, while package-relative executable/icon paths and group semantics remain deterministic |
+| Custom Metrics XDG | recursively traverse directories without `metric.json`; a directory with `metric.json` is a package boundary; only `source.type=group` expands its children; explicit paths persist in INI. Companion example: [`PsykeDady/AQTRunCat_CustomMetrics`](https://github.com/PsykeDady/AQTRunCat_CustomMetrics), installed as `metrics/ExampleMetrics` on 2.1.8+ | collections can be nested without becoming groups, while package-relative executable/icon paths and group semantics remain deterministic |
 | Custom symbols (F1) | legacy string or `{type: theme|file, value}`; file/executable relative paths and command CWD resolve from config directory; invalid icon uses fallback without invalidating metric | deterministic self-contained packages, never process CWD |
 | Custom identity/order | canonical path when resolvable; explicit order first, discovered-only by stable name/path | no duplicate aliases or filesystem-order dependence |
 | Custom failure/retry | last-known-good retained; 100 ms debounce, 3×200 ms retry, shared degraded-only 5 s recovery | atomic saves do not flash errors; no healthy-state polling |
@@ -933,7 +946,9 @@ in a fresh directory, 0 warnings; ctest **57/57**; `packaging-versions`
 `metricgroups` and `custommetricsreload` for nested organisational
 containers, watched empty containers, package boundaries, groups below a
 container and unreadable containers. Isolated runtime (private bus and XDG
-profile) with the `AQTRunCat_CustomMetrics` repository copied below
+profile) with the
+[`AQTRunCat_CustomMetrics`](https://github.com/PsykeDady/AQTRunCat_CustomMetrics)
+repository copied below
 `metrics/ExampleMetrics`: 8 sources discovered; `ExampleMetrics` produced no
 source/group, `dice-metrics` remained one group with D6/D20/D100, D10 ran,
 and the intentionally wrong icon, executable and range produced their
@@ -1936,6 +1951,7 @@ docs/dashboard.md           Dashboard/shared sampler architecture, UI/runtime/pe
 docs/settings-and-desktop-integration.md    typed settings, preview, speed/network policy, XDG autostart, validation
 docs/custom-metrics.md      historical M6 snapshot schema, registry/watch/retry, Dashboard/Settings, validation
 docs/custom-metrics-commands.md   F1 command schema/output/security, scheduler/lifecycle, packages/icons, validation
+external: PsykeDady/AQTRunCat_CustomMetrics   companion repository of installable example metrics and intentional warning/error cases; its README owns installation/current contents; validated under metrics/ExampleMetrics with 2.1.8
 docs/integration-claude-code.md  F2: Part A revision 2026-10-20 (quota sources, semantics, live updates, Integrations, installer stop, tests, validation); Part B first implementation (context window)
 docs/metrics-bar.md         Plasma SNI spike, model/renderer/presenter, formatting, statuses, settings, ordering, cost
 docs/desktop-compatibility.md  distro/desktop matrix, suspend, tray restart, fixes, perf, soak

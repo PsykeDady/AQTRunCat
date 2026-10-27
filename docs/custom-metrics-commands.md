@@ -139,6 +139,12 @@ sia raccolte che non introducono implicitamente un gruppo:
     └── d20/metric.json
 ```
 
+Questa struttura è usata dal repository companion
+[`PsykeDady/AQTRunCat_CustomMetrics`](https://github.com/PsykeDady/AQTRunCat_CustomMetrics),
+che raccoglie esempi installabili e casi intenzionalmente errati. Il repository
+è separato da AQTRunCat e il suo README descrive contenuti e installazione
+aggiornati.
+
 I simboli `theme` usano `QIcon::fromTheme`; i simboli `file` usano i formati
 leggibili dai plugin immagine Qt installati (incluso SVG sull'ambiente
 supportato). File assente, illeggibile, non supportato o invalido produce

@@ -473,7 +473,7 @@ Una sola card “Claude Code”:
 |---|---|---|
 | Context window | `21.7% of 1M (217.4k tokens)` + barra | **occupazione della finestra di contesto** della sessione selezionata dopo la sua ultima risposta: `input_tokens + cache_creation_input_tokens + cache_read_input_tokens` dell'ultima risposta della conversazione principale, diviso la finestra (200 000, o 1 000 000 se il modello richiesto termina con `[1m]`). Stessa formula di `context_window.used_percentage`. Non conta `output_tokens`. |
 | Model | `claude-opus-5-5 · 1M context` | modello che ha prodotto l'ultima risposta; “· 1M context” quando la finestra è quella estesa |
-| Session | `AQTCatRun · busy` | nome della directory di lavoro della sessione (non il percorso completo) e stato riportato da Claude Code (`busy`/`idle`) |
+| Session | `AQTRunCat · busy` | nome della directory di lavoro della sessione (non il percorso completo) e stato riportato da Claude Code (`busy`/`idle`) |
 | Running sessions | `2 (showing the most recently active)` | numero di sessioni Claude Code in esecuzione (dopo l'eventuale filtro `--cwd`) |
 
 `metricsBarValue` è la percentuale arrotondata (`22%`; `<1%` sotto l'1%).
