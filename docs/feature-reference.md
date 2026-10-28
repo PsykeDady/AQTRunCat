@@ -818,13 +818,16 @@ causing a metric or application failure.
   not-configured, disabled, unsupported. Never inferred from GPU/CPU load or
   refresh rate; no injection, no overlay requirement. Shared setting
   `fpsSource` (`mangohud` default, `off`).
-- **Package updates**: manager detected from what is installed (pacman,
-  apt, dnf; os-release only breaks ties). Read-only commands with local
-  metadata by default (`pacman -Qu`, `apt-get -s … dist-upgrade`,
-  `dnf -C check-update`); opt-in remote refresh (`updatesRemoteRefresh`:
-  `checkupdates` for pacman, `dnf --refresh`; apt impossible without root),
-  at most hourly. Count, manager, last successful check, metadata age
-  (stale after 7 days), errors as errors.
+- **Package updates**: manager detected from what is installed (Arch-family
+  pacman, apt, dnf; os-release only breaks ties). Since 2.3.1, Pacman uses
+  `checkupdates` only: `--nosync` by default and sync of its private database
+  only when `updatesRemoteRefresh` is enabled. `pacman-contrib` is required;
+  if missing, the metric is Unavailable, with no `pacman -Qu` fallback. It
+  counts official repository updates, not AUR. Apt uses `apt-get -s …
+  dist-upgrade`; DNF uses `dnf -C check-update` or opt-in `--refresh` (apt
+  cannot refresh without root). Remote checks are at most hourly. Count,
+  manager, last successful check, metadata age (stale after 7 days), errors
+  as errors.
 - **Flatpak updates**: `flatpak remote-ls --updates --cached` per
   installation (user, system, `installations.d`), apps and runtimes; count =
   distinct refs per installation, summed; any failing installation makes

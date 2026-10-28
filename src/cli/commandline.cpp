@@ -74,8 +74,8 @@ const QString RemoveHelp = QStringLiteral(
 const QString MetricsHelp = QStringLiteral(
     "Usage: aqtruncat metrics [--watch]\n"
     "\n"
-    "Show CPU, memory, swap, network, storage and disk activity, read directly\n"
-    "from /proc, /sys and statvfs. Rates need two samples, so the report comes\n"
+    "Show CPU usage and temperature, memory, swap, network, storage and disk\n"
+    "activity, read directly from /proc, /sys and statvfs. Rates need two samples, so the report comes\n"
     "after about one second. Network counts physical interfaces only (no\n"
     "loopback, VPN, bridges or containers); disk activity counts whole physical\n"
     "disks only (no partitions, device-mapper, loop or zram).\n"

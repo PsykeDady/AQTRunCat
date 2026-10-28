@@ -12,8 +12,9 @@ affiliated with RunCat Neo. It uses the
 standard StatusNotifierItem tray, so it needs no desktop-specific components;
 the primary target is KDE Plasma 6 on Wayland.
 
-**Version 2.3.0** initializes the v2F3 roadmap; it contains no functional
-changes from 2.2.0.
+**Version 2.3.2** adds native CPU temperature monitoring from identified Linux
+hardware sensors. Arch package update checks use `checkupdates` from
+`pacman-contrib` and cover official repositories, not AUR.
 
 ![Runner and Metrics Bar in the Plasma tray](docs/metrics-bar/metrics-bar-basic.png)
 
@@ -27,7 +28,7 @@ changes from 2.2.0.
 - **Runners**: Cat (default), Coffee, Walking Goose, Party Parrot, Engine and
   Rickroll are built in; import any
   [RunCat Runner Gallery](https://github.com/runcat-dev/RunnerGallery) ZIP.
-- **Dashboard**: CPU, memory, swap, network, Root/Home storage and disk
+- **Dashboard**: CPU usage and temperature, memory, swap, network, Root/Home storage and disk
   activity, read directly from `/proc`, `/sys` and `statvfs`; uptime, every
   GPU (utilization, memory, temperature where the driver reports them), game
   FPS from MangoHud's log, available package and Flatpak updates, kernel and
@@ -510,13 +511,19 @@ Besides CPU, memory, network and storage, AQTRunCat shows:
   `~/.config/MangoHud/MangoHud.conf` and start logging (`Shift_L+F2` or
   `autostart_log`). AQTRunCat never injects anything into games; without a
   MangoHud log it says why there is no FPS.
-- **Package updates** (pacman, apt or dnf, whichever is installed) and
+- **Package updates** (`checkupdates` on Arch and compatible derivatives;
+  apt or dnf elsewhere) and
   **Flatpak updates**: counts from read-only checks, once an hour by default
   (Settings or `aqtruncatctl settings set updatesIntervalMinutes …`, `0` =
   off). By default only the metadata your system has already downloaded is
-  used, so there is no network access; *Download fresh package metadata* is
-  opt-in (pacman needs `checkupdates` from pacman-contrib; apt cannot do it
-  without root). Nothing is ever installed and root is never asked for.
+  used, so there is no network access; on Arch this is `checkupdates
+  --nosync` against its private cached database. *Download fresh package
+  metadata* is opt-in and syncs only that private database; if its cache has
+  not been initialized yet, the check reports an error until a refresh is
+  allowed. Arch requires
+  `pacman-contrib`; if missing the metric is unavailable (install with
+  `sudo pacman -S pacman-contrib`). AUR updates are not included. Apt cannot
+  refresh without root. Nothing is ever installed and root is never asked for.
 - **Kernel** and **distribution** (from `uname` and `/etc/os-release`, read
   as data).
 

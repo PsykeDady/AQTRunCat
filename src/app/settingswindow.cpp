@@ -144,6 +144,18 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
     m_fpsSource->addItem(tr("MangoHud log"), QStringLiteral("mangohud"));
     m_fpsSource->addItem(tr("Off"), QStringLiteral("off"));
     builtInForm->addRow(tr("FPS source:"), m_fpsSource);
+    m_showCpuTemperature = new QCheckBox(tr("Show CPU temperature"), builtInBox);
+    m_showCpuTemperature->setObjectName(QStringLiteral("showCpuTemperature"));
+    builtInForm->addRow(m_showCpuTemperature);
+    m_showGpuMemory = new QCheckBox(tr("Show GPU memory"), builtInBox);
+    m_showGpuMemory->setObjectName(QStringLiteral("showGpuMemory"));
+    builtInForm->addRow(m_showGpuMemory);
+    m_showGpuTemperature = new QCheckBox(tr("Show GPU temperature"), builtInBox);
+    m_showGpuTemperature->setObjectName(QStringLiteral("showGpuTemperature"));
+    builtInForm->addRow(m_showGpuTemperature);
+    m_showFps = new QCheckBox(tr("Show FPS"), builtInBox);
+    m_showFps->setObjectName(QStringLiteral("showFps"));
+    builtInForm->addRow(m_showFps);
     auto *fpsNote = new QLabel(tr("FPS is read from the CSV log MangoHud writes while it logs a game "
                                   "(output_folder and log_interval in MangoHud.conf). AQTRunCat never "
                                   "injects anything into games."), builtInBox);
@@ -162,9 +174,11 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
     builtInForm->addRow(tr("Check for updates:"), m_updatesInterval);
     m_updatesRemote = new QCheckBox(tr("Download fresh package metadata (uses the network)"), builtInBox);
     m_updatesRemote->setObjectName(QStringLiteral("updatesRemote"));
-    m_updatesRemote->setToolTip(tr("Off: only the metadata your system already downloaded is read. On: pacman uses "
-                                   "checkupdates (pacman-contrib), dnf refreshes its own cache and Flatpak downloads "
+    m_updatesRemote->setToolTip(tr("Off: only cached metadata is read; on Arch, checkupdates uses its private "
+                                   "database without syncing. On: checkupdates syncs only that private database, "
+                                   "dnf refreshes its own cache and Flatpak downloads "
                                    "remote summaries, at most once an hour. apt cannot refresh without root. "
+                                   "Arch requires checkupdates from pacman-contrib; AUR updates are not included. "
                                    "Nothing is ever installed."));
     builtInForm->addRow(m_updatesRemote);
     root->addWidget(builtInBox);
@@ -404,6 +418,10 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
         if (!m_rebuilding && index >= 0)
             m_settings->setFpsSource(m_fpsSource->itemData(index).toString());
     });
+    connect(m_showCpuTemperature, &QCheckBox::toggled, m_settings, &aqtruncat::AppSettings::setShowCpuTemperature);
+    connect(m_showGpuMemory, &QCheckBox::toggled, m_settings, &aqtruncat::AppSettings::setShowGpuMemory);
+    connect(m_showGpuTemperature, &QCheckBox::toggled, m_settings, &aqtruncat::AppSettings::setShowGpuTemperature);
+    connect(m_showFps, &QCheckBox::toggled, m_settings, &aqtruncat::AppSettings::setShowFps);
     connect(m_updatesInterval, &QComboBox::currentIndexChanged, this, [this](int index) {
         if (!m_rebuilding && index >= 0)
             m_settings->setUpdatesIntervalMinutes(m_updatesInterval->itemData(index).toInt());
@@ -413,6 +431,7 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
             m_settings->setUpdatesRemoteRefresh(checked);
     });
     connect(m_settings, &aqtruncat::AppSettings::systemMetricsSettingsChanged, this, [this] { syncFromSettings(); });
+    connect(m_settings, &aqtruncat::AppSettings::displaySettingsChanged, this, [this] { syncFromSettings(); });
     connect(addCustomMetric, &QPushButton::clicked, this, [this] {
         if (!m_customMetrics)
             return;
@@ -772,6 +791,10 @@ void SettingsWindow::syncFromSettings()
     m_refresh->setCurrentIndex(refresh >= 0 ? refresh : 0);
     m_autostart->setChecked(m_settings->autostartEnabled());
     m_fpsSource->setCurrentIndex(std::max(0, m_fpsSource->findData(m_settings->fpsSource())));
+    m_showCpuTemperature->setChecked(m_settings->showCpuTemperature());
+    m_showGpuMemory->setChecked(m_settings->showGpuMemory());
+    m_showGpuTemperature->setChecked(m_settings->showGpuTemperature());
+    m_showFps->setChecked(m_settings->showFps());
     const int interval = m_updatesInterval->findData(m_settings->updatesIntervalMinutes());
     m_updatesInterval->setCurrentIndex(interval >= 0 ? interval : 0);
     m_updatesRemote->setChecked(m_settings->updatesRemoteRefresh());

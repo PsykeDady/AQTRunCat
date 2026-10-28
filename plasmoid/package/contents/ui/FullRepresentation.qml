@@ -41,12 +41,13 @@ PlasmaExtras.Representation {
     function sync() {
         const presented = Logic.settleRefreshes(client.metrics, settled);
         settled = presented.settled;
-        Logic.syncModel(metricModel, Logic.metricRows(presented.metrics, shown));
+        Logic.syncModel(metricModel, Logic.metricRows(presented.metrics, shown, client.settings));
     }
     onShownChanged: sync()
     Connections {
         target: full.client
         function onMetricsChanged() { full.sync(); }
+        function onSettingsChanged() { full.sync(); }
     }
     Component.onCompleted: sync()
 

@@ -40,6 +40,10 @@ public:
     QString fpsSource() const { return m_fpsSource; }
     int updatesIntervalMinutes() const { return m_updatesIntervalMinutes; }
     bool updatesRemoteRefresh() const { return m_updatesRemoteRefresh; }
+    bool showCpuTemperature() const { return m_showCpuTemperature; }
+    bool showGpuMemory() const { return m_showGpuMemory; }
+    bool showGpuTemperature() const { return m_showGpuTemperature; }
+    bool showFps() const { return m_showFps; }
     static bool isValidGpuDevice(const QString &id);
     static bool isValidFpsSource(const QString &source);
     static bool isValidUpdatesInterval(int minutes);
@@ -64,6 +68,10 @@ public slots:
     void setFpsSource(const QString &source);
     void setUpdatesIntervalMinutes(int minutes);
     void setUpdatesRemoteRefresh(bool remote);
+    void setShowCpuTemperature(bool show);
+    void setShowGpuMemory(bool show);
+    void setShowGpuTemperature(bool show);
+    void setShowFps(bool show);
     void restoreDefaults();
     // Re-reads the file (written by another process: the backend, a
     // frontend, "aqtruncat autostart") and emits the signals of the values
@@ -78,7 +86,8 @@ signals:
     void autostartEnabledChanged(bool enabled);
     void customMetricFilesChanged(const QStringList &files);
     void metricsBarChanged();
-    void systemMetricsSettingsChanged(); // any of the F5 settings
+    void systemMetricsSettingsChanged(); // settings that change backend metric collection
+    void displaySettingsChanged(); // global presentation visibility preferences
 
 private:
     void load();
@@ -102,6 +111,10 @@ private:
     QString m_fpsSource = QStringLiteral("mangohud");
     int m_updatesIntervalMinutes = 60;
     bool m_updatesRemoteRefresh = false;
+    bool m_showCpuTemperature = true;
+    bool m_showGpuMemory = true;
+    bool m_showGpuTemperature = true;
+    bool m_showFps = true;
 };
 
 } // namespace aqtruncat

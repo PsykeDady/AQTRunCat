@@ -32,7 +32,7 @@ foreach(name memory network storage diskio metricsformat compactformat)
 endforeach()
 # F5 built-in metrics: uptime, kernel/distribution, GPU (fake sysfs, fake
 # NVML), FPS (fake MangoHud logs) and update-check parsing.
-foreach(name uptime systeminfo gpu fps packageupdates)
+foreach(name uptime systeminfo gpu fps packageupdates cputemperature)
     qt_add_executable(tst_${name} tst_${name}.cpp)
     target_link_libraries(tst_${name} PRIVATE aqtruncat_metrics Qt6::Test)
     target_compile_options(tst_${name} PRIVATE -Wall -Wextra -Wpedantic)

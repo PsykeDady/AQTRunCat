@@ -56,6 +56,7 @@ struct Fixture {
         rootFile(QStringLiteral("etc/os-release"), "ID=arch\n");
         rootDir(QStringLiteral("var/lib/pacman/local"));
         rootFile(QStringLiteral("var/lib/pacman/sync/core.db"), "db");
+        tool(QStringLiteral("pacman"), "exit 0\n");
     }
 
     void setAge(const QString &relative, qint64 seconds)
@@ -73,6 +74,7 @@ struct Fixture {
         o.searchPath = {bin()};
         o.root = root();
         o.home = tmp.filePath(QStringLiteral("home"));
+        o.checkupdatesDatabase = tmp.filePath(QStringLiteral("checkupdates-db"));
         o.firstCheckDelayMs = 0;
         o.policyChangeDelayMs = 0;
         o.changeDebounceMs = 50;
@@ -110,9 +112,13 @@ private slots:
     {
         Fixture f;
         f.arch();
-        f.setAge(QStringLiteral("var/lib/pacman/sync/core.db"), 10 * 24 * 3600);
-        f.tool(QStringLiteral("pacman"), "echo 'linux 6.17.1-1 -> 6.17.2-1'\necho 'mesa 1:25.2.4-1 -> 1:25.2.5-1'\n");
-        f.tool(QStringLiteral("checkupdates"), "exit 1\n"); // present, but not used without remote refresh
+        const QString privateDb = f.options().checkupdatesDatabase + QStringLiteral("/sync/core.db");
+        f.file(privateDb, "db");
+        struct timeval oldTime[2];
+        oldTime[0].tv_sec = oldTime[1].tv_sec = time_t(QDateTime::currentSecsSinceEpoch() - 10 * 24 * 3600);
+        oldTime[0].tv_usec = oldTime[1].tv_usec = 0;
+        ::utimes(privateDb.toLocal8Bit().constData(), oldTime);
+        f.tool(QStringLiteral("checkupdates"), "echo 'linux 6.17.1-1 -> 6.17.2-1'\necho 'mesa 1:25.2.4-1 -> 1:25.2.5-1'\n");
         UpdatesService service(f.options());
         service.start();
         QTRY_VERIFY_WITH_TIMEOUT(settled(service.packages()), 10000);
@@ -124,14 +130,13 @@ private slots:
         QVERIFY(!p.remote);
         QVERIFY(p.metadataTime);
         QVERIFY(p.metadataStale); // the sync database is ten days old
-        QCOMPARE(f.calls(), QStringList{QStringLiteral("pacman -Qu LC_ALL=C")});
+        QCOMPARE(f.calls(), QStringList{QStringLiteral("checkupdates --nosync --nocolor LC_ALL=C")});
     }
 
     void remoteRefreshIsOptIn()
     {
         Fixture f;
         f.arch();
-        f.tool(QStringLiteral("pacman"), "exit 1\n");
         f.tool(QStringLiteral("checkupdates"), "echo 'a 1-1 -> 2-1'\n");
         UpdatesService service(f.options());
         service.setPolicy(60, true);
@@ -140,20 +145,65 @@ private slots:
         QCOMPARE(*service.packages().count, 1);
         QVERIFY(service.packages().remote);
         QVERIFY(!service.packages().metadataStale);
-        QCOMPARE(f.calls(), QStringList{QStringLiteral("checkupdates  LC_ALL=C")});
+        QCOMPARE(f.calls(), QStringList{QStringLiteral("checkupdates --nocolor LC_ALL=C")});
+    }
+
+    void exitTwoAndStderrWarningAreZeroUpdates()
+    {
+        Fixture f;
+        f.arch();
+        f.tool(QStringLiteral("checkupdates"), "echo 'cached metadata warning' >&2\nexit 2\n");
+        UpdatesService service(f.options());
+        service.start();
+        QTRY_VERIFY_WITH_TIMEOUT(settled(service.packages()), 10000);
+        QVERIFY(service.packages().status.ok());
+        QCOMPARE(*service.packages().count, 0);
+        QCOMPARE(f.calls().size(), 1);
+    }
+
+    void archDerivativeUsesCheckupdatesAndDebianDoesNot()
+    {
+        {
+            Fixture f;
+            f.arch();
+            f.rootFile(QStringLiteral("etc/os-release"), "ID=garuda\nID_LIKE=arch\n");
+            f.tool(QStringLiteral("checkupdates"), "echo 'a 1-1 -> 2-1'\n");
+            UpdatesService service(f.options());
+            service.start();
+            QTRY_VERIFY_WITH_TIMEOUT(settled(service.packages()), 10000);
+            QCOMPARE(service.packages().manager, std::string("pacman"));
+            QCOMPARE(*service.packages().count, 1);
+            QCOMPARE(f.calls(), QStringList{QStringLiteral("checkupdates --nosync --nocolor LC_ALL=C")});
+        }
+        {
+            Fixture f;
+            f.rootFile(QStringLiteral("etc/os-release"), "ID=debian\nID_LIKE=debian\n");
+            f.rootFile(QStringLiteral("var/lib/dpkg/status"));
+            f.rootDir(QStringLiteral("var/lib/pacman/local"));
+            f.tool(QStringLiteral("pacman"), "echo forbidden >> '" + f.log().toUtf8() + "'\n");
+            f.tool(QStringLiteral("checkupdates"), "echo forbidden >> '" + f.log().toUtf8() + "'\n");
+            f.tool(QStringLiteral("apt-get"), "echo 'Inst bash [1] (2 Debian [amd64])'\n");
+            UpdatesService service(f.options());
+            service.start();
+            QTRY_VERIFY_WITH_TIMEOUT(settled(service.packages()), 10000);
+            QCOMPARE(service.packages().manager, std::string("apt"));
+            QCOMPARE(*service.packages().count, 1);
+            QCOMPARE(f.calls(), QStringList{QStringLiteral("apt-get -s -q -o Debug::NoLocking=true dist-upgrade LC_ALL=C")});
+        }
     }
 
     void remoteWithoutCheckupdatesSaysSo()
     {
         Fixture f;
         f.arch();
-        f.tool(QStringLiteral("pacman"), "exit 1\n");
         UpdatesService service(f.options());
         service.setPolicy(60, true);
         service.start();
-        QTRY_VERIFY_WITH_TIMEOUT(settled(service.packages()), 10000);
-        QCOMPARE(*service.packages().count, 0);
-        QVERIFY(QString::fromStdString(service.packages().note).contains(QLatin1String("pacman-contrib")));
+        QTRY_COMPARE_WITH_TIMEOUT(service.packages().status.state, MetricState::Unavailable, 10000);
+        QVERIFY(!service.packages().count);
+        QVERIFY(QString::fromStdString(service.packages().status.message).contains(QLatin1String("checkupdates")));
+        QVERIFY(QString::fromStdString(service.packages().status.message).contains(QLatin1String("pacman-contrib")));
+        QVERIFY(f.calls().isEmpty()); // never falls back to pacman -Qu
     }
 
     void aptAndDnfByCapability()
@@ -200,7 +250,7 @@ private slots:
     {
         Fixture f;
         f.arch();
-        f.tool(QStringLiteral("pacman"), "echo 'error: could not open database' >&2\nexit 1\n");
+        f.tool(QStringLiteral("checkupdates"), "echo 'error: could not open database' >&2\nexit 1\n");
         UpdatesService service(f.options());
         service.start();
         QTRY_COMPARE_WITH_TIMEOUT(service.packages().status.state, MetricState::Error, 10000);
@@ -213,7 +263,7 @@ private slots:
         Fixture f;
         f.arch();
         const QString pidFile = f.tmp.filePath(QStringLiteral("child.pid"));
-        f.tool(QStringLiteral("pacman"), "sleep 30 &\necho $! > '" + pidFile.toUtf8() + "'\nwait\n");
+        f.tool(QStringLiteral("checkupdates"), "sleep 30 &\necho $! > '" + pidFile.toUtf8() + "'\nwait\n");
         UpdatesService::Options options = f.options();
         options.timeoutMs = 500;
         UpdatesService service(options);
@@ -233,7 +283,7 @@ private slots:
         Fixture f;
         f.arch();
         const QString lock = f.tmp.filePath(QStringLiteral("running"));
-        f.tool(QStringLiteral("pacman"), "mkdir '" + lock.toUtf8() + "' || echo OVERLAP >> '" + f.log().toUtf8()
+        f.tool(QStringLiteral("checkupdates"), "mkdir '" + lock.toUtf8() + "' || echo OVERLAP >> '" + f.log().toUtf8()
                                              + "'\nsleep 0.4\nrmdir '" + lock.toUtf8() + "'\nexit 1\n");
         UpdatesService service(f.options());
         service.start();
@@ -252,7 +302,7 @@ private slots:
     {
         Fixture f;
         f.arch();
-        f.tool(QStringLiteral("pacman"), "exit 1\n");
+        f.tool(QStringLiteral("checkupdates"), "exit 2\n");
         f.tool(QStringLiteral("flatpak"), "exit 0\n");
         UpdatesService service(f.options());
         service.setPolicy(0, false);
@@ -268,7 +318,7 @@ private slots:
     {
         Fixture f;
         f.arch();
-        f.tool(QStringLiteral("pacman"), "exit 1\n");
+        f.tool(QStringLiteral("checkupdates"), "exit 2\n");
         UpdatesService service(f.options());
         service.start();
         QTRY_VERIFY_WITH_TIMEOUT(settled(service.packages()), 10000);
@@ -285,7 +335,7 @@ private slots:
     {
         Fixture f;
         f.arch();
-        f.tool(QStringLiteral("pacman"), "exit 1\n");
+        f.tool(QStringLiteral("checkupdates"), "exit 2\n");
         UpdatesService service(f.options());
         service.start();
         QTRY_COMPARE_WITH_TIMEOUT(service.flatpak().status.state, MetricState::Unavailable, 10000);
@@ -351,7 +401,7 @@ private slots:
         Fixture f;
         f.arch();
         const QString pidFile = f.tmp.filePath(QStringLiteral("tool.pid"));
-        f.tool(QStringLiteral("pacman"), "echo $$ > '" + pidFile.toUtf8() + "'\nsleep 30\n");
+        f.tool(QStringLiteral("checkupdates"), "echo $$ > '" + pidFile.toUtf8() + "'\nsleep 30\n");
         {
             UpdatesService service(f.options());
             service.start();

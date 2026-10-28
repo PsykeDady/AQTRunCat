@@ -34,14 +34,16 @@ add_library(aqtruncat_runner STATIC
 target_link_libraries(aqtruncat_runner PUBLIC aqtruncat_core Qt6::Gui PRIVATE LibArchive::LibArchive)
 target_compile_options(aqtruncat_runner PRIVATE -Wall -Wextra -Wpedantic)
 
-# Linux system metrics (CPU, memory, network, storage, disk I/O; F5: uptime,
-# GPU, FPS from MangoHud logs, kernel/distribution, update-check parsing)
+# Linux system metrics (CPU usage/temperature, memory, network, storage, disk
+# I/O; F5: uptime, GPU, FPS from MangoHud logs, kernel/distribution, updates)
 # from /proc, /sys, statvfs and release files. Plain C++, no Qt; reuses core/cpustat for CPU usage.
 # Shared by every consumer (CLI, Dashboard and Metrics Bar).
 add_library(aqtruncat_metrics STATIC
     metrics/compactformat.cpp
     metrics/compactformat.h
     metrics/counterrates.h
+    metrics/cputemperature.cpp
+    metrics/cputemperature.h
     metrics/diskio.cpp
     metrics/diskio.h
     metrics/fps.cpp

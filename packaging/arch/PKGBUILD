@@ -6,7 +6,7 @@
 # the release tarball and replace SKIP with its checksum.
 
 pkgname=aqtruncat
-pkgver=2.3.0
+pkgver=2.3.2
 pkgrel=1
 pkgdesc='A Cute Run Cat for Linux: CPU-driven tray runner with system metrics'
 arch=('x86_64' 'aarch64')
@@ -18,7 +18,7 @@ optdepends=('qt6-wayland: native Wayland windows instead of XWayland'
             'plasma-workspace: the AQTRunCat widget for KDE Plasma 6 panels and desktop'
             'hwdata: GPU model names (pci.ids)'
             'flatpak: the Flatpak updates metric'
-            'pacman-contrib: checkupdates, for the optional remote refresh of package updates'
+            'pacman-contrib: checkupdates, required for the Arch package updates metric'
             'mangohud: game FPS, read from the log MangoHud writes')
 source=("$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')

@@ -134,25 +134,34 @@ DashboardWindow::DashboardWindow(std::string homePath, QWidget *parent)
     title->setFont(titleFont);
     m_layout->addWidget(title);
 
-    m_layout->addWidget(sectionHeader(tr("CPU"), this));
-    auto *cpuTop = new QWidget(this);
-    auto *cpuTopLayout = new QHBoxLayout(cpuTop);
+    m_cpuHeader = sectionHeader(tr("CPU"), this);
+    m_layout->addWidget(m_cpuHeader);
+    auto *cpu = new QWidget(this);
+    cpu->setObjectName(QStringLiteral("cpuContainer"));
+    auto *cpuLayout = new QVBoxLayout(cpu);
+    cpuLayout->setContentsMargins(0, 0, 0, 0);
+    cpuLayout->setSpacing(6);
+    m_cpuTop = new QWidget(cpu);
+    auto *cpuTopLayout = new QHBoxLayout(m_cpuTop);
     cpuTopLayout->setContentsMargins(0, 0, 0, 0);
-    m_cpuDetail = label(QString(), cpuTop, "cpuDetail");
-    m_cpuValue = label(QStringLiteral("N/A"), cpuTop, "cpuValue");
+    m_cpuDetail = label(QString(), m_cpuTop, "cpuDetail");
+    m_cpuValue = label(QStringLiteral("N/A"), m_cpuTop, "cpuValue");
     QFont primary = m_cpuValue->font();
     primary.setBold(true);
     m_cpuValue->setFont(primary);
     cpuTopLayout->addWidget(m_cpuDetail);
     cpuTopLayout->addStretch();
     cpuTopLayout->addWidget(m_cpuValue);
-    m_layout->addWidget(cpuTop);
-    m_cpuBar = new QProgressBar(this);
+    cpuLayout->addWidget(m_cpuTop);
+    m_cpuBar = new QProgressBar(cpu);
     m_cpuBar->setObjectName(QStringLiteral("cpuProgress"));
     m_cpuBar->setAccessibleName(tr("CPU usage"));
     m_cpuBar->setTextVisible(false);
     setProgress(m_cpuBar, std::nullopt);
-    m_layout->addWidget(m_cpuBar);
+    cpuLayout->addWidget(m_cpuBar);
+    m_cpuTemperature = textRow(tr("Temperature"), "cpuTemperature", cpu);
+    cpuLayout->addWidget(m_cpuTemperature.container);
+    m_layout->addWidget(cpu);
 
     m_layout->addWidget(sectionHeader(tr("Memory"), this));
     auto *memoryTop = new QWidget(this);
@@ -196,7 +205,8 @@ DashboardWindow::DashboardWindow(std::string homePath, QWidget *parent)
                                   tr("Write"), &m_diskWrite, "diskWrite", this));
 
     // F5 built-in metrics.
-    m_layout->addWidget(sectionHeader(tr("GPU"), this));
+    m_gpuHeader = sectionHeader(tr("GPU"), this);
+    m_layout->addWidget(m_gpuHeader);
     auto *gpus = new QWidget(this);
     gpus->setObjectName(QStringLiteral("gpuContainer"));
     m_gpuLayout = new QVBoxLayout(gpus);
@@ -354,6 +364,13 @@ DashboardWindow::StorageRow &DashboardWindow::ensureStorageRow(const std::string
 
 void DashboardWindow::updateSnapshot(const SystemMetricsSnapshot &s)
 {
+    m_lastSnapshot = s;
+    const bool cpuUsageShown = s.cpu.status.state != MetricState::Unavailable;
+    m_cpuTop->setVisible(cpuUsageShown);
+    m_cpuBar->setVisible(cpuUsageShown);
+    m_cpuTemperature.container->setVisible(m_showCpuTemperature
+        && s.cpuTemperature.status.state != MetricState::Unavailable);
+    m_cpuHeader->setVisible(cpuUsageShown || m_cpuTemperature.container->isVisible());
     if (s.cpu.status.ok() && s.cpu.usagePercent) {
         m_cpuValue->setText(percent(*s.cpu.usagePercent));
         m_cpuDetail->setText(s.cpu.logicalCpus > 0 ? tr("%1 logical CPUs").arg(s.cpu.logicalCpus) : QString());
@@ -363,6 +380,15 @@ void DashboardWindow::updateSnapshot(const SystemMetricsSnapshot &s)
         m_cpuValue->setText(text);
         m_cpuDetail->clear();
         setProgress(m_cpuBar, std::nullopt, text);
+    }
+
+    if (s.cpuTemperature.status.ok() && s.cpuTemperature.celsius) {
+        setText(m_cpuTemperature, q(formatCelsiusPrecise(*s.cpuTemperature.celsius)), QString());
+    } else {
+        setText(m_cpuTemperature, statusText(s.cpuTemperature.status), q(s.cpuTemperature.status.message),
+                s.cpuTemperature.status.state == MetricState::Error
+                    || s.cpuTemperature.status.state == MetricState::Unavailable,
+                q(s.cpuTemperature.status.message));
     }
 
     if (s.memory.status.ok() && s.memory.info) {
@@ -419,7 +445,7 @@ void DashboardWindow::updateSnapshot(const SystemMetricsSnapshot &s)
     // FPS: only a fresh MangoHud reading is a value; every other condition
     // says why there is none, except OFF, which hides the row (and the
     // Gaming section, FPS being its only metric).
-    const bool fpsShown = !fpsHidden(s.fps);
+    const bool fpsShown = m_showFps && !fpsHidden(s.fps) && s.fps.status.state != MetricState::Unavailable;
     m_fps.container->setVisible(fpsShown);
     m_gamingHeader->setVisible(fpsShown);
     if (s.fps.status.ok() && s.fps.fps) {
@@ -464,6 +490,16 @@ void DashboardWindow::updateSnapshot(const SystemMetricsSnapshot &s)
     }
 }
 
+void DashboardWindow::setBuiltInMetricVisibility(bool cpuTemperature, bool gpuMemory, bool gpuTemperature, bool fps)
+{
+    m_showCpuTemperature = cpuTemperature;
+    m_showGpuMemory = gpuMemory;
+    m_showGpuTemperature = gpuTemperature;
+    m_showFps = fps;
+    if (m_lastSnapshot)
+        updateSnapshot(*m_lastSnapshot);
+}
+
 void DashboardWindow::updateUpdates(TextRow &row, const UpdatesMetrics &updates)
 {
     QStringList detail;
@@ -476,7 +512,8 @@ void DashboardWindow::updateUpdates(TextRow &row, const UpdatesMetrics &updates)
         detail << tr("%1 ignored").arg(updates.ignored);
     const QLocale locale;
     if (updates.lastSuccess)
-        detail << tr("checked %1").arg(locale.toString(QDateTime::fromSecsSinceEpoch(*updates.lastSuccess), QLocale::ShortFormat));
+        detail << tr("last successful check %1")
+                      .arg(locale.toString(QDateTime::fromSecsSinceEpoch(*updates.lastSuccess), QLocale::ShortFormat));
     if (updates.metadataStale && updates.metadataTime)
         detail << tr("package metadata from %1 is out of date")
                       .arg(locale.toString(QDateTime::fromSecsSinceEpoch(*updates.metadataTime).date(), QLocale::ShortFormat));
@@ -491,7 +528,9 @@ void DashboardWindow::updateUpdates(TextRow &row, const UpdatesMetrics &updates)
     if (!updates.status.message.empty() && updates.status.state != MetricState::Pending)
         detail.prepend(q(updates.status.message));
     setText(row, updates.status.state == MetricState::Error ? tr("Error") : statusText(updates.status),
-            detail.join(QStringLiteral(" · ")), updates.status.state == MetricState::Error, q(updates.status.message));
+            detail.join(QStringLiteral(" · ")), updates.status.state == MetricState::Error
+                || updates.status.state == MetricState::Unavailable,
+            q(updates.status.message));
 }
 
 void DashboardWindow::updateGpus(const GpuMetrics &gpu)
@@ -528,11 +567,13 @@ void DashboardWindow::updateGpus(const GpuMetrics &gpu)
             card.utilizationBar->setTextVisible(false);
             card.memory = label(QStringLiteral("N/A"), card.card, nullptr);
             card.memory->setObjectName(QStringLiteral("gpuMemory_%1").arg(i));
+            card.memoryName = label(tr("Memory"), card.card, nullptr);
             card.memoryBar = new QProgressBar(card.card);
             card.memoryBar->setObjectName(QStringLiteral("gpuMemoryProgress_%1").arg(i));
             card.memoryBar->setTextVisible(false);
             card.temperature = label(QStringLiteral("N/A"), card.card, nullptr);
             card.temperature->setObjectName(QStringLiteral("gpuTemperature_%1").arg(i));
+            card.temperatureName = label(tr("Temperature"), card.card, nullptr);
             for (QLabel *value : {card.utilization, card.memory, card.temperature})
                 value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
             grid->addWidget(card.title, 0, 0, 1, 2);
@@ -540,10 +581,10 @@ void DashboardWindow::updateGpus(const GpuMetrics &gpu)
             grid->addWidget(card.utilizationName, 2, 0);
             grid->addWidget(card.utilization, 2, 1);
             grid->addWidget(card.utilizationBar, 3, 0, 1, 2);
-            grid->addWidget(label(tr("Memory"), card.card, nullptr), 4, 0);
+            grid->addWidget(card.memoryName, 4, 0);
             grid->addWidget(card.memory, 4, 1);
             grid->addWidget(card.memoryBar, 5, 0, 1, 2);
-            grid->addWidget(label(tr("Temperature"), card.card, nullptr), 6, 0);
+            grid->addWidget(card.temperatureName, 6, 0);
             grid->addWidget(card.temperature, 6, 1);
             m_gpuLayout->addWidget(card.card);
             m_gpuCards.append(card);
@@ -553,16 +594,20 @@ void DashboardWindow::updateGpus(const GpuMetrics &gpu)
     m_gpuStatus->setText(gpu.status.state == MetricState::Pending ? tr("Waiting…") : q(gpu.status.message));
 
     // A value only when the field has one; otherwise its reason, no bar.
-    auto field = [](QLabel *value, QProgressBar *bar, const MetricStatus &status, const QString &text,
-                    const std::optional<double> &percent) {
+    auto field = [](QLabel *name, QLabel *value, QProgressBar *bar, const MetricStatus &status, const QString &text,
+                    const std::optional<double> &percent, bool enabled) {
+        const bool visible = enabled && status.state != MetricState::Unavailable;
+        name->setVisible(visible);
+        value->setVisible(visible);
         value->setText(status.ok() ? text : statusText(status));
         value->setToolTip(status.ok() ? QString() : q(status.message));
         if (bar) {
-            bar->setVisible(status.ok() && percent.has_value());
+            bar->setVisible(visible && status.ok() && percent.has_value());
             if (status.ok() && percent)
                 setProgress(bar, percent);
         }
     };
+    bool anyGpuVisible = false;
     for (int i = 0; i < m_gpuCards.size(); ++i) {
         const GpuDevice &device = gpu.devices[std::size_t(i)];
         GpuCard &card = m_gpuCards[i];
@@ -582,18 +627,24 @@ void DashboardWindow::updateGpus(const GpuMetrics &gpu)
         const bool activity = device.utilizationMethod == "rc6-residency";
         card.utilizationName->setText(activity ? tr("Activity") : tr("Utilization"));
         card.utilizationName->setToolTip(activity ? tr("Time out of the RC6 power-saving state") : QString());
-        field(card.utilization, card.utilizationBar, device.utilizationStatus,
-              device.utilizationPercent ? percent(*device.utilizationPercent) : QString(), device.utilizationPercent);
+        field(card.utilizationName, card.utilization, card.utilizationBar, device.utilizationStatus,
+              device.utilizationPercent ? percent(*device.utilizationPercent) : QString(), device.utilizationPercent, true);
         std::optional<double> memoryPercent;
         QString memoryText;
         if (device.memoryUsedBytes && device.memoryTotalBytes && *device.memoryTotalBytes > 0) {
             memoryPercent = 100.0 * double(*device.memoryUsedBytes) / double(*device.memoryTotalBytes);
             memoryText = tr("%1 / %2").arg(bytes(*device.memoryUsedBytes), bytes(*device.memoryTotalBytes));
         }
-        field(card.memory, card.memoryBar, device.memoryStatus, memoryText, memoryPercent);
-        field(card.temperature, nullptr, device.temperatureStatus,
-              device.temperatureCelsius ? q(formatCelsius(*device.temperatureCelsius)) : QString(), std::nullopt);
+        field(card.memoryName, card.memory, card.memoryBar, device.memoryStatus, memoryText, memoryPercent, m_showGpuMemory);
+        field(card.temperatureName, card.temperature, nullptr, device.temperatureStatus,
+              device.temperatureCelsius ? q(formatCelsius(*device.temperatureCelsius)) : QString(), std::nullopt,
+              m_showGpuTemperature);
+        const bool visible = !card.utilization->isHidden() || !card.memory->isHidden() || !card.temperature->isHidden();
+        card.card->setVisible(visible);
+        anyGpuVisible = anyGpuVisible || visible;
     }
+    m_gpuHeader->setVisible(anyGpuVisible || (gpu.devices.empty() && gpu.status.state != MetricState::Unavailable));
+    m_gpuStatus->setVisible(gpu.devices.empty() && gpu.status.state != MetricState::Unavailable);
 }
 
 namespace {

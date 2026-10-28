@@ -69,6 +69,9 @@ QJsonObject byId(const QJsonArray &array, const QString &id)
 metrics::SystemMetricsSnapshot sampleF5()
 {
     metrics::SystemMetricsSnapshot s = sample();
+    s.cpuTemperature.status = MetricStatus::okStatus();
+    s.cpuTemperature.celsius = 54.26;
+    s.cpuTemperature.sensor = "Package id 0";
     s.uptime.status = MetricStatus::okStatus();
     s.uptime.seconds = 90061.6;
     s.gpu.status = MetricStatus::okStatus();
@@ -292,12 +295,22 @@ private slots:
         QCOMPARE(distribution.value(QStringLiteral("data")).toObject().value(QStringLiteral("id")).toString(), QStringLiteral("arch"));
         QVERIFY(distribution.value(QStringLiteral("value")).isNull());
         QVERIFY(api::SchemaVersion >= 2); // F5 fields since schema 2
+        const QJsonObject cpuTemperature = byId(metrics, QStringLiteral("cpu.temperature"));
+        QCOMPARE(cpuTemperature.value(QStringLiteral("title")).toString(), QStringLiteral("CPU Temperature"));
+        QCOMPARE(cpuTemperature.value(QStringLiteral("unit")).toString(), QStringLiteral("celsius"));
+        QCOMPARE(cpuTemperature.value(QStringLiteral("value")).toDouble(), 54.26);
+        QCOMPARE(cpuTemperature.value(QStringLiteral("formattedValue")).toString(), QStringLiteral("54.3 °C"));
+        QVERIFY(cpuTemperature.value(QStringLiteral("detail")).toString().isEmpty());
+        QCOMPARE(cpuTemperature.value(QStringLiteral("data")).toObject().value(QStringLiteral("sensor")).toString(),
+                 QStringLiteral("Package id 0"));
     }
 
     void f5SnapshotRoundTrips()
     {
         const metrics::SystemMetricsSnapshot original = sampleF5();
         const metrics::SystemMetricsSnapshot s = api::systemSnapshotFromMetrics(api::builtInMetrics(original, "/home/alice"));
+        QCOMPARE(*s.cpuTemperature.celsius, 54.26);
+        QCOMPARE(s.cpuTemperature.sensor, std::string("Package id 0"));
         QCOMPARE(*s.uptime.seconds, 90061.6);
         QCOMPARE(s.gpu.devices.size(), std::size_t(2));
         const metrics::GpuDevice &intel = s.gpu.devices[0];
@@ -346,6 +359,7 @@ private slots:
         QVERIFY(s.cpu.status.ok());
         QCOMPARE(*s.cpu.usagePercent, 23.4);
         QCOMPARE(s.cpu.logicalCpus, 8);
+        QCOMPARE(s.cpuTemperature.status.state, metrics::MetricState::Unavailable);
         QVERIFY(s.memory.info);
         QCOMPARE(s.memory.info->usedBytes, original.memory.info->usedBytes);
         QCOMPARE(s.memory.info->totalBytes, original.memory.info->totalBytes);
@@ -523,7 +537,7 @@ private slots:
     // source ids back.
     void refreshResult()
     {
-        QCOMPARE(api::SchemaVersion, 7);
+        QCOMPARE(api::SchemaVersion, 9);
         custommetrics::RefreshResult result;
         result.status = custommetrics::RefreshStatus::Accepted;
         result.started = {QStringLiteral("/m/g/a/metric.json")};
@@ -584,7 +598,8 @@ private slots:
         const QJsonObject object = api::settingsObject(settings);
         for (const char *key : {"runnerId", "speedMode", "networkMode", "networkInterfaces", "dashboardRefreshSeconds",
                                 "autostart", "metricsBarEnabled", "metricsBarItems", "customMetricFiles",
-                                "gpuDevice", "fpsSource", "updatesIntervalMinutes", "updatesRemoteRefresh"})
+                                "gpuDevice", "fpsSource", "updatesIntervalMinutes", "updatesRemoteRefresh",
+                                "showCpuTemperature", "showGpuMemory", "showGpuTemperature", "showFps"})
             QVERIFY2(object.contains(QLatin1String(key)), key);
         QCOMPARE(object.value(QStringLiteral("speedMode")).toString(), QStringLiteral("slow-down"));
         QCOMPARE(object.value(QStringLiteral("runnerId")).toString(), QStringLiteral("cat"));

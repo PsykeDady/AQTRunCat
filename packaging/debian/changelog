@@ -1,9 +1,18 @@
-aqtruncat (2.3.0-1) unstable; urgency=medium
+aqtruncat (2.3.2-1) unstable; urgency=medium
 
-  * Initialize v2F3 Dependency Advisor & Hardware Monitoring. Version and
-    roadmap documentation only; no functional changes.
+  * Add native CPU temperature monitoring through Linux hwmon and identified
+    CPU thermal-zone interfaces.
 
- -- AQTRunCat maintainers <maintainers@aqtruncat.invalid>  Tue, 27 Oct 2026 18:00:00 +0100
+ -- AQTRunCat maintainers <maintainers@aqtruncat.invalid>  Wed, 28 Oct 2026 00:00:00 +0000
+
+aqtruncat (2.3.1-1) unstable; urgency=medium
+
+  * Use checkupdates from pacman-contrib for Arch package update counts.
+    Treat exit status 2 as no updates; missing checkupdates is Unavailable.
+    Default checks use its cached private database; explicit refresh syncs
+    only that private database. AUR updates are not included.
+
+ -- AQTRunCat maintainers <maintainers@aqtruncat.invalid>  Wed, 28 Oct 2026 12:00:00 +0100
 
 aqtruncat (2.2.0-1) unstable; urgency=medium
 

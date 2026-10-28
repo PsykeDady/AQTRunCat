@@ -36,16 +36,21 @@ bool present(const PackageManagerAvailability &available, PackageManager manager
     return false;
 }
 
-// "name old -> new" lines (pacman, checkupdates).
-UpdateCount countArrowLines(std::string_view out)
+// checkupdates emits one "name old -> new" record for each official update.
+UpdateCount parseCheckupdatesRecords(std::string_view out)
 {
     UpdateCount result;
     int count = 0;
     for (const std::string_view line : splitLines(out)) {
-        const auto fields = splitFields(line);
-        if (fields.size() < 4 || fields[2] != "->")
+        if (trimView(line).empty())
             continue;
-        if (fields.back() == "[ignored]")
+        const auto fields = splitFields(line);
+        if ((fields.size() != 4 && !(fields.size() == 5 && fields[4] == "[ignored]"))
+            || fields[0].empty() || fields[1].empty() || fields[2] != "->" || fields[3].empty()) {
+            result.error = "unexpected checkupdates output format";
+            return result;
+        }
+        if (fields.size() == 5)
             ++result.ignored;
         else
             ++count;
@@ -95,13 +100,15 @@ std::optional<CommandSpec> packageUpdateCommand(PackageManager manager, bool rem
 {
     switch (manager) {
     case PackageManager::Pacman:
-        // checkupdates syncs a private copy of the databases (in /tmp),
-        // never /var/lib/pacman; "pacman -Qu" compares with the local ones.
-        if (remote && checkupdatesAvailable)
-            return CommandSpec{"checkupdates", {}};
-        if (remote && reason)
-            *reason = "checkupdates (pacman-contrib) is not installed: using the local package databases";
-        return CommandSpec{"pacman", {"-Qu"}};
+        if (!checkupdatesAvailable) {
+            if (reason)
+                *reason = "checkupdates is not installed (pacman-contrib). Install with: sudo pacman -S pacman-contrib";
+            return std::nullopt;
+        }
+        // Default checks reuse checkupdates' private database without network
+        // access. Explicit refresh syncs that private database, never pacman's.
+        return remote ? CommandSpec{"checkupdates", {"--nocolor"}}
+                      : CommandSpec{"checkupdates", {"--nosync", "--nocolor"}};
     case PackageManager::Apt:
         if (remote && reason)
             *reason = "apt cannot refresh its package lists without root: using the local package lists";
@@ -119,23 +126,26 @@ std::optional<CommandSpec> packageUpdateCommand(PackageManager manager, bool rem
     return std::nullopt;
 }
 
-UpdateCount parsePacmanQu(std::string_view out, int exitCode, std::string_view err)
-{
-    // pacman -Qu exits 1 when no package matches, i.e. no update.
-    if (exitCode == 0 || (exitCode == 1 && trimView(out).empty() && trimView(err).empty()))
-        return countArrowLines(out);
-    return failed(err, exitCode);
-}
-
 UpdateCount parseCheckupdates(std::string_view out, int exitCode, std::string_view err)
 {
     if (exitCode == 2) {
+        if (!trimView(out).empty()) {
+            UpdateCount invalid;
+            invalid.error = "unexpected checkupdates output for the no-updates status";
+            return invalid;
+        }
         UpdateCount none;
         none.count = 0;
         return none;
     }
-    if (exitCode == 0)
-        return countArrowLines(out);
+    if (exitCode == 0) {
+        if (trimView(out).empty()) {
+            UpdateCount invalid;
+            invalid.error = "checkupdates returned success without update records";
+            return invalid;
+        }
+        return parseCheckupdatesRecords(out);
+    }
     return failed(err, exitCode);
 }
 

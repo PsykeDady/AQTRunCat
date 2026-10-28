@@ -23,6 +23,7 @@ std::string formatPercent(double percent);
 
 // F5: 54.4 → "54 °C"; 143.6 → "144 FPS"; counts → "Up to date", "1 update", "12 updates".
 std::string formatCelsius(double celsius);
+std::string formatCelsiusPrecise(double celsius);
 std::string formatFps(double fps);
 std::string formatUpdateCount(long long count);
 

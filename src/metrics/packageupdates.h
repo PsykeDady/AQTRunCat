@@ -6,8 +6,7 @@
 // the backend's job (app/updatesservice), with bounded subprocesses.
 //
 // Every command here only reads: no install, upgrade or removal, no root.
-// By default only locally cached metadata is used; a remote refresh is a
-// separate, opt-in command that still never touches the system databases.
+// Pacman checks use checkupdates' private database; syncing it is opt-in.
 
 #include "metricstatus.h"
 
@@ -66,9 +65,9 @@ struct CommandSpec {
     std::vector<std::string> arguments;
 };
 
-// The read-only check. remote: refresh metadata first where that is
-// possible without root (pacman needs checkupdates from pacman-contrib;
-// dnf refreshes the user's own cache; apt cannot: nullopt + reason).
+// The read-only check. On Pacman, checkupdates is mandatory; remote selects
+// whether its private database is synchronized. Apt cannot refresh without
+// root; DNF uses its user's cache.
 std::optional<CommandSpec> packageUpdateCommand(PackageManager manager, bool remote, bool checkupdatesAvailable,
                                                 std::string *reason = nullptr);
 
@@ -80,10 +79,8 @@ struct UpdateCount {
     std::string error;
 };
 
-// pacman -Qu: one "name old -> new" line per update; " [ignored]" lines
-// are not counted. Exit 1 with no output means no updates.
-UpdateCount parsePacmanQu(std::string_view out, int exitCode, std::string_view err);
-// checkupdates: same lines; exit 2 = no updates.
+// checkupdates: one "name old -> new" line per update; exit 2 with empty
+// stdout means no updates. stderr diagnostics never contribute to the count.
 UpdateCount parseCheckupdates(std::string_view out, int exitCode, std::string_view err);
 // apt-get -s dist-upgrade: "Inst name [old] (new …)" = an upgrade of an
 // installed package; "Inst name (…)" without [old] is a new dependency.

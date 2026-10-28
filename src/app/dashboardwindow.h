@@ -28,6 +28,7 @@ public:
 
 public slots:
     void updateSnapshot(const aqtruncat::metrics::SystemMetricsSnapshot &snapshot);
+    void setBuiltInMetricVisibility(bool cpuTemperature, bool gpuMemory, bool gpuTemperature, bool fps);
     void updateCustomMetrics(const QList<aqtruncat::custommetrics::Source> &sources);
     // v2F1.7: the answer to a refreshRequested, shown briefly as a tooltip
     // where the icon was clicked (refreshFeedback keeps the text).
@@ -77,8 +78,10 @@ private:
         QLabel *utilization = nullptr;
         QProgressBar *utilizationBar = nullptr;
         QLabel *memory = nullptr;
+        QLabel *memoryName = nullptr;
         QProgressBar *memoryBar = nullptr;
         QLabel *temperature = nullptr;
+        QLabel *temperatureName = nullptr;
     };
     TextRow textRow(const QString &title, const char *name, QWidget *parent);
     static void setText(TextRow &row, const QString &value, const QString &detail, bool warning = false,
@@ -113,6 +116,14 @@ private:
     QWidget *m_customContainer = nullptr;
     QVBoxLayout *m_customLayout = nullptr;
     QScrollArea *m_scroll = nullptr;
+    QWidget *m_cpuHeader = nullptr;
+    QWidget *m_cpuTop = nullptr;
+    QWidget *m_gpuHeader = nullptr;
+    bool m_showCpuTemperature = true;
+    bool m_showGpuMemory = true;
+    bool m_showGpuTemperature = true;
+    bool m_showFps = true;
+    std::optional<aqtruncat::metrics::SystemMetricsSnapshot> m_lastSnapshot;
     bool m_shownOnce = false;
     // Command sources publish on every run; a hidden Dashboard keeps only the
     // latest list and rebuilds its cards when shown.
@@ -161,6 +172,7 @@ private:
     QList<GpuCard> m_gpuCards;
     QWidget *m_gamingHeader = nullptr; // hidden with FPS when its source is OFF
     TextRow m_fps;
+    TextRow m_cpuTemperature;
     TextRow m_packageUpdates;
     TextRow m_flatpakUpdates;
 };

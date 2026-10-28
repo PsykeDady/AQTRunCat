@@ -39,7 +39,7 @@ Tutti `category: "builtin"`, `kind: "system"`.
 | `uptime` | `/proc/uptime` (primo campo, `CLOCK_BOOTTIME`: sospensione inclusa) | secondi interi / `seconds` | `1d 1h 1m` | `uptime` (`3d`, `14h`, `52m`) |
 | `gpu:<device>` (una per GPU) | DRM `/sys/class/drm/card<N>/device` + sysfs del driver, NVML per NVIDIA | utilizzo % (o `null`) / `percent`; `items` = utilization, memory, temperature | modello + tre voci | `gpu.utilization`, `gpu.memory`, `gpu.temperature` = la GPU selezionata |
 | `fps` | log CSV di MangoHud (`output_folder`) | FPS misurati / `fps` | `144 FPS` + applicazione, frame time | `fps` (`144`) |
-| `updates.packages` | `pacman -Qu` / `apt-get -s dist-upgrade` / `dnf -C check-update` | numero / `count` | `3 updates`, `Up to date` | `updates.packages` |
+| `updates.packages` | `checkupdates` / `apt-get -s dist-upgrade` / `dnf -C check-update` | numero / `count` | `3 updates`, `Up to date` | `updates.packages` |
 | `updates.flatpak` | `flatpak remote-ls --updates --cached` | numero / `count` | `7 updates` (app, runtime) | `updates.flatpak` |
 | `kernel` | `uname(2)` | `null` (testo) / `null` | `Linux 7.2.10-zen1-1-zen`, `x86_64` | no (testo) |
 | `distribution` | `/etc/os-release`, poi `/usr/lib/os-release`, `/etc/lsb-release`, file specifici | `null` (testo) / `null` | `Arch Linux`, `rolling · ID arch` | no (testo) |
@@ -281,11 +281,23 @@ l'ordine fisso pacman, apt, dnf. Se non ce n'è nessuno: Unavailable.
 
 | Gestore | Default (solo metadati locali) | Refresh remoto (opt-in) | Conteggio |
 |---|---|---|---|
-| pacman | `pacman -Qu` (confronta con i database sync già presenti) | `checkupdates` (pacman-contrib: sincronizza una **copia privata** dei database in `/tmp`, mai `/var/lib/pacman`); se manca: locale + nota | righe `nome vecchia -> nuova`; le `[ignored]` (IgnorePkg) sono contate a parte; exit 1 senza output = 0 |
+| pacman | `checkupdates --nosync --nocolor` (usa il database privato in cache) | `checkupdates --nocolor` (pacman-contrib sincronizza una **copia privata** dei database, mai `/var/lib/pacman`) | una riga valida `nome vecchia -> nuova`; exit 2 e stdout vuoto = 0; stderr non è contato |
 | apt | `apt-get -s -q -o Debug::NoLocking=true dist-upgrade` (simulazione da utente normale) | impossibile senza root → locale + nota | righe `Inst nome [vecchia]` = aggiornamenti di pacchetti installati; le nuove dipendenze (`Inst` senza `[…]`) non contano |
 | dnf (4 e 5) | `dnf -q -C check-update` (solo cache) | `dnf -q --refresh check-update` (cache dell'utente) | righe `nome.arch versione repo`, exit 100; la sezione "Obsoleting" non è contata due volte |
 
-Età dei metadati: pacman = il più recente di `/var/lib/pacman/sync/*`; apt
+Se `checkupdates` manca, il provider pacman è **Unavailable**, non zero: il
+messaggio identifica `checkupdates`/`pacman-contrib` e suggerisce
+`sudo pacman -S pacman-contrib`; AQTRunCat non lo esegue. Non c'è fallback a
+`pacman -Qu`. Il codice 0 richiede almeno un record valido; gli exit code
+inaspettati e l'output malformato sono Error. Le righe vuote sono ignorate.
+Le `[ignored]` (IgnorePkg), se presenti, restano escluse dal conteggio
+principale. Sono supportati gli ID espliciti `arch`, `archarm`, `manjaro`,
+`endeavouros`, `cachyos`, e gli altri derivati con `ID_LIKE=arch` soltanto se
+la rilevazione esistente trova anche `pacman` e il database locale Pacman.
+Gli update AUR non sono inclusi.
+
+Età dei metadati: per pacman, con `--nosync`, il più recente del database
+privato di `checkupdates`; apt
 = `update-success-stamp` o la directory `lists`; dnf = le cache in
 `/var/cache/libdnf5` e `/var/cache/dnf`; dopo un refresh remoto = adesso.
 Oltre 7 giorni sono **stale**: il conteggio resta, con un avviso
@@ -389,7 +401,7 @@ System. Gli aggiornamenti restano del backend.
 
 ## 11. Dashboard, Plasmoid, Metrics Bar
 
-- **Dashboard Qt**: sezioni nuove GPU (una scheda per GPU con
+- **Dashboard Qt**: temperatura CPU nella stessa sezione del carico CPU; sezioni GPU (una scheda per GPU con
   Utilization/Activity, Memory, Temperature; barre solo per un valore
   percentuale valido, altrimenti `N/A` e il motivo nel tooltip), Gaming
   (FPS con sorgente/applicazione, oppure il motivo e l'ultima lettura con un
@@ -397,11 +409,14 @@ System. Gli aggiornamenti restano del backend.
   controllo e avviso se i metadati sono vecchi o in errore), System
   (Uptime, Kernel, Distribution). Le schede GPU si ricostruiscono solo se
   cambia l'insieme dei dispositivi.
-- **Plasmoid**: nessun codice per metrica, perché le nuove sono oggetti
+- **Plasmoid**: nessun codice di raccolta per metrica, perché le nuove sono oggetti
   generici con `items`. La sezione "System" si chiama ora **Built-in
   Metrics** (anche nell'opzione di aspetto); la pagina delle impostazioni
   condivise ha GPU della Metrics Bar, sorgente FPS, intervallo dei controlli
-  e refresh remoto, visibili solo con un backend di schema 2. Le scelte
+  e refresh remoto, oltre alle preferenze globali di visibilità per temperatura
+  CPU, memoria/temperatura GPU e FPS. Dashboard Qt, Metrics Bar e Plasmoid
+  rispettano gli stessi valori; campi `Unavailable` (N/D) CPU/GPU/FPS sono
+  nascosti, mentre errori e stati in attesa restano diagnostici. Le scelte
   stanno in funzioni pure di `logic.js` (testate). Niente raccolta né
   comandi nel QML; animazione, riconnessione e delta invariati.
 - **Metrics Bar**: id nuovi `uptime`, `gpu.utilization`, `gpu.memory`,
@@ -413,7 +428,8 @@ System. Gli aggiornamenti restano del backend.
   velocità del runner (CPU) non cambia.
 - **Settings Qt**: gruppo "Built-in Metrics" con le stesse quattro
   impostazioni (una GPU assente resta "(not present)"); "Restore Defaults"
-  le riporta ai valori predefiniti.
+  le riporta ai valori predefiniti. Le quattro preferenze di visibilità si
+  modificano qui o nella configurazione nativa del Plasmoid.
 
 ## 12. Prestazioni (misurate, Plasma 6.8, i7-11390H, build RelWithDebInfo)
 
@@ -425,8 +441,10 @@ Backend su un bus privato con XDG isolato, 60 s dopo 5 s di assestamento:
 | F5, controlli aggiornamenti spenti (uptime, GPU, FPS, kernel/distro) | 0.150 % | 21.8 MiB |
 | F5 con un giro di controlli nella finestra | 0.283 % + figli 3.2 % (in 60 s) | 22.1 MiB |
 
-Un giro completo costa circa 1,8 s di CPU: `pacman -Qu` circa 0,7 s, con le
-firme `gpg` dei database; le quattro chiamate Flatpak circa 1 s. Con
+Misurazione storica della prima implementazione F5, precedente alla modifica
+v2F3.1 descritta in §19: un giro completo costava circa 1,8 s di CPU;
+`pacman -Qu` circa 0,7 s, con le firme `gpg` dei database; le quattro
+chiamate Flatpak circa 1 s. Con
 l'intervallo orario di default è circa 0,05 % di un core in media. Nessun
 processo resta in background tra i controlli.
 
@@ -474,7 +492,7 @@ pacchetti dell'host. `backendipc`, `plasmoidclient` e
 `tools/plasmoid-preview.sh` spengono i controlli aggiornamenti nei loro XDG
 isolati.
 
-## 16. Validazione runtime (host Arch, Plasma 6.8 Wayland)
+## 16. Validazione runtime storica (host Arch, Plasma 6.8 Wayland; pre-v2F3.1)
 
 Automatica, su un bus D-Bus privato (`backendipc-bus.conf`, senza service
 dir) e con XDG isolato; la sessione Plasma e il backend 1.4.2 dell'utente non
@@ -546,3 +564,19 @@ Modificati: `src/metrics/{systemmetrics,textparse,compactformat,metricsformat}.*
 `packaging/{arch/PKGBUILD,rpm/aqtruncat.spec,debian/changelog,debian/control}`,
 `README.md`, `docs/backend-dbus-api-cli.md`, `requirements.md`,
 `MEMORY.md`.
+
+## 19. Nota v2F3.1 — Arch updates (2.3.1)
+
+Da AQTRunCat 2.3.1, su Arch e derivati riconosciuti dal rilevamento
+esistente, `checkupdates` di `pacman-contrib` è l'unica sorgente per il
+conteggio dei pacchetti dei repository ufficiali. Senza refresh esplicito si
+usa `--nosync` sul suo database temporaneo; con refresh esplicito si usa
+`checkupdates` per aggiornarlo. Il database primario di pacman non viene
+sincronizzato da AQTRunCat. Se il database privato non è ancora inizializzato,
+il controllo senza sync è un errore, non zero; il refresh opt-in lo inizializza.
+Exit 2 con stdout vuoto significa zero update;
+exit 0 richiede righe-record valide. Gli altri exit e gli output inattesi
+sono errori. Se il comando manca, la metrica diventa Unavailable con
+diagnostica e suggerimento `sudo pacman -S pacman-contrib`; non viene
+eseguito alcun fallback e AQTRunCat non installa la dipendenza. Gli update
+AUR sono esclusi. Polling e timeout restano quelli centralizzati nel backend.

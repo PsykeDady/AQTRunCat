@@ -9,6 +9,7 @@
 #include <QStandardPaths>
 
 #include <algorithm>
+#include <unistd.h>
 
 using namespace aqtruncat::metrics;
 
@@ -139,6 +140,16 @@ QString UpdatesService::findTool(const QString &name) const
                                           : QStandardPaths::findExecutable(name, m_options.searchPath);
 }
 
+QString UpdatesService::checkupdatesDatabase() const
+{
+    if (!m_options.checkupdatesDatabase.isEmpty())
+        return m_options.checkupdatesDatabase;
+    const QString configured = qEnvironmentVariable("CHECKUPDATES_DB");
+    if (!configured.isEmpty())
+        return configured;
+    return QDir::tempPath() + QStringLiteral("/checkup-db-%1").arg(::getuid());
+}
+
 std::optional<qint64> UpdatesService::newestTime(const QStringList &paths, bool filesInside) const
 {
     std::optional<qint64> newest;
@@ -224,7 +235,7 @@ void UpdatesService::checkPackages()
     const bool checkupdates = !findTool(QStringLiteral("checkupdates")).isEmpty();
     const auto spec = packageUpdateCommand(manager, m_remote, checkupdates, &reason);
     if (!spec) {
-        unavailable(job, QString(), QString::fromStdString(reason));
+        unavailable(job, QString::fromLatin1(packageManagerName(manager)), QString::fromStdString(reason));
         return;
     }
     const QString program = findTool(QString::fromStdString(spec->program));
@@ -234,7 +245,8 @@ void UpdatesService::checkPackages()
         return;
     }
     job.manager = manager;
-    job.remote = spec->program == "checkupdates" || (manager == PackageManager::Dnf && m_remote);
+    job.remote = (manager == PackageManager::Pacman && m_remote)
+        || (manager == PackageManager::Dnf && m_remote);
     job.metrics.manager = packageManagerName(manager);
     job.metrics.note = reason;
     switch (manager) {
@@ -265,16 +277,13 @@ void UpdatesService::checkPackages()
 void UpdatesService::finishPackages(const BoundedProcess::Result &result)
 {
     Job &job = m_packages;
-    const QString program = job.queue.isEmpty() ? QString() : QFileInfo(job.queue.first().program).fileName();
     job.queue.clear();
     job.metrics.checking = false;
     UpdateCount parsed;
     if (!result.ok()) {
         parsed.error = result.error.toStdString();
     } else if (job.manager == PackageManager::Pacman) {
-        parsed = program == QLatin1String("checkupdates")
-            ? parseCheckupdates(text(result.standardOutput), result.exitCode, text(result.standardError))
-            : parsePacmanQu(text(result.standardOutput), result.exitCode, text(result.standardError));
+        parsed = parseCheckupdates(text(result.standardOutput), result.exitCode, text(result.standardError));
     } else if (job.manager == PackageManager::Apt) {
         parsed = parseAptSimulation(text(result.standardOutput), result.exitCode, text(result.standardError));
     } else if (job.manager == PackageManager::Dnf) {
@@ -290,7 +299,7 @@ void UpdatesService::finishPackages(const BoundedProcess::Result &result)
         if (job.remote)
             metadata = now();
         else if (job.manager == PackageManager::Pacman)
-            metadata = newestTime({path(QStringLiteral("/var/lib/pacman/sync"))}, true);
+            metadata = newestTime({checkupdatesDatabase() + QStringLiteral("/sync")}, true);
         else if (job.manager == PackageManager::Apt)
             metadata = newestTime({path(QStringLiteral("/var/lib/apt/periodic/update-success-stamp")),
                                    path(QStringLiteral("/var/lib/apt/lists"))}, false);

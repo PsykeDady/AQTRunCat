@@ -66,6 +66,7 @@ public:
 public slots:
     // Only the first MaxItems ids are considered, whatever the caller passes.
     void setConfiguration(bool enabled, const QStringList &order);
+    void setMetricVisibility(bool cpuTemperature, bool gpuMemory, bool gpuTemperature, bool fps);
     void updateSystem(const aqtruncat::metrics::SystemMetricsSnapshot &snapshot);
     void updateCustom(const QList<aqtruncat::custommetrics::Source> &sources);
 
@@ -83,6 +84,10 @@ private:
 
     std::string m_homePath;
     bool m_enabled = false;
+    bool m_showCpuTemperature = true;
+    bool m_showGpuMemory = true;
+    bool m_showGpuTemperature = true;
+    bool m_showFps = true;
     QStringList m_order;
     std::optional<aqtruncat::metrics::SystemMetricsSnapshot> m_system;
     QList<aqtruncat::custommetrics::Source> m_sources;

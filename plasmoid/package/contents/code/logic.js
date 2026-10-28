@@ -88,6 +88,8 @@ function itemRows(metric) {
         var item = items[i] || {};
         var formatted = typeof item.formattedValue === "string" ? item.formattedValue : "";
         rows.push({
+            metricId: typeof item.id === "string" ? String(metric.id) + ":" + item.id : String(metric.id),
+            state: States.indexOf(item.state) >= 0 ? item.state : stateOf(metric),
             title: typeof item.title === "string" ? item.title : "",
             value: formatted.length > 0 ? formatted : "—",
             detail: typeof item.detail === "string" ? item.detail : "",
@@ -291,14 +293,61 @@ function groupCells(group, metrics) {
 
 // Rows grouped by category (built-in, integrations, custom), API order kept
 // inside each group; hidden categories and hidden metrics are left out.
-function metricRows(metrics, shown) {
+function metricRows(metrics, shown, settings) {
+    settings = settings || {};
     var groups = { builtin: [], integration: [], custom: [] };
     for (var i = 0; i < metrics.length; ++i) {
-        if (hiddenMetric(metrics[i]) || groupIdOf(metrics[i]).length > 0)
+        var source = metrics[i];
+        var id = source && source.id;
+        if (hiddenMetric(source) || groupIdOf(source).length > 0)
             continue; // a group's children are shown inside its row
-        var row = metricRow(metrics[i]);
-        if (metrics[i].kind === "group") {
-            var cells = groupCells(metrics[i], metrics);
+        if (id === "cpu.temperature")
+            continue; // presented inside the CPU row, never as a separate metric
+        if ((id === "fps" && settings.showFps === false)
+            || (id === "fps" && stateOf(source) === "unavailable"))
+            continue;
+        var row = metricRow(source);
+        if (id === "cpu") {
+            var temperature = metrics.find(function (m) { return m && m.id === "cpu.temperature"; });
+            var showTemperature = settings.showCpuTemperature !== false && temperature
+                && stateOf(temperature) !== "unavailable";
+            if (!showTemperature && stateOf(source) === "unavailable")
+                continue;
+            if (showTemperature) {
+                var cells = [];
+                if (stateOf(source) !== "unavailable") {
+                    cells.push({ metricId: "cpu", refreshable: false, icon: "", warning: false, title: "Usage", value: valueText(source),
+                                 fraction: fraction(source.normalized), state: stateOf(source), detail: detailText(source), warnings: [] });
+                }
+                cells.push({ metricId: "cpu.temperature", refreshable: false, icon: "", warning: false, title: "Temperature",
+                             value: valueText(temperature), fraction: null, state: stateOf(temperature),
+                             detail: "", warnings: [] });
+                // When temperature is shown, CPU submetrics use the same
+                // indented, one-per-line layout as GPU child metrics.
+                row.group = false;
+                row.state = "ok";
+                row.value = "";
+                row.detail = "";
+                row.hasFraction = false;
+                row.itemsJson = JSON.stringify(cells);
+            }
+        } else if (typeof id === "string" && id.indexOf("gpu:") === 0) {
+            var gpu = Object.assign({}, source);
+            gpu.items = (Array.isArray(source.items) ? source.items : []).filter(function (item) {
+                if (!item || item.state === "unavailable") return false;
+                if (item.id === "memory" && settings.showGpuMemory === false) return false;
+                if (item.id === "temperature" && settings.showGpuTemperature === false) return false;
+                return true;
+            });
+            if (gpu.items.length === 0)
+                continue;
+            gpu.state = gpu.items.some(function (item) { return item.state === "ok"; }) ? "ok"
+                : gpu.items.some(function (item) { return item.state === "pending"; }) ? "pending"
+                : gpu.items.some(function (item) { return item.state === "error"; }) ? "error" : "unavailable";
+            row = metricRow(gpu);
+        }
+        if (source.kind === "group") {
+            var cells = groupCells(source, metrics);
             if (cells.length === 0)
                 continue; // no enabled child: nothing to show
             row.group = true;

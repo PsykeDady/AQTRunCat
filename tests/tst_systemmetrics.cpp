@@ -114,6 +114,8 @@ private slots:
         QVERIFY(s.cpu.status.ok());
         QCOMPARE(*s.cpu.usagePercent, 25.0);
         QCOMPARE(s.cpu.logicalCpus, 4);
+        QCOMPARE(s.cpuTemperature.status.state, MetricState::Unavailable);
+        QVERIFY(!s.cpuTemperature.celsius);
 
         QCOMPARE(s.memory.info->usedBytes, (16384000ull - 9830400ull) * 1024);
         QCOMPARE(s.memory.info->swapUsedBytes, 1048576ull * 1024);
@@ -136,6 +138,7 @@ private slots:
                                      "Network (wlp2s0)\n  Download:   2.0 MiB/s\n  Upload:     64.0 KiB/s",
                                      "Storage /\n  Used:       114.5 GiB / 195.8 GiB  (61.6 %)",
                                      "Disk I/O (nvme0n1)\n  Read:       4.0 MiB/s\n  Write:      1.0 MiB/s",
+                                     "CPU Temperature\n  n/a: no identifiable CPU temperature sensor found",
                                      "Uptime\n  n/a: ",
                                      "GPU\n  n/a: no GPU found",
                                      "FPS\n  n/a: the FPS source is turned off",
@@ -143,8 +146,15 @@ private slots:
             QVERIFY2(report.contains(QLatin1String(expected)), qPrintable(QStringLiteral("missing \"%1\" in:\n%2").arg(QLatin1String(expected), report)));
 
         const QString line = aqtruncat::cli::formatMetricsLine(s, QStringLiteral("12:00:00"));
-        QCOMPARE(line, QStringLiteral("12:00:00  CPU 25.0 % | Mem 6.2 GiB (40.0 %) | Net down 2.0 MiB/s up 64.0 KiB/s | "
+        QCOMPARE(line, QStringLiteral("12:00:00  CPU 25.0 % | Temp n/a | Mem 6.2 GiB (40.0 %) | Net down 2.0 MiB/s up 64.0 KiB/s | "
                                       "Disk read 4.0 MiB/s write 1.0 MiB/s"));
+
+        SystemMetricsSnapshot withTemperature = s;
+        withTemperature.cpuTemperature.status = MetricStatus::okStatus();
+        withTemperature.cpuTemperature.celsius = 54.26;
+        withTemperature.cpuTemperature.sensor = "Package id 0";
+        QVERIFY(aqtruncat::cli::formatMetricsReport(withTemperature).contains(
+            QStringLiteral("CPU Temperature\n  Temperature: 54.3 °C")));
     }
 
     void cpuUsesTheRunnerCalculation()

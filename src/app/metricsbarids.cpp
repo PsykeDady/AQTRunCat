@@ -15,6 +15,7 @@ const QList<BuiltInMetric> &builtInMetrics()
 {
     static const QList<BuiltInMetric> metrics = {
         {QStringLiteral("cpu"), QStringLiteral("CPU"), QStringLiteral("CPU")},
+        {QStringLiteral("cpu.temperature"), QStringLiteral("CPU Temperature"), QStringLiteral("CPU°")},
         {QStringLiteral("memory"), QStringLiteral("Memory"), QStringLiteral("MEM")},
         {QStringLiteral("swap"), QStringLiteral("Swap"), QStringLiteral("SWAP")},
         {QStringLiteral("network.download"), QStringLiteral("Network download"), QStringLiteral("NET↓")},

@@ -1,7 +1,7 @@
 # Build: packaging/make-source-tarball.sh ~/rpmbuild/SOURCES
 #        rpmbuild -ba packaging/rpm/aqtruncat.spec
 Name:           aqtruncat
-Version:        2.3.0
+Version:        2.3.2
 Release:        1%{?dist}
 Summary:        A Cute Run Cat for Linux
 
@@ -69,6 +69,13 @@ export QT_QPA_PLATFORM=offscreen
 %{_docdir}/%{name}/
 
 %changelog
+* Wed Oct 28 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.3.2-1
+- Add native CPU temperature monitoring using Linux CPU hwmon sensors.
+
+* Wed Oct 28 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.3.1-1
+- Use checkupdates from pacman-contrib for Arch package update counts;
+  missing utility is reported as Unavailable, and AUR updates are excluded.
+
 * Tue Oct 27 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.3.0-1
 - Initialize v2F3 Dependency Advisor & Hardware Monitoring; no functional changes.
 

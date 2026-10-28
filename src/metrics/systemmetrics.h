@@ -7,6 +7,7 @@
 
 #include "core/cpustat.h"
 #include "counterrates.h"
+#include "cputemperature.h"
 #include "diskio.h"
 #include "fps.h"
 #include "gpu.h"
@@ -79,6 +80,7 @@ struct DiskIoMetrics {
 struct SystemMetricsSnapshot {
     double timeSeconds = 0.0; // monotonic time of the sample
     CpuMetrics cpu;
+    CpuTemperatureMetrics cpuTemperature;
     MemoryMetrics memory;
     NetworkMetrics network;
     std::vector<StorageMetrics> storage; // one per configured path
@@ -151,6 +153,7 @@ private:
 
     MetricsSources m_sources;
     CpuSampler m_cpu;
+    CpuTemperatureSampler m_cpuTemperature;
     CounterRateTracker m_network;
     CounterRateTracker m_disk;
     GpuSampler m_gpu;

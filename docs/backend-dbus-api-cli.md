@@ -409,6 +409,10 @@ i client.
 | `fpsSource` (schema 2) | `"mangohud"` \| `"off"` | sì |
 | `updatesIntervalMinutes` (schema 2) | 0 (off) \| 15 \| 30 \| 60 \| 180 \| 360 \| 720 \| 1440 | sì |
 | `updatesRemoteRefresh` (schema 2) | bool (refresh remoto dei metadati, opt-in) | sì |
+| `showCpuTemperature` (schema 9) | bool (visibilità globale temperatura CPU) | sì |
+| `showGpuMemory` (schema 9) | bool (visibilità globale memoria GPU) | sì |
+| `showGpuTemperature` (schema 9) | bool (visibilità globale temperatura GPU) | sì |
+| `showFps` (schema 9) | bool (visibilità globale FPS) | sì |
 
 Propagazione:
 
@@ -471,6 +475,7 @@ Integrations:  Claude Code: on, live updates off · Codex: on, live updates off
 $ aqtruncatctl metrics --category builtin
 Built-in metrics
   cpu               CPU                   22.4 %
+  cpu.temperature   CPU Temperature       54.3 °C
   memory            Memory                57.0 %  17.7 GiB / 31.1 GiB used
   swap              Swap                  11.8 %  1.9 GiB / 15.9 GiB
   network.download  Network download      8.9 KiB/s
@@ -485,6 +490,12 @@ AQTRunCat Settings opened.
 $ aqtruncatctl --no-start status
 aqtruncatctl: the AQTRunCat backend is not running           (exit 3)
 ```
+
+Dal 2.3.2 lo schema 8 aggiunge la metrica built-in `cpu.temperature` ai
+payload `GetMetrics`/`MetricsChanged` (valore numerico in °C, unità `celsius`,
+stato standard e label del sensore in `data.sensor`). Lo schema 9 aggiunge le
+quattro preferenze globali di visibilità e lo stato di ogni campo GPU. Le
+firme D-Bus non cambiano; client più vecchi possono ignorare i campi aggiunti.
 
 Tutti gli eseguibili (`aqtruncat`, `aqtruncatd`, `aqtruncatctl`, gli
 adattatori) stampano la versione con `-v` / `--version`

@@ -15,7 +15,7 @@
 // apt or dnf, detected from what is installed) and Flatpak are two
 // independent jobs; each runs at most one bounded, read-only command at a
 // time, never overlaps itself, and is scheduled `interval` after its
-// previous check finished. Local metadata only, unless the user enabled the
+// previous check finished. Cached metadata only, unless the user enabled the
 // remote refresh. A change of the package databases (an upgrade, a refresh
 // by the system) triggers one debounced re-check.
 class UpdatesService : public QObject
@@ -27,6 +27,7 @@ public:
         QStringList searchPath;      // directories for the tools; empty: $PATH
         QString root;                // prefix of /etc, /var ("" = the real root)
         QString home;                // for Flatpak's user installation; empty: $HOME
+        QString checkupdatesDatabase; // test override; empty: CHECKUPDATES_DB or checkupdates default
         int firstCheckDelayMs = 30000;
         int policyChangeDelayMs = 2000;
         int changeDebounceMs = 30000;
@@ -83,6 +84,7 @@ private:
     QString path(const QString &absolute) const { return m_options.root + absolute; }
     qint64 now() const;
     std::optional<qint64> newestTime(const QStringList &paths, bool filesInside) const;
+    QString checkupdatesDatabase() const;
     void setMetadata(aqtruncat::metrics::UpdatesMetrics &metrics, std::optional<qint64> time) const;
     QStringList flatpakInstallations() const;
     void unavailable(Job &job, const QString &manager, const QString &why);

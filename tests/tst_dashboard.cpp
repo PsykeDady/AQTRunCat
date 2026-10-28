@@ -122,8 +122,10 @@ private slots:
     void displaysLiveMetrics()
     {
         DashboardWindow window("/home/alice");
-        window.updateSnapshot(populatedSnapshot());
+        SystemMetricsSnapshot snapshot = populatedSnapshot();
+        window.updateSnapshot(snapshot);
         QCOMPARE(child<QLabel>(window, "cpuValue")->text(), QStringLiteral("23.4 %"));
+        QCOMPARE(child<QLabel>(window, "cpuTemperatureValue")->text(), QStringLiteral("N/A"));
         QCOMPARE(child<QLabel>(window, "cpuDetail")->text(), QStringLiteral("8 logical CPUs"));
         QCOMPARE(child<QProgressBar>(window, "cpuProgress")->value(), 234);
         QCOMPARE(child<QLabel>(window, "memoryValue")->text(), QStringLiteral("43.8 %"));
@@ -135,6 +137,38 @@ private slots:
         QCOMPARE(child<QLabel>(window, "homeStorageValue")->text(), QStringLiteral("41.9 %"));
         QCOMPARE(child<QLabel>(window, "diskRead")->text(), QStringLiteral("↓ 3.2 MiB/s"));
         QCOMPARE(child<QLabel>(window, "diskWrite")->text(), QStringLiteral("↑ 620.0 KiB/s"));
+        snapshot.cpuTemperature.status = MetricStatus::okStatus();
+        snapshot.cpuTemperature.celsius = 54.26;
+        snapshot.cpuTemperature.sensor = "Package id 0";
+        window.updateSnapshot(snapshot);
+        QCOMPARE(child<QLabel>(window, "cpuTemperatureValue")->text(), QStringLiteral("54.3 °C"));
+        QVERIFY(child<QLabel>(window, "cpuTemperatureDetail")->text().isEmpty());
+    }
+
+    void packageUpdateFailuresAreVisibleAndNotReportedAsFresh()
+    {
+        DashboardWindow window("/home/alice");
+        SystemMetricsSnapshot s;
+        s.packageUpdates.manager = "pacman";
+        s.packageUpdates.lastSuccess = 1'800'000'000;
+        s.packageUpdates.status = MetricStatus::error("==> ERROR: Cannot fetch updates");
+        window.updateSnapshot(s);
+
+        QCOMPARE(child<QLabel>(window, "packageUpdatesValue")->text(), QStringLiteral("Error"));
+        QVERIFY(child<QLabel>(window, "packageUpdatesDetail")->text().contains(
+            QStringLiteral("==> ERROR: Cannot fetch updates")));
+        QVERIFY(child<QLabel>(window, "packageUpdatesDetail")->text().contains(
+            QStringLiteral("last successful check")));
+        QVERIFY(!child<QLabel>(window, "packageUpdatesDetail")->text().contains(QStringLiteral("checked ")));
+        QVERIFY(!child<QLabel>(window, "packageUpdatesWarning")->isHidden());
+
+        s.packageUpdates.status = MetricStatus::unavailable(
+            "checkupdates is not installed (pacman-contrib). Install with: sudo pacman -S pacman-contrib");
+        s.packageUpdates.lastSuccess.reset();
+        window.updateSnapshot(s);
+        QCOMPARE(child<QLabel>(window, "packageUpdatesValue")->text(), QStringLiteral("N/A"));
+        QVERIFY(child<QLabel>(window, "packageUpdatesDetail")->text().contains(QStringLiteral("pacman-contrib")));
+        QVERIFY(!child<QLabel>(window, "packageUpdatesWarning")->isHidden());
     }
 
     void f5SectionsShowValuesAndReasons()
@@ -187,14 +221,11 @@ private slots:
         QCOMPARE(child<QLabel>(window, "gpuTitle_0")->text(), QStringLiteral("Intel Iris Xe"));
         QCOMPARE(child<QLabel>(window, "gpuUtilization_0")->text(), QStringLiteral("37.5 %"));
         QVERIFY(!child<QProgressBar>(window, "gpuUtilizationProgress_0")->isHidden());
-        QCOMPARE(child<QLabel>(window, "gpuMemory_0")->text(), QStringLiteral("N/A"));
-        QVERIFY(child<QLabel>(window, "gpuMemory_0")->toolTip().contains(QLatin1String("shared system memory")));
+        QVERIFY(child<QLabel>(window, "gpuMemory_0")->isHidden());
         QVERIFY(child<QProgressBar>(window, "gpuMemoryProgress_0")->isHidden()); // no meaningless bar
-        QCOMPARE(child<QLabel>(window, "gpuTemperature_0")->text(), QStringLiteral("N/A"));
-        // Stale FPS: no value, the reason and the last reading, with a warning.
-        QCOMPARE(child<QLabel>(window, "fpsValue")->text(), QStringLiteral("N/A"));
-        QVERIFY(child<QLabel>(window, "fpsDetail")->text().contains(QLatin1String("59 FPS")));
-        QVERIFY(!child<QLabel>(window, "fpsWarning")->isHidden());
+        QVERIFY(child<QLabel>(window, "gpuTemperature_0")->isHidden());
+        // Unavailable FPS is hidden; it is not a zero or stale-looking value.
+        QVERIFY(child<QWidget>(window, "fpsRow")->isHidden());
         QCOMPARE(child<QLabel>(window, "packageUpdatesValue")->text(), QStringLiteral("3 updates"));
         QVERIFY(child<QLabel>(window, "packageUpdatesDetail")->text().contains(QLatin1String("out of date")));
         QVERIFY(!child<QLabel>(window, "packageUpdatesWarning")->isHidden());
@@ -258,10 +289,15 @@ private slots:
             s.fps.condition = c.condition;
             s.fps.status = c.status;
             window.updateSnapshot(s);
-            QVERIFY(!child<QWidget>(window, "fpsRow")->isHidden());
-            QVERIFY(!child<QWidget>(window, "gamingHeader")->isHidden());
-            QCOMPARE(child<QLabel>(window, "fpsValue")->text(), QStringLiteral("N/A"));
-            QCOMPARE(child<QLabel>(window, "fpsDetail")->text(), QString::fromStdString(c.status.message));
+            if (c.status.state == MetricState::Unavailable) {
+                QVERIFY(child<QWidget>(window, "fpsRow")->isHidden());
+                QVERIFY(child<QWidget>(window, "gamingHeader")->isHidden());
+            } else {
+                QVERIFY(!child<QWidget>(window, "fpsRow")->isHidden());
+                QVERIFY(!child<QWidget>(window, "gamingHeader")->isHidden());
+                QCOMPARE(child<QLabel>(window, "fpsValue")->text(), QStringLiteral("N/A"));
+                QCOMPARE(child<QLabel>(window, "fpsDetail")->text(), QString::fromStdString(c.status.message));
+            }
         }
         s.fps.condition = FpsCondition::Measured;
         s.fps.status = MetricStatus::okStatus();

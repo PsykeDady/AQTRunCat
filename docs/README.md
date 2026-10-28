@@ -1,6 +1,6 @@
 # AQTRunCat Documentation
 
-Technical documentation of AQTRunCat **2.3.0**, by topic. Users start with
+Technical documentation of AQTRunCat **2.3.2**, by topic. Users start with
 the main [README](../README.md); the v2 roadmap is
 [requirements.md](../requirements.md). The topic documents are design and
 validation records written in Italian; [feature-reference.md](feature-reference.md)
@@ -41,6 +41,7 @@ service, client), `aqtruncat_desktop` (Widgets UI). Details: `MEMORY.md` §3.
 | Built-in runners Walking Goose, Party Parrot, Engine, Rickroll (assets, build integration) | [built-in-runners.md](built-in-runners.md) |
 | System metrics (CPU, memory, swap, network, storage, disk I/O) | [system-metrics.md](system-metrics.md) |
 | Uptime, GPU, FPS, package/Flatpak updates, kernel, distribution | [additional-built-in-metrics.md](additional-built-in-metrics.md) |
+| Temperatura CPU nativa, selezione hwmon e fallback thermal zone | [cpu-temperature.md](cpu-temperature.md) |
 | Dashboard | [dashboard.md](dashboard.md) |
 | Settings, autostart, desktop integration | [settings-and-desktop-integration.md](settings-and-desktop-integration.md) |
 | Custom Metrics: RunCat Neo-compatible snapshots | [custom-metrics.md](custom-metrics.md) |
@@ -98,4 +99,6 @@ Commit messages, code comments and the documents themselves refer to the
 | v2F1.7 manual refresh by clicking metric icons | 2.1.7 | custom-metrics-commands.md §13 |
 | v2F1.8 recursive Custom Metric discovery | 2.1.8 | custom-metrics-commands.md §14 |
 | v2F2 standalone Settings | 2.2.0 | settings-and-desktop-integration.md §11 |
-| v2F3 phase initialization | 2.3.0 | requirements.md |
+| v2F3.0 phase initialization | 2.3.0 | requirements.md |
+| v2F3.1 Arch updates via `checkupdates` | 2.3.1 | additional-built-in-metrics.md §19 |
+| v2F3.2 CPU temperature sensors | 2.3.2 | cpu-temperature.md |

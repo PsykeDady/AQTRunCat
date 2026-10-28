@@ -203,6 +203,26 @@ KCM.SimpleKCM {
                 currentIndex: client.settings.fpsSource === "off" ? 1 : 0
                 onActivated: index => client.setSetting("fpsSource", index === 1 ? "off" : "mangohud")
             }
+            QQC2.CheckBox {
+                text: "Show CPU temperature"
+                checked: client.settings.showCpuTemperature !== false
+                onToggled: client.setSetting("showCpuTemperature", checked)
+            }
+            QQC2.CheckBox {
+                text: "Show GPU memory"
+                checked: client.settings.showGpuMemory !== false
+                onToggled: client.setSetting("showGpuMemory", checked)
+            }
+            QQC2.CheckBox {
+                text: "Show GPU temperature"
+                checked: client.settings.showGpuTemperature !== false
+                onToggled: client.setSetting("showGpuTemperature", checked)
+            }
+            QQC2.CheckBox {
+                text: "Show FPS"
+                checked: client.settings.showFps !== false
+                onToggled: client.setSetting("showFps", checked)
+            }
             QQC2.ComboBox {
                 Kirigami.FormData.label: "Check for updates:"
                 model: builtInForm.intervalChoices

@@ -93,6 +93,15 @@ void MetricsBarModel::setConfiguration(bool enabled, const QStringList &order)
     scheduleRebuild();
 }
 
+void MetricsBarModel::setMetricVisibility(bool cpuTemperature, bool gpuMemory, bool gpuTemperature, bool fps)
+{
+    m_showCpuTemperature = cpuTemperature;
+    m_showGpuMemory = gpuMemory;
+    m_showGpuTemperature = gpuTemperature;
+    m_showFps = fps;
+    scheduleRebuild();
+}
+
 void MetricsBarModel::updateSystem(const aqtruncat::metrics::SystemMetricsSnapshot &snapshot)
 {
     m_system = snapshot;
@@ -146,6 +155,11 @@ void MetricsBarModel::rebuild()
 
 std::optional<Item> MetricsBarModel::builtIn(const BuiltInMetric &metric) const
 {
+    if ((metric.id == QLatin1String("cpu.temperature") && !m_showCpuTemperature)
+        || (metric.id == QLatin1String("gpu.memory") && !m_showGpuMemory)
+        || (metric.id == QLatin1String("gpu.temperature") && !m_showGpuTemperature)
+        || (metric.id == QLatin1String("fps") && !m_showFps))
+        return std::nullopt;
     Item item;
     item.id = metric.id;
     item.origin = Origin::BuiltIn;
@@ -160,11 +174,21 @@ std::optional<Item> MetricsBarModel::builtIn(const BuiltInMetric &metric) const
     const auto &s = *m_system;
 
     if (metric.id == QLatin1String("cpu")) {
+        if (s.cpu.status.state == MetricState::Unavailable)
+            return std::nullopt;
         applyStatus(item, s.cpu.status);
         if (s.cpu.status.ok() && s.cpu.usagePercent)
             setPercent(item, *s.cpu.usagePercent);
         if (s.cpu.logicalCpus > 0)
             item.context = QStringLiteral("%1 logical CPUs").arg(s.cpu.logicalCpus);
+    } else if (metric.id == QLatin1String("cpu.temperature")) {
+        if (!m_showCpuTemperature || s.cpuTemperature.status.state == MetricState::Unavailable)
+            return std::nullopt;
+        applyStatus(item, s.cpuTemperature.status);
+        if (s.cpuTemperature.celsius) {
+            item.shortValue = q(aqtruncat::metrics::compactCelsius(*s.cpuTemperature.celsius).value_or(std::string()));
+            item.detail = q(aqtruncat::metrics::formatCelsiusPrecise(*s.cpuTemperature.celsius));
+        }
     } else if (metric.id == QLatin1String("memory") || metric.id == QLatin1String("swap")) {
         applyStatus(item, s.memory.status);
         if (s.memory.status.ok() && s.memory.info) {
@@ -232,6 +256,9 @@ std::optional<Item> MetricsBarModel::builtIn(const BuiltInMetric &metric) const
             item.detail = q(aqtruncat::metrics::formatDuration(*s.uptime.seconds));
         }
     } else if (metric.id.startsWith(QLatin1String("gpu."))) {
+        if ((metric.id == QLatin1String("gpu.memory") && !m_showGpuMemory)
+            || (metric.id == QLatin1String("gpu.temperature") && !m_showGpuTemperature))
+            return std::nullopt;
         // The selected GPU (setting gpuDevice; resolved by the backend).
         const auto gpu = std::find_if(s.gpu.devices.cbegin(), s.gpu.devices.cend(), [](const auto &d) { return d.selected; });
         if (gpu == s.gpu.devices.cend()) {
@@ -251,12 +278,16 @@ std::optional<Item> MetricsBarModel::builtIn(const BuiltInMetric &metric) const
             std::optional<std::string> compact;
             QString detail;
             if (metric.id == QLatin1String("gpu.utilization")) {
+                if (gpu->utilizationStatus.state == MetricState::Unavailable)
+                    return std::nullopt;
                 applyStatus(item, gpu->utilizationStatus);
                 if (gpu->utilizationStatus.ok() && gpu->utilizationPercent) {
                     compact = aqtruncat::metrics::compactPercent(*gpu->utilizationPercent);
                     detail = q(aqtruncat::metrics::formatPercent(*gpu->utilizationPercent));
                 }
             } else if (metric.id == QLatin1String("gpu.memory")) {
+                if (gpu->memoryStatus.state == MetricState::Unavailable)
+                    return std::nullopt;
                 applyStatus(item, gpu->memoryStatus);
                 if (gpu->memoryStatus.ok() && gpu->memoryUsedBytes && gpu->memoryTotalBytes && *gpu->memoryTotalBytes) {
                     const double percent = 100.0 * double(*gpu->memoryUsedBytes) / double(*gpu->memoryTotalBytes);
@@ -265,6 +296,8 @@ std::optional<Item> MetricsBarModel::builtIn(const BuiltInMetric &metric) const
                                                            q(aqtruncat::metrics::formatBytes(*gpu->memoryTotalBytes)));
                 }
             } else {
+                if (gpu->temperatureStatus.state == MetricState::Unavailable)
+                    return std::nullopt;
                 applyStatus(item, gpu->temperatureStatus);
                 if (gpu->temperatureStatus.ok() && gpu->temperatureCelsius) {
                     compact = aqtruncat::metrics::compactCelsius(*gpu->temperatureCelsius);
@@ -279,7 +312,8 @@ std::optional<Item> MetricsBarModel::builtIn(const BuiltInMetric &metric) const
     } else if (metric.id == QLatin1String("fps")) {
         // Source OFF: no item, not a placeholder; the selection is kept so
         // FPS comes back by itself when a source is chosen again.
-        if (aqtruncat::metrics::fpsHidden(s.fps))
+        if (!m_showFps || aqtruncat::metrics::fpsHidden(s.fps)
+            || s.fps.status.state == MetricState::Unavailable)
             return std::nullopt;
         applyStatus(item, s.fps.status);
         if (s.fps.source == "mangohud")
@@ -311,6 +345,10 @@ std::optional<Item> MetricsBarModel::builtIn(const BuiltInMetric &metric) const
         item.status = Status::Pending;
         item.statusMessage = QStringLiteral("waiting for the next sample");
     }
+    if (item.status == Status::Unavailable
+        && (metric.id == QLatin1String("cpu") || metric.id == QLatin1String("cpu.temperature")
+            || metric.id.startsWith(QLatin1String("gpu.")) || metric.id == QLatin1String("fps")))
+        return std::nullopt;
     return item;
 }
 

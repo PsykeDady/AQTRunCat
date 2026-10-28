@@ -1,11 +1,11 @@
-# MEMORY.md — AQTRunCat maintainer notes (2.3.0)
+# MEMORY.md — AQTRunCat maintainer notes (2.3.2)
 
 > Audience: an AI agent or developer maintaining AQTRunCat without access to
 > earlier conversations. Precedence when sources disagree: **actual
 > code/tests > this file (frozen decisions §5) > docs/ > commit messages**.
 >
-> **State (2026-10-27): AQTRunCat 2.3.0** (v2F3 phase initialization;
-> version/docs/roadmap only, no functional changes), branch `feature/v2/f3` — the user
+> **State (2026-10-28): AQTRunCat 2.3.2** (v2F3.2 CPU temperature sensors),
+> branch `feature/v2/f3.1` — the user
 > commits (v2F1: 2.1.1 = 385ceb1, 2.1.2 = 0a72597, 2.1.3 = 613bdbe, 2.1.4 =
 > f3440d6, 2.1.5 = f00da7e, 2.1.6 = ddbe06d + 07ccd3f). **v2F1 — Custom
 > Metrics v3 is complete.** 2.0.0 (commit 61f3a8e) was the consolidation release
@@ -15,9 +15,9 @@
 > `docs/feature-reference.md`, topic documents indexed by `docs/README.md`).
 > `requirements.md` is the **v2 roadmap**: v2F1 complete through 2.1.7,
 > recursive discovery shipped in 2.1.8; v2F2 Standalone Settings (2.2.0)
-> COMPLETE; v2F3 Dependency Advisor & Hardware Monitoring initialized at
-> 2.3.0. Next implementation checkpoint: 2.3.1 Arch Updates via
-> `checkupdates`. See the roadmap for all four checkpoints.
+> COMPLETE; v2F3 checkpoints 2.3.0–2.3.2 complete. Next implementation
+> checkpoint: 2.3.3 Dependency Advisor. 2.3.0 was initialization only, with
+> no functionality.
 >
 > The user owns every Git write (branches, commits, merges, tags); read-only
 > Git only. Reports to the user in Italian; code, comments and
@@ -43,7 +43,7 @@
 >   Italian locale (comma): use `LC_ALL=C` in generated fixtures.
 > - The shell sandbox cannot reach the user's AT-SPI bus.
 >
-> Last verified (2.3.0, 2026-10-27): see §9 (clean build, full ctest,
+> Last verified (2.3.2, 2026-10-28): see §9 (clean build, full ctest,
 > installer/packaging checks).
 
 ---
@@ -109,7 +109,7 @@
 ## 1. Project identity
 
 - Name **AQTRunCat**, tagline **"A Cute Run Cat for Linux"**, executable
-  **`aqtruncat`**, version **2.3.0** (CMake `PROJECT_VERSION`). History:
+  **`aqtruncat`**, version **2.3.2** (CMake `PROJECT_VERSION`). History:
   1.0.0 = M0–M9; F<n> raised the minor and its sub-features the patch (1.4.2
   = F4.2, 1.5.6 = F5.1–F5.6, 1.6.3 = F6.1–F6.3, 1.7.4 = F7.1–F7.4); 2.0.0 =
   consolidation of 1.7.4. v2 rule (requirements.md "Versioning"): v2F<n>
@@ -177,14 +177,16 @@ F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (party
 2.1.7 DONE    v2F1.7 manual refresh by clicking metric icons (RefreshCustomMetric, API schema 7) (docs/custom-metrics-commands.md §13) — v2F1 COMPLETE
 2.1.8 DONE    recursive Custom Metric discovery through organisational directories (docs/custom-metrics-commands.md §14); schema remains 7
 2.2.0 DONE    v2F2 standalone Settings; CLI, app launcher, tray/Plasmoid entry; single D-Bus-owned window; clarified tray autostart label
-2.3.0 CURRENT v2F3 phase initialization; version/docs/roadmap only, no new functionality
-NEXT          2.3.1 Arch Updates via checkupdates
+2.3.0 DONE    v2F3 phase initialization; version/docs/roadmap only, no new functionality
+2.3.1 DONE    v2F3.1 Arch updates via checkupdates
+2.3.2 DONE    v2F3.2 native CPU temperature metric (`cpu.temperature`); follow-up display prefs use API schema 9
+NEXT          2.3.3 Dependency Advisor
 ```
 
-v2 roadmap summary (requirements.md is authoritative; revised 2026-10-27):
+v2 roadmap summary (requirements.md is authoritative; revised 2026-10-28):
 
-- **Runner convention**: v2F1 introduced Rickroll at 2.1.1. v2F2 and
-  planned v2F3 have no new runner; do not add one unless requested.
+- **Runner convention**: v2F1 introduced Rickroll at 2.1.1. v2F2 and v2F3
+  add no runner; do not add one unless requested.
 - **v2F1** 2.1.0 baseline, 2.1.1 Rickroll, 2.1.2 `enabled`, 2.1.3 execution
   warnings, 2.1.4 `display.showBar`, 2.1.5 groups/inheritance, 2.1.6
   reload/rescan, 2.1.7 click-to-refresh (each shifted +1 patch from the
@@ -195,11 +197,10 @@ v2 roadmap summary (requirements.md is authoritative; revised 2026-10-27):
   activate it. Shared INI/backend; closing Settings exits only that process.
   Backend activation/lifetime are unchanged. Autostart label names the Qt
   Tray Plugin; key/value and XDG behavior are unchanged.
-- **v2F3 Dependency Advisor & Hardware Monitoring**: current 2.3.0 is
-  initialization only; next 2.3.1 replaces Arch update detection with
-  `checkupdates`; 2.3.2 adds CPU temperature sensors; 2.3.3 adds the
-  Dependency Advisor. Full requirements and constraints are in
-  `requirements.md`; do not implement ahead of the requested checkpoint.
+- **v2F3 Dependency Advisor & Hardware Monitoring**: 2.3.0 initialization,
+  2.3.1 `checkupdates`, and 2.3.2 CPU temperature are complete. Next is
+  2.3.3 Dependency Advisor; see `requirements.md` and do not implement it
+  before requested.
 
 - Build: `cmake -S . -B build && cmake --build build && ctest --test-dir build`.
   Clean build: **0 warnings** (`-Wall -Wextra -Wpedantic` on all targets).
@@ -747,7 +748,7 @@ Key components:
 | F5 GPU | per-field state; Intel = *activity* from RC6 residency delta (method `rc6-residency`, label "Activity"), not per-engine utilization; amdgpu sysfs; NVIDIA via NVML `dlopen("libnvidia-ml.so.1")` only; integrated Intel: VRAM/temperature unavailable (no CPU-package substitute); runtime-suspended GPU never read; `integrated` null for AMD | no privileges, no subprocess, never wake a dGPU, never invent values |
 | F5 GPU selection | setting `gpuDevice` `auto` (first known discrete, else first) or id; resolved in the sampler, published as `data.selected`; absent chosen id stays persisted, auto meanwhile; Metrics Bar `gpu.utilization/memory/temperature` follow it | one GPU per bar slot without client logic |
 | F5 FPS | only MangoHud's CSV log (verified in MangoHud source: appended + flushed per sample); `output_folder` from `~/.config/MangoHud/*.conf` (re-read ≤ every 5 s); last complete row; fresh ≤ 3 s, stale ≤ 60 s (no value), else inactive; malformed row = error; setting `fpsSource` mangohud (default) / off; **off = FPS hidden everywhere** (Dashboard row + Gaming header, Metrics Bar item without a slot or placeholder, selection kept; Plasmoid row) via one rule `condition == disabled` (`metrics::fpsHidden`, `logic.js hiddenMetric`); API still reports `fps` as `disabled`; default `FpsMetrics::condition` is Inactive; a source change republishes FPS at once (fix 2026-10-22, still 1.5.6) | no injection, no overlay, never from GPU load/refresh rate; MangoHud control socket has no FPS |
-| F5 updates commands | `pacman -Qu` (remote opt-in: `checkupdates`), `apt-get -s -q -o Debug::NoLocking=true dist-upgrade` (no remote: needs root), `dnf -q -C check-update` (remote: `--refresh`), `flatpak remote-ls --user/--system/--installation=N --updates --cached --app/--runtime --columns=ref`; manager by installed capability, os-release only for ties | read-only, no root, local metadata by default, verified no network |
+| F5 updates commands | Arch/derivatives: `checkupdates --nosync --nocolor` (default) or `checkupdates --nocolor` (explicit refresh); mandatory `pacman-contrib`, missing = Unavailable with install suggestion, no `pacman -Qu` fallback; exit 2 + empty stdout = zero, strict record parsing; official repos only, no AUR. Apt: `apt-get -s -q -o Debug::NoLocking=true dist-upgrade`; DNF: `dnf -q -C check-update` (remote: `--refresh`); Flatpak as below | read-only, no root; refresh opt-in; primary pacman DB untouched |
 | F5 updates scheduling | `UpdatesService` in the backend: two jobs, ≤1 command each, first check 30 s after start, next `updatesIntervalMinutes` (60; 0 off; 15–1440) after completion, remote ≥ 60 min; debounced (30 s) re-check on package-db/Flatpak `.changed` changes; 120 s timeout, 4 MiB/stream, process-group SIGKILL; LC_ALL=C, stdin /dev/null | infrequent, cached, non-overlapping, bounded |
 | F5 update semantics | count only when ok; error keeps `lastSuccess` but no count; metadata > 7 days = stale warning; Flatpak count = distinct refs per installation summed (apps + runtimes, no .Locale/.Debug); any failing installation → error (no partial sum); no Flatpak → unavailable | honest counts |
 | F6 hover summary | tray and Plasmoid show the same lines: `CPU: <formatPercent>`, `RAM: <percent> · <formatMemoryDetail>`, `Swap: <percent> · <formatSwapDetail>`; no Swap line when swap is not configured; missing = `waiting for data`/`unavailable`/`error` (never 0, never the backend's message); `Connecting to the backend…` / `Backend not running` replace values (after the client's 3 s grace); Plasmoid title "AQTRunCat", first line the runner | one formatter for API `detail` and tray (`metrics::formatMemoryDetail/formatSwapDetail`); Plasmoid formats nothing itself |
@@ -928,6 +929,7 @@ sources exist but none has a rate → Pending; Δ0 → real 0 (Ok).
 | FPS (F5) | newest MangoHud `*.csv` (not `_summary`) in `output_folder` | fps, frametime, condition | last complete row; ≤3 s fresh | stale/inactive/missing/not-configured/disabled → Unavailable; bad log → Error | §11 item 23 |
 | Kernel / distribution (F5) | `uname(2)`; os-release → lsb-release → release files | strings | every 600 s | Unavailable, never failure | — |
 | Updates (F5) | backend `UpdatesService` (not the sampler) | count, manager, lastSuccess, metadata age | §5 F5 rows | Unavailable (no tool/off), Error (failed), Pending (first check) | §11 item 25 |
+| CPU temperature (2.3.2) | backend `CpuTemperatureSampler` via hwmon; identified thermal-zone fallback | °C, one decimal | `cpu.temperature` | Unavailable (no identified sensor), Error (identified sensor unreadable) | `requirements.md` v2F3.2; `docs/cpu-temperature.md` |
 
 Sampling cost: `sample()` ≈ 108 µs (≈50 syscalls: 6 opens, 18 reads,
 ~14 stats for classification, 1 statfs); classification is redone every
@@ -936,6 +938,25 @@ sample on purpose (hot-plug) — caching not needed.
 ---
 
 ## 9. Tests and validation
+
+2.3.2 (2026-10-28, native CPU temperature): fresh Release Ninja configure in
+`/tmp/aqtruncat-232-validation`; full build completed after fixing a test
+fixture compile error, no compiler warnings; CTest **59/59** passed (190.79 s),
+including `cputemperature`, installer and `packaging-versions`; all shipped
+version reports show 2.3.2; `git diff --check` clean. Read-only host CLI smoke
+test reported CPU package temperature 74.0 °C. No user config or hardware
+configuration was modified. Host-only smoke does not establish portability.
+
+2.3.1 (2026-10-28, Arch updates via `checkupdates`): fresh Release build in
+`/tmp/aqtruncat-231-release`, no compiler warnings; packageupdates and
+updatesservice tests pass; full in-sandbox CTest **57/58** (all except the
+installer). Under Makefiles, its `make -q` freshness check fails after a
+successful build; a separate in-sandbox Ninja run then hit sandbox `/proc`
+visibility for spawned processes. Standalone installer validation outside
+the sandbox with a clean Release Ninja build passed **331/331**;
+`packaging-versions`, all executable version
+reports (`2.3.1`) and `git diff --check` pass. No package DB or real user
+configuration was touched.
 
 2.3.0 (2026-10-27, v2F3 initialization): fresh Release configure/build in
 `/tmp/aqtruncat-v2f3.4aihKc/build` (359 build steps; no warnings); ctest

@@ -217,8 +217,9 @@ ColumnLayout {
                 Kirigami.Icon {
                     Layout.preferredWidth: Kirigami.Units.iconSizes.small
                     Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                    visible: item.modelData.warning
-                    source: "dialog-warning"
+                    visible: item.modelData.warning === true || item.modelData.state === "error"
+                          || item.modelData.state === "unavailable"
+                    source: item.modelData.state === "error" ? "dialog-error" : "dialog-warning"
                 }
                 PlasmaComponents.Label {
                     Layout.fillWidth: true

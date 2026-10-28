@@ -1,0 +1,1111 @@
+[
+  {
+    "category": "builtin",
+    "compactLabel": "CPU",
+    "compactValue": "20%",
+    "data": {
+      "logicalCpus": 8,
+      "section": {
+        "message": "",
+        "state": "ok"
+      }
+    },
+    "detail": "",
+    "formattedValue": "19.6 %",
+    "icon": null,
+    "id": "cpu",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": 0.19600499375780273,
+    "state": "ok",
+    "title": "CPU",
+    "unit": "percent",
+    "updatedAt": null,
+    "value": 19.600499375780274
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "CPU°",
+    "compactValue": "83°",
+    "data": {
+      "section": {
+        "message": "",
+        "state": "ok"
+      },
+      "sensor": "Package id 0"
+    },
+    "detail": "Package id 0",
+    "formattedValue": "83.0 °C",
+    "icon": null,
+    "id": "cpu.temperature",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": null,
+    "state": "ok",
+    "title": "CPU Temperature",
+    "unit": "celsius",
+    "updatedAt": null,
+    "value": 83
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "MEM",
+    "compactValue": "78%",
+    "data": {
+      "availableBytes": 7347183616,
+      "availableIsEstimate": false,
+      "section": {
+        "message": "",
+        "state": "ok"
+      },
+      "totalBytes": 33371512832,
+      "usedBytes": 26024329216
+    },
+    "detail": "24.2 GiB / 31.1 GiB used",
+    "formattedValue": "78.0 %",
+    "icon": null,
+    "id": "memory",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": 0.7798366632946058,
+    "state": "ok",
+    "title": "Memory",
+    "unit": "percent",
+    "updatedAt": null,
+    "value": 77.98366632946058
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "SWAP",
+    "compactValue": "37%",
+    "data": {
+      "present": true,
+      "section": {
+        "message": "",
+        "state": "ok"
+      },
+      "totalBytes": 17056260096,
+      "usedBytes": 6338637824
+    },
+    "detail": "5.9 GiB / 15.9 GiB",
+    "formattedValue": "37.2 %",
+    "icon": null,
+    "id": "swap",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": 0.37163116581967015,
+    "state": "ok",
+    "title": "Swap",
+    "unit": "percent",
+    "updatedAt": null,
+    "value": 37.16311658196702
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "NET↓",
+    "compactValue": "3.5K",
+    "data": {
+      "countedInterfaces": 1,
+      "interfaces": [
+        {
+          "counted": false,
+          "counterReset": false,
+          "downloadBytesPerSecond": 0,
+          "kind": "virtual",
+          "name": "docker0",
+          "uploadBytesPerSecond": 0
+        },
+        {
+          "counted": false,
+          "counterReset": false,
+          "downloadBytesPerSecond": 479.99927808173544,
+          "kind": "loopback",
+          "name": "lo",
+          "uploadBytesPerSecond": 479.99927808173544
+        },
+        {
+          "counted": true,
+          "counterReset": false,
+          "downloadBytesPerSecond": 3595.994591629001,
+          "kind": "physical",
+          "name": "wlan0",
+          "uploadBytesPerSecond": 4564.993134256505
+        }
+      ],
+      "section": {
+        "message": "",
+        "state": "ok"
+      }
+    },
+    "detail": "",
+    "formattedValue": "3.5 KiB/s",
+    "icon": null,
+    "id": "network.download",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": null,
+    "state": "ok",
+    "title": "Network download",
+    "unit": "bytes-per-second",
+    "updatedAt": null,
+    "value": 3595.994591629001
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "NET↑",
+    "compactValue": "4.5K",
+    "data": {
+      "countedInterfaces": 1,
+      "interfaces": [
+        {
+          "counted": false,
+          "counterReset": false,
+          "downloadBytesPerSecond": 0,
+          "kind": "virtual",
+          "name": "docker0",
+          "uploadBytesPerSecond": 0
+        },
+        {
+          "counted": false,
+          "counterReset": false,
+          "downloadBytesPerSecond": 479.99927808173544,
+          "kind": "loopback",
+          "name": "lo",
+          "uploadBytesPerSecond": 479.99927808173544
+        },
+        {
+          "counted": true,
+          "counterReset": false,
+          "downloadBytesPerSecond": 3595.994591629001,
+          "kind": "physical",
+          "name": "wlan0",
+          "uploadBytesPerSecond": 4564.993134256505
+        }
+      ],
+      "section": {
+        "message": "",
+        "state": "ok"
+      }
+    },
+    "detail": "",
+    "formattedValue": "4.5 KiB/s",
+    "icon": null,
+    "id": "network.upload",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": null,
+    "state": "ok",
+    "title": "Network upload",
+    "unit": "bytes-per-second",
+    "updatedAt": null,
+    "value": 4564.993134256505
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "ROOT",
+    "compactValue": "66%",
+    "data": {
+      "availableBytes": 66914324480,
+      "path": "/",
+      "section": {
+        "message": "",
+        "state": "ok"
+      },
+      "totalBytes": 210241560576,
+      "usedBytes": 132573040640
+    },
+    "detail": "62.3 GiB available",
+    "formattedValue": "66.5 %",
+    "icon": null,
+    "id": "storage.root",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": 0.6645686084442078,
+    "state": "ok",
+    "title": "Root storage",
+    "unit": "percent",
+    "updatedAt": null,
+    "value": 66.45686084442079
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "HOME",
+    "compactValue": "37%",
+    "data": {
+      "availableBytes": 589469372416,
+      "path": "/home/psykedady",
+      "section": {
+        "message": "",
+        "state": "ok"
+      },
+      "totalBytes": 983050194944,
+      "usedBytes": 343569620992
+    },
+    "detail": "549.0 GiB available",
+    "formattedValue": "36.8 %",
+    "icon": null,
+    "id": "storage.home",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": 0.3682264336424829,
+    "state": "ok",
+    "title": "Home storage",
+    "unit": "percent",
+    "updatedAt": null,
+    "value": 36.82264336424829
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "DSK↓",
+    "compactValue": "0B",
+    "data": {
+      "countedDevices": 2,
+      "section": {
+        "message": "",
+        "state": "ok"
+      }
+    },
+    "detail": "",
+    "formattedValue": "0 B/s",
+    "icon": null,
+    "id": "disk.read",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": null,
+    "state": "ok",
+    "title": "Disk read",
+    "unit": "bytes-per-second",
+    "updatedAt": null,
+    "value": 0
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "DSK↑",
+    "compactValue": "24K",
+    "data": {
+      "countedDevices": 2,
+      "section": {
+        "message": "",
+        "state": "ok"
+      }
+    },
+    "detail": "",
+    "formattedValue": "24.0 KiB/s",
+    "icon": null,
+    "id": "disk.write",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": null,
+    "state": "ok",
+    "title": "Disk write",
+    "unit": "bytes-per-second",
+    "updatedAt": null,
+    "value": 24575.963037784855
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "UP",
+    "compactValue": "2d",
+    "data": {
+      "seconds": 202708.5,
+      "section": {
+        "message": "",
+        "state": "ok"
+      }
+    },
+    "detail": "since boot",
+    "formattedValue": "2d 8h 18m",
+    "icon": null,
+    "id": "uptime",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": null,
+    "state": "ok",
+    "title": "Uptime",
+    "unit": "seconds",
+    "updatedAt": null,
+    "value": 202708
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "GPU",
+    "compactValue": "6%",
+    "data": {
+      "bootVga": true,
+      "card": "card1",
+      "device": "0000:00:02.0",
+      "deviceId": "9a49",
+      "driver": "i915",
+      "frequencyMHz": 0,
+      "integrated": true,
+      "memory": {
+        "message": "integrated GPU: it uses shared system memory",
+        "state": "unavailable",
+        "totalBytes": null,
+        "usedBytes": null
+      },
+      "model": "Intel TigerLake-LP GT2 [Iris Xe Graphics]",
+      "section": {
+        "message": "",
+        "state": "ok"
+      },
+      "selected": true,
+      "suspended": false,
+      "temperature": {
+        "celsius": null,
+        "message": "integrated GPU: no sensor of its own (it is part of the CPU package)",
+        "sensor": "",
+        "state": "unavailable"
+      },
+      "utilization": {
+        "message": "",
+        "method": "rc6-residency",
+        "percent": 5.800141676459425,
+        "state": "ok"
+      },
+      "vendor": "Intel",
+      "vendorId": "8086"
+    },
+    "detail": "i915 · integrated · Metrics Bar GPU",
+    "formattedValue": "5.8 %",
+    "icon": null,
+    "id": "gpu:0000:00:02.0",
+    "integration": null,
+    "items": [
+      {
+        "compactLabel": "GPU",
+        "compactValue": "6%",
+        "detail": "time out of the RC6 power-saving state",
+        "formattedValue": "5.8 %",
+        "id": "utilization",
+        "normalized": 0.058001416764594256,
+        "state": "ok",
+        "title": "Activity",
+        "warning": false
+      },
+      {
+        "compactLabel": "VRAM",
+        "compactValue": null,
+        "detail": "integrated GPU: it uses shared system memory",
+        "formattedValue": "N/A",
+        "id": "memory",
+        "normalized": null,
+        "state": "unavailable",
+        "title": "Memory",
+        "warning": false
+      },
+      {
+        "compactLabel": "GPU°",
+        "compactValue": null,
+        "detail": "integrated GPU: no sensor of its own (it is part of the CPU package)",
+        "formattedValue": "N/A",
+        "id": "temperature",
+        "normalized": null,
+        "state": "unavailable",
+        "title": "Temperature",
+        "warning": false
+      }
+    ],
+    "kind": "system",
+    "message": "",
+    "normalized": null,
+    "state": "ok",
+    "title": "Intel TigerLake-LP GT2 [Iris Xe Graphics]",
+    "unit": "percent",
+    "updatedAt": null,
+    "value": 5.800141676459425
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "FPS",
+    "compactValue": null,
+    "data": {
+      "ageSeconds": null,
+      "application": "",
+      "condition": "disabled",
+      "fps": null,
+      "frametimeMs": null,
+      "lastFps": null,
+      "section": {
+        "message": "the FPS source is turned off",
+        "state": "unavailable"
+      },
+      "source": ""
+    },
+    "detail": "",
+    "formattedValue": "",
+    "icon": null,
+    "id": "fps",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "the FPS source is turned off",
+    "normalized": null,
+    "state": "unavailable",
+    "title": "FPS",
+    "unit": "fps",
+    "updatedAt": null,
+    "value": null
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "UPD",
+    "compactValue": "127",
+    "data": {
+      "checking": false,
+      "count": 127,
+      "ignored": 0,
+      "lastSuccess": "2026-10-28T16:06:41Z",
+      "manager": "pacman",
+      "metadataStale": false,
+      "metadataTime": "2026-10-28T16:06:41Z",
+      "note": "",
+      "remote": true,
+      "section": {
+        "message": "",
+        "state": "ok"
+      }
+    },
+    "detail": "pacman · checked 17:06",
+    "formattedValue": "127 updates",
+    "icon": null,
+    "id": "updates.packages",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": null,
+    "state": "ok",
+    "title": "Package updates",
+    "unit": "count",
+    "updatedAt": null,
+    "value": 127
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "FLAT",
+    "compactValue": "0",
+    "data": {
+      "apps": 0,
+      "checking": false,
+      "count": 0,
+      "ignored": 0,
+      "installations": [
+        {
+          "apps": 0,
+          "message": "",
+          "name": "user",
+          "runtimes": 0,
+          "state": "ok"
+        },
+        {
+          "apps": 0,
+          "message": "",
+          "name": "system",
+          "runtimes": 0,
+          "state": "ok"
+        }
+      ],
+      "lastSuccess": "2026-10-28T16:06:37Z",
+      "manager": "flatpak",
+      "metadataStale": false,
+      "metadataTime": "2026-10-28T16:06:37Z",
+      "note": "",
+      "remote": true,
+      "runtimes": 0,
+      "section": {
+        "message": "",
+        "state": "ok"
+      }
+    },
+    "detail": "checked 17:06",
+    "formattedValue": "Up to date",
+    "icon": null,
+    "id": "updates.flatpak",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": null,
+    "state": "ok",
+    "title": "Flatpak updates",
+    "unit": "count",
+    "updatedAt": null,
+    "value": 0
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "",
+    "compactValue": null,
+    "data": {
+      "machine": "x86_64",
+      "release": "7.2.11-zen1-1-zen",
+      "section": {
+        "message": "",
+        "state": "ok"
+      },
+      "sysname": "Linux",
+      "version": "#1 ZEN SMP PREEMPT_DYNAMIC Fri, 16 Oct 2026 00:28:42 +0000"
+    },
+    "detail": "x86_64",
+    "formattedValue": "Linux 7.2.11-zen1-1-zen",
+    "icon": null,
+    "id": "kernel",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": null,
+    "state": "ok",
+    "title": "Kernel",
+    "unit": null,
+    "updatedAt": null,
+    "value": null
+  },
+  {
+    "category": "builtin",
+    "compactLabel": "",
+    "compactValue": null,
+    "data": {
+      "buildId": "rolling",
+      "codename": "",
+      "id": "arch",
+      "idLike": [],
+      "name": "Arch Linux",
+      "prettyName": "Arch Linux",
+      "section": {
+        "message": "",
+        "state": "ok"
+      },
+      "source": "/etc/os-release",
+      "variant": "",
+      "version": "",
+      "versionId": ""
+    },
+    "detail": "rolling · ID arch",
+    "formattedValue": "Arch Linux",
+    "icon": null,
+    "id": "distribution",
+    "integration": null,
+    "items": [],
+    "kind": "system",
+    "message": "",
+    "normalized": null,
+    "state": "ok",
+    "title": "Distribution",
+    "unit": null,
+    "updatedAt": null,
+    "value": null
+  },
+  {
+    "category": "integration",
+    "compactLabel": "",
+    "compactValue": "11%",
+    "data": {
+      "configuredEnabled": true,
+      "configuredId": "claude-code",
+      "discovered": true,
+      "explicit": false,
+      "explicitPath": "",
+      "groupId": "",
+      "hasSnapshot": true,
+      "path": "/home/psykedady/.local/share/AQTRunCat/metrics/claude-code/metric.json",
+      "sourceId": "/home/psykedady/.local/share/AQTRunCat/metrics/claude-code/metric.json"
+    },
+    "detail": "",
+    "enabled": true,
+    "formattedValue": "11%",
+    "icon": {
+      "resolved": "/home/psykedady/.local/share/AQTRunCat/metrics/claude-code/claude-code.svg",
+      "type": "file",
+      "value": "./claude-code.svg"
+    },
+    "id": "custom:/home/psykedady/.local/share/AQTRunCat/metrics/claude-code/metric.json",
+    "integration": "claude-code",
+    "items": [
+      {
+        "compactLabel": "5h",
+        "compactValue": "11%",
+        "detail": "Resets at 20:40",
+        "formattedValue": "11% used",
+        "id": "five_hour",
+        "normalized": 0.11,
+        "title": "Current session (5h)",
+        "warning": false
+      },
+      {
+        "compactLabel": "7d",
+        "compactValue": "25%",
+        "detail": "Resets Oct 30, 19:00",
+        "formattedValue": "25% used",
+        "id": "seven_day",
+        "normalized": 0.25,
+        "title": "Current week (all models)",
+        "warning": false
+      },
+      {
+        "compactLabel": "",
+        "compactValue": null,
+        "detail": "",
+        "formattedValue": "live, Claude Code status line",
+        "id": "source",
+        "normalized": null,
+        "title": "Usage data",
+        "warning": false
+      }
+    ],
+    "kind": "command",
+    "message": "",
+    "normalized": null,
+    "showBar": true,
+    "state": "ok",
+    "title": "Claude Code",
+    "unit": null,
+    "updatedAt": "2026-10-28T16:23:07.112Z",
+    "value": null,
+    "warnings": []
+  },
+  {
+    "category": "integration",
+    "compactLabel": "",
+    "compactValue": "0%",
+    "data": {
+      "configuredEnabled": true,
+      "configuredId": "codex",
+      "discovered": true,
+      "explicit": false,
+      "explicitPath": "",
+      "groupId": "",
+      "hasSnapshot": true,
+      "path": "/home/psykedady/.local/share/AQTRunCat/metrics/codex/metric.json",
+      "sourceId": "/home/psykedady/.local/share/AQTRunCat/metrics/codex/metric.json"
+    },
+    "detail": "",
+    "enabled": true,
+    "formattedValue": "0%",
+    "icon": {
+      "resolved": "/home/psykedady/.local/share/AQTRunCat/metrics/codex/codex.svg",
+      "type": "file",
+      "value": "./codex.svg"
+    },
+    "id": "custom:/home/psykedady/.local/share/AQTRunCat/metrics/codex/metric.json",
+    "integration": "codex",
+    "items": [
+      {
+        "compactLabel": "cx5h",
+        "compactValue": "0%",
+        "detail": "100% left · Resets at 21:18",
+        "formattedValue": "0% used",
+        "id": "window_300m",
+        "normalized": 0,
+        "title": "5h limit",
+        "warning": false
+      },
+      {
+        "compactLabel": "cx7d",
+        "compactValue": "4%",
+        "detail": "96% left · Resets Nov 4, 10:19",
+        "formattedValue": "4% used",
+        "id": "window_10080m",
+        "normalized": 0.04,
+        "title": "Weekly limit",
+        "warning": false
+      },
+      {
+        "compactLabel": "",
+        "compactValue": null,
+        "detail": "ChatGPT plus plan",
+        "formattedValue": "live, Codex app-server",
+        "id": "source",
+        "normalized": null,
+        "title": "Usage data",
+        "warning": false
+      }
+    ],
+    "kind": "command",
+    "message": "",
+    "normalized": null,
+    "showBar": true,
+    "state": "ok",
+    "title": "Codex",
+    "unit": null,
+    "updatedAt": "2026-10-28T16:24:26.245Z",
+    "value": null,
+    "warnings": []
+  },
+  {
+    "category": "custom",
+    "compactLabel": "",
+    "compactValue": "7/10",
+    "data": {
+      "configuredEnabled": true,
+      "configuredId": "d10-metric",
+      "discovered": true,
+      "explicit": false,
+      "explicitPath": "",
+      "groupId": "",
+      "hasSnapshot": true,
+      "path": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/d10-metric/metric.json",
+      "sourceId": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/d10-metric/metric.json"
+    },
+    "detail": "",
+    "enabled": true,
+    "formattedValue": "7/10",
+    "icon": {
+      "resolved": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/d10-metric/d10.svg",
+      "type": "file",
+      "value": "./d10.svg"
+    },
+    "id": "custom:/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/d10-metric/metric.json",
+    "integration": null,
+    "items": [
+      {
+        "compactLabel": "",
+        "compactValue": null,
+        "detail": "",
+        "formattedValue": "7/10",
+        "id": null,
+        "normalized": 0.3157894736842105,
+        "title": "D10",
+        "warning": false
+      }
+    ],
+    "kind": "command",
+    "message": "",
+    "normalized": null,
+    "showBar": false,
+    "state": "ok",
+    "title": "D10",
+    "unit": null,
+    "updatedAt": "2026-10-28T16:25:34.278Z",
+    "value": null,
+    "warnings": []
+  },
+  {
+    "category": "custom",
+    "compactLabel": "",
+    "compactValue": null,
+    "data": {
+      "configuredEnabled": true,
+      "configuredId": "dice-metrics",
+      "discovered": true,
+      "explicit": false,
+      "explicitPath": "",
+      "groupId": "",
+      "hasSnapshot": true,
+      "path": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/metric.json",
+      "sourceId": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/metric.json"
+    },
+    "detail": "",
+    "enabled": true,
+    "formattedValue": "",
+    "icon": {
+      "resolved": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/dices.svg",
+      "type": "file",
+      "value": "./dices.svg"
+    },
+    "id": "custom:/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/metric.json",
+    "integration": null,
+    "items": [],
+    "kind": "group",
+    "message": "",
+    "normalized": null,
+    "showBar": true,
+    "state": "ok",
+    "title": "Dice Metrics",
+    "unit": null,
+    "updatedAt": null,
+    "value": null,
+    "warnings": []
+  },
+  {
+    "category": "custom",
+    "compactLabel": "",
+    "compactValue": "3/6",
+    "data": {
+      "configuredEnabled": true,
+      "configuredId": "dice-metrics/d6-metric",
+      "discovered": true,
+      "explicit": false,
+      "explicitPath": "",
+      "groupId": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/metric.json",
+      "hasSnapshot": true,
+      "path": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/d6-metric/metric.json",
+      "sourceId": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/d6-metric/metric.json"
+    },
+    "detail": "",
+    "enabled": true,
+    "formattedValue": "3/6",
+    "icon": {
+      "resolved": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/d6-metric/dice.svg",
+      "type": "file",
+      "value": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/d6-metric/dice.svg"
+    },
+    "id": "custom:/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/d6-metric/metric.json",
+    "integration": null,
+    "items": [
+      {
+        "compactLabel": "",
+        "compactValue": null,
+        "detail": "",
+        "formattedValue": "3/6",
+        "id": null,
+        "normalized": 0.4,
+        "title": "D6",
+        "warning": false
+      }
+    ],
+    "kind": "command",
+    "message": "",
+    "normalized": null,
+    "showBar": false,
+    "state": "ok",
+    "title": "D6",
+    "unit": null,
+    "updatedAt": "2026-10-28T16:25:34.278Z",
+    "value": null,
+    "warnings": []
+  },
+  {
+    "category": "custom",
+    "compactLabel": "",
+    "compactValue": "20/20",
+    "data": {
+      "configuredEnabled": true,
+      "configuredId": "dice-metrics/d20-metric",
+      "discovered": true,
+      "explicit": false,
+      "explicitPath": "",
+      "groupId": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/metric.json",
+      "hasSnapshot": true,
+      "path": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/d20-metric/metric.json",
+      "sourceId": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/d20-metric/metric.json"
+    },
+    "detail": "",
+    "enabled": true,
+    "formattedValue": "20/20",
+    "icon": {
+      "resolved": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/dices.svg",
+      "type": "file",
+      "value": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/dices.svg"
+    },
+    "id": "custom:/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/d20-metric/metric.json",
+    "integration": null,
+    "items": [
+      {
+        "compactLabel": "",
+        "compactValue": null,
+        "detail": "",
+        "formattedValue": "20/20",
+        "id": null,
+        "normalized": 1,
+        "title": "D20",
+        "warning": false
+      }
+    ],
+    "kind": "command",
+    "message": "",
+    "normalized": null,
+    "showBar": false,
+    "state": "ok",
+    "title": "D20",
+    "unit": null,
+    "updatedAt": "2026-10-28T16:25:34.278Z",
+    "value": null,
+    "warnings": []
+  },
+  {
+    "category": "custom",
+    "compactLabel": "",
+    "compactValue": null,
+    "data": {
+      "configuredEnabled": false,
+      "configuredId": "dice-metrics/d100-metric",
+      "discovered": true,
+      "explicit": false,
+      "explicitPath": "",
+      "groupId": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/metric.json",
+      "hasSnapshot": true,
+      "path": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/d100-metric/metric.json",
+      "sourceId": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/d100-metric/metric.json"
+    },
+    "detail": "",
+    "enabled": false,
+    "formattedValue": "",
+    "icon": {
+      "resolved": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/dices.svg",
+      "type": "file",
+      "value": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/dices.svg"
+    },
+    "id": "custom:/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/dice-metrics/d100-metric/metric.json",
+    "integration": null,
+    "items": [],
+    "kind": "command",
+    "message": "Disabled.",
+    "normalized": null,
+    "showBar": true,
+    "state": "unavailable",
+    "title": "D100",
+    "unit": null,
+    "updatedAt": null,
+    "value": null,
+    "warnings": []
+  },
+  {
+    "category": "custom",
+    "compactLabel": "",
+    "compactValue": "1",
+    "data": {
+      "configuredEnabled": true,
+      "configuredId": "wront-icon",
+      "discovered": true,
+      "explicit": false,
+      "explicitPath": "",
+      "groupId": "",
+      "hasSnapshot": true,
+      "path": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/wrong-icon/metric.json",
+      "sourceId": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/wrong-icon/metric.json"
+    },
+    "detail": "",
+    "enabled": true,
+    "formattedValue": "1",
+    "icon": {
+      "resolved": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/wrong-icon/d10.svg",
+      "type": "file",
+      "value": "./d10.svg"
+    },
+    "id": "custom:/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/wrong-icon/metric.json",
+    "integration": null,
+    "items": [
+      {
+        "compactLabel": "",
+        "compactValue": null,
+        "detail": "",
+        "formattedValue": "1",
+        "id": null,
+        "normalized": 1,
+        "title": "WrongIcon",
+        "warning": false
+      }
+    ],
+    "kind": "command",
+    "message": "",
+    "normalized": null,
+    "showBar": true,
+    "state": "ok",
+    "title": "WrongIcon",
+    "unit": null,
+    "updatedAt": "2026-10-28T16:25:34.278Z",
+    "value": null,
+    "warnings": [
+      "icon file /home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/wrong-icon/d10.svg does not exist"
+    ]
+  },
+  {
+    "category": "custom",
+    "compactLabel": "",
+    "compactValue": null,
+    "data": {
+      "configuredEnabled": true,
+      "configuredId": "wront-metric",
+      "discovered": true,
+      "explicit": false,
+      "explicitPath": "",
+      "groupId": "",
+      "hasSnapshot": true,
+      "path": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/wrong-metric/metric.json",
+      "sourceId": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/wrong-metric/metric.json"
+    },
+    "detail": "",
+    "enabled": true,
+    "formattedValue": "",
+    "icon": {
+      "resolved": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/wrong-metric/dice.svg",
+      "type": "file",
+      "value": "./dice.svg"
+    },
+    "id": "custom:/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/wrong-metric/metric.json",
+    "integration": null,
+    "items": [],
+    "kind": "command",
+    "message": "Executable not found: /home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/wrong-metric/wrong-metric.sh",
+    "normalized": null,
+    "showBar": true,
+    "state": "error",
+    "title": "WrongMetric",
+    "unit": null,
+    "updatedAt": null,
+    "value": null,
+    "warnings": []
+  },
+  {
+    "category": "custom",
+    "compactLabel": "",
+    "compactValue": "10",
+    "data": {
+      "configuredEnabled": true,
+      "configuredId": "wront-range",
+      "discovered": true,
+      "explicit": false,
+      "explicitPath": "",
+      "groupId": "",
+      "hasSnapshot": true,
+      "path": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/wrong-range/metric.json",
+      "sourceId": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/wrong-range/metric.json"
+    },
+    "detail": "",
+    "enabled": true,
+    "formattedValue": "10",
+    "icon": {
+      "resolved": "/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/wrong-range/dice.svg",
+      "type": "file",
+      "value": "./dice.svg"
+    },
+    "id": "custom:/home/psykedady/.local/share/AQTRunCat/metrics/ExampleMetrics/wrong-range/metric.json",
+    "integration": null,
+    "items": [
+      {
+        "compactLabel": "",
+        "compactValue": null,
+        "detail": "outside the range 0–1",
+        "formattedValue": "10",
+        "id": null,
+        "normalized": 10,
+        "title": "WrongRange",
+        "warning": true
+      }
+    ],
+    "kind": "command",
+    "message": "",
+    "normalized": null,
+    "showBar": true,
+    "state": "ok",
+    "title": "WrongRange",
+    "unit": null,
+    "updatedAt": "2026-10-28T16:25:34.279Z",
+    "value": null,
+    "warnings": []
+  }
+]

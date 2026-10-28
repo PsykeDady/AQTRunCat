@@ -28,15 +28,17 @@ private slots:
     {
         std::string reason;
         auto spec = packageUpdateCommand(PackageManager::Pacman, false, true, &reason);
-        QCOMPARE(spec->program, std::string("pacman"));
-        QCOMPARE(spec->arguments, (std::vector<std::string>{"-Qu"}));
+        QCOMPARE(spec->program, std::string("checkupdates"));
+        QCOMPARE(spec->arguments, (std::vector<std::string>{"--nosync", "--nocolor"}));
         QVERIFY(reason.empty());
         spec = packageUpdateCommand(PackageManager::Pacman, true, true, &reason);
         QCOMPARE(spec->program, std::string("checkupdates"));
+        QCOMPARE(spec->arguments, (std::vector<std::string>{"--nocolor"}));
         reason.clear();
         spec = packageUpdateCommand(PackageManager::Pacman, true, false, &reason);
-        QCOMPARE(spec->program, std::string("pacman"));
+        QVERIFY(!spec);
         QVERIFY(QString::fromStdString(reason).contains(QLatin1String("pacman-contrib")));
+        QVERIFY(QString::fromStdString(reason).contains(QLatin1String("sudo pacman -S pacman-contrib")));
 
         reason.clear();
         spec = packageUpdateCommand(PackageManager::Apt, true, false, &reason);
@@ -69,23 +71,22 @@ private slots:
         }
     }
 
-    void pacmanCounts()
+    void checkupdatesCountsRecordsAndExitStatuses()
     {
         const char out[] = "linux 6.17.1.arch1-1 -> 6.17.2.arch1-1\n"
                            "mesa 1:25.2.4-1 -> 1:25.2.5-1\n"
                            "firefox 143.0-1 -> 144.0-1 [ignored]\n";
-        UpdateCount count = parsePacmanQu(out, 0, "");
+        UpdateCount count = parseCheckupdates(out, 0, "warning: nonfatal diagnostic\n");
         QCOMPARE(*count.count, 2);
         QCOMPARE(count.ignored, 1);
-        count = parsePacmanQu("", 1, ""); // pacman -Qu: no match = no update
-        QCOMPARE(*count.count, 0);
-        count = parsePacmanQu("", 1, "error: failed to initialize alpm library\n");
-        QVERIFY(!count.count);
-        QCOMPARE(count.error, std::string("error: failed to initialize alpm library"));
-
-        QCOMPARE(*parseCheckupdates(out, 0, "").count, 2);
+        QCOMPARE(*parseCheckupdates("a 1-1 -> 2-1\n\nb 3-1 -> 4-1\n", 0, "").count, 2);
         QCOMPARE(*parseCheckupdates("", 2, "").count, 0);
+        QCOMPARE(*parseCheckupdates("\n  \r\n", 2, "warning only\n").count, 0);
+        QVERIFY(!parseCheckupdates("a 1-1 -> 2-1\n", 2, "").count);
+        QVERIFY(!parseCheckupdates("", 0, "").count);
         QVERIFY(!parseCheckupdates("", 1, "==> ERROR: Cannot fetch updates\n").count);
+        QVERIFY(!parseCheckupdates("warning text\na 1-1 -> 2-1\n", 0, "").count);
+        QVERIFY(!parseCheckupdates("", 3, "error\n").count);
     }
 
     void aptCountsUpgradesNotNewPackages()

@@ -129,6 +129,7 @@ BackendService::BackendService(Config config, QObject *parent)
             scheduleMetrics();
         }
     });
+    connect(m_settings.get(), &aqtruncat::AppSettings::displaySettingsChanged, this, &BackendService::publishSettings);
     connect(m_settings.get(), &aqtruncat::AppSettings::autostartEnabledChanged, this, [this] { applyAutostart(); });
     for (auto signal : {&aqtruncat::AppSettings::networkSettingsChanged, &aqtruncat::AppSettings::metricsBarChanged}) {
         connect(m_settings.get(), signal, this, &BackendService::publishSettings);
@@ -471,13 +472,24 @@ void BackendService::SetSetting(const QString &key, const QString &jsonValue)
         if (!value.isDouble() || (seconds != 1 && seconds != 2 && seconds != 5))
             return void(fail(ErrorInvalidArgument, QStringLiteral("dashboardRefreshSeconds must be 1, 2 or 5")));
         s.setDashboardRefreshSeconds(seconds);
-    } else if (key == QLatin1String("autostart") || key == QLatin1String("metricsBarEnabled")) {
+    } else if (key == QLatin1String("autostart") || key == QLatin1String("metricsBarEnabled")
+               || key == QLatin1String("showCpuTemperature") || key == QLatin1String("showGpuMemory")
+               || key == QLatin1String("showGpuTemperature") || key == QLatin1String("showFps")) {
         if (!value.isBool())
             return void(fail(ErrorInvalidArgument, QStringLiteral("%1 must be true or false").arg(key)));
-        if (key == QLatin1String("autostart"))
+        if (key == QLatin1String("autostart")) {
             s.setAutostartEnabled(value.toBool());
-        else
+        } else if (key == QLatin1String("metricsBarEnabled")) {
             s.setMetricsBarEnabled(value.toBool());
+        } else if (key == QLatin1String("showCpuTemperature")) {
+            s.setShowCpuTemperature(value.toBool());
+        } else if (key == QLatin1String("showGpuMemory")) {
+            s.setShowGpuMemory(value.toBool());
+        } else if (key == QLatin1String("showGpuTemperature")) {
+            s.setShowGpuTemperature(value.toBool());
+        } else {
+            s.setShowFps(value.toBool());
+        }
     } else if (key == QLatin1String("metricsBarItems")) {
         const std::optional<QStringList> list = stringList(value, aqtruncat::metricsbar::MaxItems);
         if (!list || QSet<QString>(list->cbegin(), list->cend()).size() != list->size()

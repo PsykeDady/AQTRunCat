@@ -78,6 +78,13 @@ QString formatMetricsReport(const SystemMetricsSnapshot &s)
     } else {
         out += notAvailable(s.cpu.status);
     }
+    out += QStringLiteral("CPU Temperature\n");
+    if (s.cpuTemperature.status.ok() && s.cpuTemperature.celsius) {
+        QString value = q(formatCelsiusPrecise(*s.cpuTemperature.celsius));
+        out += row("Temperature:", value);
+    } else {
+        out += notAvailable(s.cpuTemperature.status);
+    }
 
     out += QStringLiteral("Memory\n");
     if (s.memory.status.ok()) {
@@ -194,7 +201,10 @@ QString formatMetricsLine(const SystemMetricsSnapshot &s, const QString &clock)
     const QString disk = s.diskIo.status.ok()
         ? QStringLiteral("read %1 write %2").arg(rate(s.diskIo.readBytesPerSecond), rate(s.diskIo.writeBytesPerSecond))
         : na;
-    return QStringLiteral("%1  CPU %2 | Mem %3 | Net %4 | Disk %5").arg(clock, cpu, memory, net, disk);
+    const QString temperature = s.cpuTemperature.status.ok() && s.cpuTemperature.celsius
+        ? q(formatCelsiusPrecise(*s.cpuTemperature.celsius)) : na;
+    return QStringLiteral("%1  CPU %2 | Temp %3 | Mem %4 | Net %5 | Disk %6")
+        .arg(clock, cpu, temperature, memory, net, disk);
 }
 
 int runMetrics(const Invocation &invocation, QTextStream &out, QTextStream &err, MetricsSources sources)

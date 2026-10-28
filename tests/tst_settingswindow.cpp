@@ -112,6 +112,12 @@ private slots:
         QCOMPARE(child<QCheckBox>(window, "autostart")->text(),
                  QStringLiteral("Start AQTRunCat Tray Plugin automatically on login"));
         QVERIFY(settings.autostartEnabled());
+        child<QCheckBox>(window, "showCpuTemperature")->click();
+        child<QCheckBox>(window, "showGpuMemory")->click();
+        child<QCheckBox>(window, "showGpuTemperature")->click();
+        child<QCheckBox>(window, "showFps")->click();
+        QVERIFY(!settings.showCpuTemperature() && !settings.showGpuMemory()
+                && !settings.showGpuTemperature() && !settings.showFps());
 
         window.close();
         QTRY_VERIFY(!window.isVisible());
@@ -123,6 +129,8 @@ private slots:
         QCOMPARE(settings.speedMode(), aqtruncat::SpeedMode::Normal);
         QCOMPARE(settings.networkMode(), aqtruncat::metrics::NetworkPolicyMode::Automatic);
         QVERIFY(!settings.autostartEnabled());
+        QVERIFY(settings.showCpuTemperature() && settings.showGpuMemory()
+                && settings.showGpuTemperature() && settings.showFps());
     }
 
     void dashboardAndSettingsAreIndependentWindows()
@@ -275,7 +283,7 @@ private slots:
         QCOMPARE(row(0), QStringLiteral("cpu"));
         QCOMPARE(row(1), QStringLiteral("custom:/gone/old.json"));
         QCOMPARE(list->topLevelItem(1)->text(1), QStringLiteral("Custom — not currently available"));
-        QCOMPARE(list->topLevelItemCount(), 2 + 8 + 7); // + the seven F5 entries
+        QCOMPARE(list->topLevelItemCount(), 2 + 9 + 7); // + CPU temperature and the seven F5 entries
         QVERIFY(child<QLabel>(window, "metricsBarCount")->text().startsWith(QStringLiteral("2 of 3 metrics")));
 
         enabled->click();
@@ -396,7 +404,7 @@ private slots:
         SettingsWindow window(&settings,
             {{QStringLiteral("cat"), QStringLiteral("Cat"), aqtruncat::RunnerSource::Bundled}}, &service);
         auto *list = child<QTreeWidget>(window, "metricsBarItems");
-        QCOMPARE(list->topLevelItemCount(), 9 + 7);
+        QCOMPARE(list->topLevelItemCount(), 10 + 7);
 
         auto write = [&](const QString &name, const QByteArray &bar) {
             QFile json(discovery + u'/' + name);
@@ -407,7 +415,7 @@ private slots:
         write(QStringLiteral("with.json"), "\"metricsBarValue\":\"5%\",");
         write(QStringLiteral("without.json"), "");
         service.rescan();
-        QTRY_COMPARE(list->topLevelItemCount(), 11 + 7);
+        QTRY_COMPARE(list->topLevelItemCount(), 12 + 7);
         QStringList notes;
         for (int i = 0; i < list->topLevelItemCount(); ++i)
             notes.append(list->topLevelItem(i)->text(1));
@@ -551,7 +559,7 @@ private slots:
         auto *bar = child<QTreeWidget>(window, "metricsBarItems");
         QCOMPARE(tree->topLevelItemCount(), 1);
         QCOMPARE(tree->topLevelItem(0)->checkState(0), Qt::Checked); // no "enabled" = on
-        QCOMPARE(bar->topLevelItemCount(), 9 + 7 + 1);
+        QCOMPARE(bar->topLevelItemCount(), 10 + 7 + 1);
         const QString id = QStringLiteral("custom:") + QFileInfo(file).canonicalFilePath();
 
         // Off: written to the file (other fields kept), listed as Disabled,
@@ -566,7 +574,7 @@ private slots:
         in.close();
         QCOMPARE(stored, QByteArray("{\"enabled\": false,") + json.mid(1));
         QVERIFY(!service.sources().first().enabled);
-        QTRY_COMPARE(bar->topLevelItemCount(), 9 + 7);
+        QTRY_COMPARE(bar->topLevelItemCount(), 10 + 7);
 
         // A selection made while it was on stays, marked as disabled.
         settings.setMetricsBarItems({id});

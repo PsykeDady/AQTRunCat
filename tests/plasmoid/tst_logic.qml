@@ -36,6 +36,43 @@ TestCase {
         compare(Logic.stateOf(metric({ state: undefined })), "error");
     }
 
+    function test_cpuTemperatureIsRenderedAsABuiltinValue() {
+        const temperature = metric({ id: "cpu.temperature", title: "CPU Temperature", unit: "celsius",
+                                     value: 54.25, formattedValue: "54.3 °C", compactValue: "54°",
+                                     compactLabel: "CPU°", normalized: null, detail: "" });
+        const row = Logic.metricRow(temperature);
+        compare(row.metricId, "cpu.temperature");
+        compare(row.category, "builtin");
+        compare(row.value, "54.3 °C");
+        compare(row.detail, "");
+        compare(row.hasFraction, false);
+    }
+
+    function test_cpuAndGpuFieldsShareVisibilityAndHideUnavailable() {
+        const cpu = metric({ id: "cpu", title: "CPU", formattedValue: "25 %", normalized: 0.25 });
+        const temperature = metric({ id: "cpu.temperature", title: "CPU Temperature", formattedValue: "53.2 °C",
+                                     detail: "Package", normalized: null });
+        const gpu = metric({ id: "gpu:0000:03:00.0", title: "GPU", items: [
+            { id: "utilization", title: "Utilization", state: "ok", formattedValue: "40 %", normalized: 0.4 },
+            { id: "memory", title: "Memory", state: "unavailable", formattedValue: "N/A", normalized: null },
+            { id: "temperature", title: "Temperature", state: "ok", formattedValue: "60 °C", normalized: null }
+        ] });
+        let rows = Logic.metricRows([cpu, temperature, gpu]);
+        compare(rows.map(r => r.metricId), ["cpu", "gpu:0000:03:00.0"]);
+        compare(rows[0].group, false); // CPU fields use the indented child-row layout, like GPU fields
+        compare(JSON.parse(rows[0].itemsJson).map(c => c.title), ["Usage", "Temperature"]);
+        verify(JSON.parse(rows[0].itemsJson).every(c => c.state === "ok" && c.warning === false));
+        compare(JSON.parse(rows[1].itemsJson).map(c => c.title), ["Utilization", "Temperature"]);
+        rows = Logic.metricRows([cpu, temperature, gpu], null,
+                                { showCpuTemperature: false, showGpuMemory: false, showGpuTemperature: false, showFps: false });
+        compare(rows[0].value, "25 %");
+        verify(rows[0].hasFraction);
+        compare(rows[0].itemsJson, "[]"); // no redundant indented Usage row
+        compare(rows[1].value, "40 %"); // a lone available GPU field becomes its row value
+        compare(Logic.metricRows([metric({ id: "cpu", state: "unavailable" }),
+                                  metric({ id: "cpu.temperature", state: "unavailable" })]).length, 0);
+    }
+
     function test_categoriesComeFromTheBackendOnly() {
         // A title or an icon never decides the category.
         compare(Logic.categoryOf(metric({ title: "Claude Code", category: "custom" })), "custom");
@@ -68,7 +105,7 @@ TestCase {
         compare(off.map(r => r.metricId), ["cpu", "uptime"]);
         compare(off[1].value, "1h 0m");
         verify(Logic.hiddenMetric(fps("disabled", "unavailable", "the FPS source is turned off")));
-        // With a source, every condition is a visible row with its status.
+        // Unavailable values are omitted; errors remain visible for diagnosis.
         const visible = [["missing", "unavailable", "MangoHud is not installed"],
                          ["not-configured", "unavailable", "MangoHud has no output_folder"],
                          ["inactive", "unavailable", "no game is logging with MangoHud now"],
@@ -76,9 +113,11 @@ TestCase {
                          ["unsupported", "error", "the MangoHud log has no frame-metrics header"]];
         for (let i = 0; i < visible.length; ++i) {
             const rows = Logic.metricRows(others.concat([fps(visible[i][0], visible[i][1], visible[i][2])]));
-            compare(rows.map(r => r.metricId), ["cpu", "uptime", "fps"], visible[i][0]);
-            compare(rows[2].value, "—");
-            compare(rows[2].detail, visible[i][2]);
+            compare(rows.map(r => r.metricId), visible[i][1] === "unavailable" ? ["cpu", "uptime"] : ["cpu", "uptime", "fps"], visible[i][0]);
+            if (visible[i][1] !== "unavailable") {
+                compare(rows[2].value, "—");
+                compare(rows[2].detail, visible[i][2]);
+            }
             verify(!Logic.hiddenMetric(fps(visible[i][0], visible[i][1], visible[i][2])));
         }
         const measured = Logic.metricRows([fps("measured", "ok", "", { value: 144, formattedValue: "144 FPS" })]);
@@ -100,9 +139,13 @@ TestCase {
         compare(model.count, 1);
         metrics = Logic.applyDelta(metrics, { metrics: [on], removed: [], order: ["cpu", "fps"] });
         Logic.syncModel(model, Logic.metricRows(metrics));
+        compare(model.count, 1); // N/D remains hidden even when a source is enabled
+        const failed = Object.assign({}, on, { state: "error", message: "MangoHud log is invalid" });
+        metrics = Logic.applyDelta(metrics, { metrics: [failed], removed: [], order: ["cpu", "fps"] });
+        Logic.syncModel(model, Logic.metricRows(metrics));
         compare(model.count, 2);
         compare(model.get(1).metricId, "fps");
-        compare(model.get(1).detail, "MangoHud is not installed");
+        compare(model.get(1).detail, "MangoHud log is invalid");
         metrics = Logic.applyDelta(metrics, { metrics: [off], removed: [], order: ["cpu", "fps"] });
         Logic.syncModel(model, Logic.metricRows(metrics));
         compare(model.count, 1);
@@ -206,10 +249,10 @@ TestCase {
 
     function test_syncModelKeepsDelegates() {
         model.clear();
-        const first = Logic.metricRows([metric({ id: "cpu" }), metric({ id: "memory", title: "Memory" })]);
+        const first = Logic.metricRows([metric({ id: "system.cpu" }), metric({ id: "memory", title: "Memory" })]);
         Logic.syncModel(model, first);
         compare(model.count, 2);
-        const second = Logic.metricRows([metric({ id: "cpu", formattedValue: "99 %" }), metric({ id: "memory", title: "Memory" })]);
+        const second = Logic.metricRows([metric({ id: "system.cpu", formattedValue: "99 %" }), metric({ id: "memory", title: "Memory" })]);
         let changed = [];
         const watcher = (topLeft) => changed.push(topLeft.row);
         model.dataChanged.connect(watcher);
@@ -353,7 +396,7 @@ TestCase {
         compare(JSON.parse(rows[0].itemsJson).map(c => c.title), ["D20"]);
         compare(Logic.metricRows([group, child(6, { enabled: false })]).length, 0);
         compare(Logic.metricRows([metric(), group]).length, 1); // an empty group: nothing
-        compare(Logic.metricRows([metric()])[0].group, false);
+        compare(Logic.metricRows([metric({ id: "memory" })])[0].group, false);
     }
 
     // v2F1.4 (schema 4): showBar false → no bar for the metric or its items;

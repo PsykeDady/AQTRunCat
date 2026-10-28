@@ -103,7 +103,7 @@ private slots:
         const QString path = temporary.filePath(QStringLiteral("settings.ini"));
         const QStringList wanted{QStringLiteral("custom-item:seven_day:/data/claude-code/metric.json"),
                                  QStringLiteral("custom-item:five_hour:/data/claude-code/metric.json"),
-                                 QStringLiteral("cpu")};
+                                 QStringLiteral("cpu.temperature")};
         {
             AppSettings settings(QStringLiteral("cat"), path);
             settings.setMetricsBarItems(wanted + QStringList{QStringLiteral("custom-item:bad id:/x")});
@@ -201,9 +201,14 @@ private slots:
             QCOMPARE(settings.fpsSource(), QStringLiteral("mangohud"));
             QCOMPARE(settings.updatesIntervalMinutes(), 60);
             QVERIFY(!settings.updatesRemoteRefresh()); // remote metadata is opt-in
+            QVERIFY(settings.showCpuTemperature());
+            QVERIFY(settings.showGpuMemory());
+            QVERIFY(settings.showGpuTemperature());
+            QVERIFY(settings.showFps());
             QVERIFY(!QFile::exists(file)); // defaults are not written
 
             QSignalSpy changed(&settings, &AppSettings::systemMetricsSettingsChanged);
+            QSignalSpy displayChanged(&settings, &AppSettings::displaySettingsChanged);
             settings.setGpuDevice(QStringLiteral("0000:03:00.0"));
             settings.setGpuDevice(QStringLiteral("../../etc")); // rejected
             settings.setGpuDevice(QStringLiteral("0000:03:00.0")); // unchanged: no signal
@@ -212,7 +217,12 @@ private slots:
             settings.setUpdatesIntervalMinutes(180);
             settings.setUpdatesIntervalMinutes(7); // not offered: rejected
             settings.setUpdatesRemoteRefresh(true);
+            settings.setShowCpuTemperature(false);
+            settings.setShowGpuMemory(false);
+            settings.setShowGpuTemperature(false);
+            settings.setShowFps(false);
             QCOMPARE(changed.count(), 4);
+            QCOMPARE(displayChanged.count(), 4);
             QCOMPARE(settings.gpuDevice(), QStringLiteral("0000:03:00.0"));
             QCOMPARE(settings.fpsSource(), QStringLiteral("off"));
             QCOMPARE(settings.updatesIntervalMinutes(), 180);
@@ -222,6 +232,10 @@ private slots:
         QCOMPARE(again.fpsSource(), QStringLiteral("off"));
         QCOMPARE(again.updatesIntervalMinutes(), 180);
         QVERIFY(again.updatesRemoteRefresh());
+        QVERIFY(!again.showCpuTemperature());
+        QVERIFY(!again.showGpuMemory());
+        QVERIFY(!again.showGpuTemperature());
+        QVERIFY(!again.showFps());
 
         // Another writer (CLI, Plasmoid through the backend) and reload.
         AppSettings other(QStringLiteral("cat"), file);
@@ -236,6 +250,10 @@ private slots:
         QCOMPARE(again.fpsSource(), QStringLiteral("mangohud"));
         QCOMPARE(again.updatesIntervalMinutes(), 60);
         QVERIFY(!again.updatesRemoteRefresh());
+        QVERIFY(again.showCpuTemperature());
+        QVERIFY(again.showGpuMemory());
+        QVERIFY(again.showGpuTemperature());
+        QVERIFY(again.showFps());
     }
 
     void f5HandEditedValuesFallBack()

@@ -211,6 +211,10 @@ private slots:
         QCOMPARE(info.value(QStringLiteral("schema")).toInt(), aqtruncat::api::SchemaVersion);
         QCOMPARE(info.value(QStringLiteral("service")).toString(), QStringLiteral("aqtruncatd"));
         QVERIFY(info.value(QStringLiteral("capabilities")).toArray().contains(QStringLiteral("metrics-delta")));
+        const QJsonObject cpuTemperature = metricById(
+            callObject(QStringLiteral("GetMetrics")).value(QStringLiteral("metrics")).toArray(), QStringLiteral("cpu.temperature"));
+        QCOMPARE(cpuTemperature.value(QStringLiteral("category")).toString(), QStringLiteral("builtin"));
+        QCOMPARE(cpuTemperature.value(QStringLiteral("unit")).toString(), QStringLiteral("celsius"));
         // Introspection documents the interface for any D-Bus tooling.
         const QDBusMessage introspect = QDBusConnection::sessionBus().call(QDBusMessage::createMethodCall(
             aqtruncat::api::ServiceName, aqtruncat::api::ObjectPath, QStringLiteral("org.freedesktop.DBus.Introspectable"),
@@ -582,7 +586,7 @@ private slots:
         startBackend();
         const QJsonObject info = callObject(QStringLiteral("GetInfo"));
         QVERIFY(info.value(QStringLiteral("capabilities")).toArray().contains(QStringLiteral("custom-metrics-refresh")));
-        QCOMPARE(info.value(QStringLiteral("schema")).toInt(), 7);
+        QCOMPARE(info.value(QStringLiteral("schema")).toInt(), 9);
         const QString aId = aqtruncat::metricsbar::customId(QFileInfo(a).canonicalFilePath());
         const QString gId = aqtruncat::metricsbar::customId(QFileInfo(group + QStringLiteral("/metric.json")).canonicalFilePath());
         const QString xId = aqtruncat::metricsbar::customId(QFileInfo(group + QStringLiteral("/x/metric.json")).canonicalFilePath());
@@ -754,6 +758,10 @@ private slots:
         QCOMPARE(call(QStringLiteral("SetSetting"), {QStringLiteral("metricsBarItems"), QStringLiteral("[\"cpu\",\"memory\"]")}).type(),
                  QDBusMessage::ReplyMessage);
         QCOMPARE(call(QStringLiteral("SetSetting"), {QStringLiteral("metricsBarEnabled"), QStringLiteral("true")}).type(),
+                 QDBusMessage::ReplyMessage);
+        QCOMPARE(call(QStringLiteral("SetSetting"), {QStringLiteral("showCpuTemperature"), QStringLiteral("false")}).type(),
+                 QDBusMessage::ReplyMessage);
+        QCOMPARE(call(QStringLiteral("SetSetting"), {QStringLiteral("showGpuMemory"), QStringLiteral("false")}).type(),
                  QDBusMessage::ReplyMessage);
         for (const auto &[key, value] : QList<QPair<QString, QString>>{
                  {QStringLiteral("speedMode"), QStringLiteral("fast")},

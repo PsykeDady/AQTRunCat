@@ -121,7 +121,7 @@ private slots:
         QStringList all;
         for (const BuiltInMetric &metric : builtInMetrics())
             all.append(metric.id);
-        QCOMPARE(all, (QStringList{"cpu", "memory", "swap", "network.download", "network.upload",
+        QCOMPARE(all, (QStringList{"cpu", "cpu.temperature", "memory", "swap", "network.download", "network.upload",
                                    "storage.root", "storage.home", "disk.read", "disk.write",
                                    // F5; kernel and distribution are text, not bar values
                                    "uptime", "gpu.utilization", "gpu.memory", "gpu.temperature", "fps",
@@ -204,9 +204,7 @@ private slots:
         QCOMPARE(find(model.items(), QStringLiteral("gpu.utilization"))->shortValue, QStringLiteral("88%"));
         QCOMPARE(find(model.items(), QStringLiteral("gpu.utilization"))->label, QStringLiteral("GPU utilization — AMD Radeon"));
         QCOMPARE(find(model.items(), QStringLiteral("gpu.temperature"))->shortValue, QStringLiteral("71°"));
-        const Item *fps = find(model.items(), QStringLiteral("fps"));
-        QCOMPARE(fps->status, Status::Unavailable);
-        QVERIFY(fps->shortValue.isEmpty());
+        QVERIFY(!find(model.items(), QStringLiteral("fps")));
 
         // The integrated GPU selected: its missing temperature is "—", not 0.
         s.gpu.devices[0].selected = true;
@@ -215,17 +213,35 @@ private slots:
         s.fps.fps = 59.6;
         model.updateSystem(s);
         QTRY_VERIFY(find(model.items(), QStringLiteral("gpu.utilization")) && find(model.items(), QStringLiteral("gpu.utilization"))->shortValue == QStringLiteral("5%"));
-        const Item *temperature = find(model.items(), QStringLiteral("gpu.temperature"));
-        QCOMPARE(temperature->status, Status::Unavailable);
-        QVERIFY(temperature->shortValue.isEmpty());
+        QVERIFY(!find(model.items(), QStringLiteral("gpu.temperature")));
         QCOMPARE(find(model.items(), QStringLiteral("fps"))->shortValue, QStringLiteral("60"));
 
         // No GPU at all.
         s.gpu.devices.clear();
         s.gpu.status = MetricStatus::unavailable("no GPU found");
         model.updateSystem(s);
-        QTRY_VERIFY(find(model.items(), QStringLiteral("gpu.utilization")) && find(model.items(), QStringLiteral("gpu.utilization"))->status == Status::Unavailable);
-        QCOMPARE(find(model.items(), QStringLiteral("gpu.utilization"))->statusMessage, QStringLiteral("no GPU found"));
+        QTRY_VERIFY(!find(model.items(), QStringLiteral("gpu.utilization")));
+    }
+
+    void cpuTemperatureIsSelectableAndKeepsItsUnit()
+    {
+        MetricsBarModel model("/home/test");
+        model.setConfiguration(true, {QStringLiteral("cpu.temperature")});
+        SystemMetricsSnapshot s = snapshot();
+        s.cpuTemperature.status = MetricStatus::okStatus();
+        s.cpuTemperature.celsius = 54.2;
+        s.cpuTemperature.sensor = "Package id 0";
+        model.updateSystem(s);
+        QTRY_VERIFY(find(model.items(), QStringLiteral("cpu.temperature")));
+        const Item *item = find(model.items(), QStringLiteral("cpu.temperature"));
+        QCOMPARE(item->shortValue, QStringLiteral("54°"));
+        QCOMPARE(item->detail, QStringLiteral("54.2 °C"));
+        QVERIFY(item->context.isEmpty());
+
+        s.cpuTemperature.status = MetricStatus::unavailable("no identifiable CPU temperature sensor found");
+        s.cpuTemperature.celsius.reset();
+        model.updateSystem(s);
+        QTRY_VERIFY(!find(model.items(), QStringLiteral("cpu.temperature")));
     }
 
     void fpsSourceOffHidesTheItemButKeepsTheSelection()
@@ -259,11 +275,14 @@ private slots:
             s.fps.condition = c.condition;
             s.fps.status = c.status;
             model.updateSystem(s);
-            QTRY_VERIFY(find(model.items(), QStringLiteral("fps"))
-                        && find(model.items(), QStringLiteral("fps"))->statusMessage == QString::fromStdString(c.status.message));
-            QCOMPARE(ids(model.items()), (QStringList{QStringLiteral("cpu"), QStringLiteral("fps"), QStringLiteral("memory")}));
-            QCOMPARE(find(model.items(), QStringLiteral("fps"))->status, c.expected);
-            QVERIFY(find(model.items(), QStringLiteral("fps"))->shortValue.isEmpty());
+            if (c.expected == Status::Unavailable) {
+                QTRY_VERIFY(!find(model.items(), QStringLiteral("fps")));
+            } else {
+                QTRY_VERIFY(find(model.items(), QStringLiteral("fps"))
+                            && find(model.items(), QStringLiteral("fps"))->statusMessage == QString::fromStdString(c.status.message));
+                QCOMPARE(find(model.items(), QStringLiteral("fps"))->status, c.expected);
+                QVERIFY(find(model.items(), QStringLiteral("fps"))->shortValue.isEmpty());
+            }
         }
         s.fps.condition = FpsCondition::Measured;
         s.fps.status = MetricStatus::okStatus();

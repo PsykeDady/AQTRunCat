@@ -60,6 +60,11 @@ std::string formatCelsius(double celsius)
     return std::to_string(std::lround(celsius)) + " °C";
 }
 
+std::string formatCelsiusPrecise(double celsius)
+{
+    return oneDecimal(celsius) + " °C";
+}
+
 std::string formatFps(double fps)
 {
     return std::to_string(std::lround(fps)) + " FPS";

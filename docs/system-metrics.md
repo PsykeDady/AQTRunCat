@@ -55,6 +55,10 @@ nasconde le altre (testato).
 
 ## 3. CPU
 
+La temperatura CPU nativa (`cpu.temperature`, introdotta in 2.3.2) è
+documentata separatamente in [cpu-temperature.md](cpu-temperature.md); è una
+lettura hwmon distinta dalla percentuale di utilizzo descritta qui.
+
 - **Una sola implementazione.** Il metrics layer usa `parseProcStat`,
   `cpuBusyBetween` e `CpuSampler` di `core/cpustat`, gli stessi del runner.
   Semantica invariata: attivi user, nice, system, irq, softirq, steal; idle

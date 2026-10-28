@@ -188,6 +188,7 @@ QJsonObject gpuItem(const QString &id, const QString &title, const MetricStatus 
     const bool ok = status.ok();
     return QJsonObject{{QStringLiteral("id"), id},
                        {QStringLiteral("title"), title},
+                       {QStringLiteral("state"), stateName(status.state)},
                        {QStringLiteral("formattedValue"), ok ? value : QStringLiteral("N/A")},
                        {QStringLiteral("detail"), ok ? detail : q(status.message)},
                        {QStringLiteral("normalized"), ok ? normalized : QJsonValue()},
@@ -553,6 +554,22 @@ QJsonArray builtInMetrics(const std::optional<metrics::SystemMetricsSnapshot> &s
                 setPercent(metric, *s.cpu.usagePercent);
             else
                 setStatus(metric, s.cpu.status.ok() ? MetricStatus::pending("waiting for the next sample") : s.cpu.status);
+        } else if (id == QLatin1String("cpu.temperature")) {
+            const auto &temperature = s.cpuTemperature;
+            metric.insert(QStringLiteral("unit"), QStringLiteral("celsius"));
+            data = {{QStringLiteral("section"), sectionObject(temperature.status)},
+                    {QStringLiteral("sensor"), q(temperature.sensor)}};
+            if (temperature.status.ok() && temperature.celsius) {
+                metric.insert(QStringLiteral("state"), QStringLiteral("ok"));
+                metric.insert(QStringLiteral("value"), *temperature.celsius);
+                metric.insert(QStringLiteral("formattedValue"), q(metrics::formatCelsiusPrecise(*temperature.celsius)));
+                metric.insert(QStringLiteral("compactValue"), optionalString(metrics::compactCelsius(*temperature.celsius)));
+                // Keep the kernel sensor label in structured data for diagnostics,
+                // but don't surface labels such as "Package id 0" as user-facing detail.
+                metric.insert(QStringLiteral("detail"), QString());
+            } else {
+                setStatus(metric, temperature.status);
+            }
         } else if (id == QLatin1String("memory") || id == QLatin1String("swap")) {
             const bool memory = id == QLatin1String("memory");
             data = {{QStringLiteral("section"), sectionObject(s.memory.status)}};
@@ -844,6 +861,10 @@ QJsonObject settingsObject(const AppSettings &settings)
         {QStringLiteral("fpsSource"), settings.fpsSource()},
         {QStringLiteral("updatesIntervalMinutes"), settings.updatesIntervalMinutes()},
         {QStringLiteral("updatesRemoteRefresh"), settings.updatesRemoteRefresh()},
+        {QStringLiteral("showCpuTemperature"), settings.showCpuTemperature()},
+        {QStringLiteral("showGpuMemory"), settings.showGpuMemory()},
+        {QStringLiteral("showGpuTemperature"), settings.showGpuTemperature()},
+        {QStringLiteral("showFps"), settings.showFps()},
     };
 }
 
@@ -868,6 +889,14 @@ metrics::SystemMetricsSnapshot systemSnapshotFromMetrics(const QJsonArray &array
     s.cpu.status = status("cpu");
     s.cpu.usagePercent = numberOf(byId.value(QStringLiteral("cpu")).value(QStringLiteral("value")));
     s.cpu.logicalCpus = data("cpu").value(QStringLiteral("logicalCpus")).toInt();
+
+    s.cpuTemperature.status = status("cpu.temperature");
+    if (s.cpuTemperature.status.ok()) {
+        s.cpuTemperature.celsius = numberOf(byId.value(QStringLiteral("cpu.temperature")).value(QStringLiteral("value")));
+        s.cpuTemperature.sensor = data("cpu.temperature").value(QStringLiteral("sensor")).toString().toStdString();
+        if (!s.cpuTemperature.celsius)
+            s.cpuTemperature.status = MetricStatus::error("CPU temperature payload has no numeric value");
+    }
 
     s.memory.status = status("memory");
     const QJsonObject memory = data("memory");

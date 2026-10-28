@@ -85,6 +85,10 @@ private:
     QComboBox *m_refresh = nullptr;
     QComboBox *m_gpuDevice = nullptr;
     QComboBox *m_fpsSource = nullptr;
+    QCheckBox *m_showCpuTemperature = nullptr;
+    QCheckBox *m_showGpuMemory = nullptr;
+    QCheckBox *m_showGpuTemperature = nullptr;
+    QCheckBox *m_showFps = nullptr;
     QComboBox *m_updatesInterval = nullptr;
     QCheckBox *m_updatesRemote = nullptr;
     QCheckBox *m_autostart = nullptr;

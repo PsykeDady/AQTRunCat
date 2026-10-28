@@ -6,9 +6,9 @@ nothing below the 2.0.0 baseline is implemented until its section says so.
 - **2.0.0** is the consolidation baseline: the complete 1.x application
   (M0–M9, then F1–F7) released as one version, without new runtime
   functionality.
-- **v2F1** (Custom Metrics v3) and **v2F2** (Standalone Settings) are
-  complete. **v2F3 — Dependency Advisor & Hardware Monitoring** is initialized
-  at 2.3.0; its next implementation checkpoint is 2.3.1.
+- **v2F1** (Custom Metrics v3), **v2F2** (Standalone Settings), and v2F3
+  checkpoints 2.3.0–2.3.2 are complete. Current release: 2.3.2; next
+  implementation checkpoint: 2.3.3 Dependency Advisor.
 
 The behaviour shipped in 2.0.0 is documented in [README.md](README.md) and in
 the topic documents indexed by [docs/README.md](docs/README.md); the
@@ -18,7 +18,7 @@ normative summaries of the 1.x features are in
     2.0.0  Consolidation baseline (1.x complete)            COMPLETE
     v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       COMPLETE (2.1.7)
     v2F2   Standalone Settings                   2.2.0       COMPLETE
-    v2F3   Dependency Advisor & Hardware Monitoring 2.3.x    CURRENT (2.3.0)
+    v2F3   Dependency Advisor & Hardware Monitoring 2.3.x    CURRENT (2.3.2; next 2.3.3)
 
 2.1.8 recursive Custom Metrics discovery, allowing complete repositories to
 be cloned inside the metrics directory, was completed after v2F1.
@@ -411,62 +411,69 @@ configuration separately.
 
 ## v2F3 — Dependency Advisor & Hardware Monitoring
 
-Status: CURRENT CHECKPOINT: **2.3.0 — Phase Initialization**. Version family
-**2.3.x**. The feature checkpoints below are prospective; 2.3.0 adds no
-functionality.
+Status: IN PROGRESS. Checkpoints 2.3.0–2.3.2 are complete. Version family
+**2.3.x**; next is 2.3.3.
 
     2.3.0  Phase Initialization
     2.3.1  Arch Updates via checkupdates
-    2.3.2  CPU Temperature Sensors
-    2.3.3  Dependency Advisor
+    2.3.2  CPU Temperature Sensors                         COMPLETE
+    2.3.3  Dependency Advisor                              NEXT
 
 ### 2.3.0 — Phase Initialization
 
-Status: CURRENT CHECKPOINT.
+Status: COMPLETE.
 
 - Initialize version 2.3.0, update roadmap and documentation, establish the
   v2F3 development baseline, and preserve existing behavior.
-- No functional changes.
+- No functional changes were introduced in 2.3.0.
 
 ### 2.3.1 — Arch Updates via `checkupdates`
 
-Future checkpoint; replace the existing Arch Linux update-detection
-implementation with `checkupdates`, provided by `pacman-contrib`.
+Status: COMPLETE (2.3.1).
 
-- Inspect the existing update-detection architecture first. Use
-  `checkupdates` as the authoritative source for official repository updates
-  on Arch and compatible derivatives; preserve other distributions and the
-  metric's public semantics/integrations where possible.
-- Do not run `pacman -Sy` or unnecessarily modify primary sync databases;
-  do not require root. Distinguish no updates, missing command, errors and
-  timeouts. Document that AUR updates are out of scope.
-- Handle missing `checkupdates` gracefully until Dependency Advisor exists.
-- Do not implement this checkpoint in 2.3.0.
+- `checkupdates` from `pacman-contrib` is the sole Arch-family source for
+  official pacman repository updates. Default checks use `--nosync`; the
+  explicit remote-refresh setting syncs only checkupdates' private database.
+- Never use `pacman -Sy`, `pacman -Qu` fallback, root, or package install.
+  Exit 2 with empty stdout means zero; exit 0 requires valid update records;
+  unexpected status/output, startup failure and timeout are errors.
+- Missing `checkupdates` is Unavailable with a diagnostic and the suggested
+  install command `sudo pacman -S pacman-contrib`; it is never run
+  automatically. AUR updates are outside scope.
+- Existing manager detection supports explicit IDs `arch`, `archarm`,
+  `manjaro`, `endeavouros`, `cachyos`, and `ID_LIKE=arch` when the existing
+  capability checks find pacman and its local database. Non-Arch providers,
+  metric/API contract, schedule and backend ownership are unchanged.
 
-Note for implementation: the current implementation already has Arch update
-provider/fallback behavior. Inspect it at 2.3.1 and preserve the configured
-remote-refresh policy; do not add silent network access.
+The polling interval, first-check delay, timeout, output bounds and
+non-overlap continue to be owned by `UpdatesService` in the backend. AUR is
+not counted by `checkupdates`.
 
 ### 2.3.2 — CPU Temperature Sensors
 
-Future checkpoint; do not implement in 2.3.0.
+Status: COMPLETE (2.3.2). Adds the native `cpu.temperature` metric in °C.
+The backend discovers explicitly identified CPU channels under
+`/sys/class/hwmon`, preferring package/die labels and known CPU drivers; only
+well-known CPU thermal-zone types are accepted as fallback. It retains sensor
+identity between samples and reports unavailable/error instead of fabricating
+a value. Collection is part of the existing one-second backend sample, with
+sensor discovery cached for five minutes and immediate rediscovery on failure.
+No `sensors` subprocess is used; `lm_sensors` is neither required nor invoked.
+See [CPU temperature documentation](docs/cpu-temperature.md) for selection
+rules, frontend integration, and hardware limitations.
 
-- Inspect existing metric collection and hardware-monitoring infrastructure.
-- Detect available CPU temperature sensors, preferring kernel interfaces such
-  as `/sys/class/hwmon` where appropriate.
-- Evaluate `lm_sensors` and `sensors -j` as supporting or fallback mechanisms.
-- Provide a reliably identifiable primary CPU/package temperature in °C and
-  per-core readings where available and architecturally appropriate.
-- Integrate with the existing backend, Dashboard, Metrics Bar and native
-  Plasma Plasmoid while preserving metric transport/configuration conventions.
-- Handle missing sensors, unsupported hardware and unreadable values
-  gracefully; do not invent values or misidentify motherboard/GPU sensors.
-- Never run `sensors-detect` automatically. `lm_sensors` is optional, not a
-  requirement for starting AQTRunCat. Avoid unnecessary polling overhead.
+The metric is available through the existing API schema (additive schema 8),
+Dashboard, Metrics Bar, Plasma Plasmoid, and `aqtruncat metrics` output. A
+schema-9 presentation follow-up adds global Settings for CPU temperature, GPU
+memory/temperature, and FPS visibility; Dashboard, Metrics Bar and Plasmoid
+use the same preferences. CPU temperature is grouped with CPU activity in the
+Dashboard and Plasmoid. Unavailable (N/D) CPU/GPU/FPS fields are hidden, while
+pending and error states remain visible. These are presentation-only settings:
+sampling, backend lifecycle, and dependencies are unchanged.
 
 ### 2.3.3 — Dependency Advisor
 
-Future checkpoint; do not implement in 2.3.0.
+Next implementation checkpoint; do not implement before requested.
 
 Detect required, optional, missing, available and unsupported dependencies.
 
@@ -480,7 +487,7 @@ implementation time):
 | MangoHud | FPS metric (F5) | optional |
 | `pacman-contrib` (`checkupdates`) | Arch package updates metric (F5, 2.3.1) | optional, Arch only |
 | Flatpak | Flatpak updates metric (F5) | optional |
-| `lm_sensors` | CPU temperature sensors (2.3.2) | optional where used |
+| `lm_sensors` | — | Not used by AQTRunCat 2.3.2; direct kernel hwmon access is used. |
 | other distribution-specific utilities | — | only when verified against actual code |
 
 Keep the advisor consistent with package-recipe optional dependencies
@@ -523,9 +530,9 @@ aqtruncatctl --missing-deps
   execution failures. Never auto-install or request administrator privileges.
 - Integrate in standalone Settings where appropriate; reuse existing
   architecture instead of adding an unnecessary background service.
-- Do not add mandatory `pacman-contrib` or `lm_sensors` dependencies during
-  the 2.3.0 initialization.
-- Do not implement this checkpoint in 2.3.0.
+- Do not add mandatory `pacman-contrib` or `lm_sensors` package dependencies
+  as part of v2F3; both remain optional for their respective features.
+- Do not implement the Advisor until the 2.3.3 checkpoint.
 
 
 ## General Principles

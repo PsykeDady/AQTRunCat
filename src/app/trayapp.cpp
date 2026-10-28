@@ -105,6 +105,16 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
         backendOptions.backendExecutable = backendExecutable.absoluteFilePath();
     BackendClient backend(backendOptions);
     DashboardWindow dashboard(home.toStdString());
+    auto applyMetricVisibility = [&settings, &dashboard](MetricsBarModel *bar = nullptr) {
+        dashboard.setBuiltInMetricVisibility(settings.showCpuTemperature(), settings.showGpuMemory(),
+                                             settings.showGpuTemperature(), settings.showFps());
+        if (bar)
+            bar->setMetricVisibility(settings.showCpuTemperature(), settings.showGpuMemory(),
+                                     settings.showGpuTemperature(), settings.showFps());
+    };
+    applyMetricVisibility();
+    QObject::connect(&settings, &aqtruncat::AppSettings::displaySettingsChanged, &dashboard,
+                     [&] { applyMetricVisibility(); });
     SnapshotThrottle dashboardUpdates(settings.dashboardRefreshSeconds());
     aqtruncat::RunnerAnimator animator;
     QObject::connect(&animator, &aqtruncat::RunnerAnimator::frameChanged, &tray, &TrayPresenter::showFrame);
@@ -147,9 +157,12 @@ int runTrayApplication(QApplication &app, const aqtruncat::RunnerService &runner
     MetricsBarPresenter metricsBarTray;
     auto applyMetricsBarSettings = [&settings, &metricsBar] {
         metricsBar.setConfiguration(settings.metricsBarEnabled(), settings.metricsBarItems());
+        metricsBar.setMetricVisibility(settings.showCpuTemperature(), settings.showGpuMemory(),
+                                       settings.showGpuTemperature(), settings.showFps());
     };
     applyMetricsBarSettings();
     QObject::connect(&settings, &aqtruncat::AppSettings::metricsBarChanged, &metricsBar, applyMetricsBarSettings);
+    QObject::connect(&settings, &aqtruncat::AppSettings::displaySettingsChanged, &metricsBar, applyMetricsBarSettings);
     QObject::connect(&backend, &BackendClient::systemSnapshot, &metricsBar, &MetricsBarModel::updateSystem);
     QObject::connect(&backend, &CustomMetricsModel::sourcesChanged, &metricsBar, &MetricsBarModel::updateCustom);
     QObject::connect(&metricsBar, &MetricsBarModel::itemsChanged, &metricsBarTray, &MetricsBarPresenter::setItems);

@@ -26,6 +26,10 @@ constexpr auto GpuDeviceKey = "gpu/device";
 constexpr auto FpsSourceKey = "fps/source";
 constexpr auto UpdatesIntervalKey = "updates/intervalMinutes";
 constexpr auto UpdatesRemoteKey = "updates/remoteRefresh";
+constexpr auto ShowCpuTemperatureKey = "display/cpuTemperature";
+constexpr auto ShowGpuMemoryKey = "display/gpuMemory";
+constexpr auto ShowGpuTemperatureKey = "display/gpuTemperature";
+constexpr auto ShowFpsKey = "display/fps";
 constexpr int DefaultUpdatesInterval = 60;
 constexpr qsizetype MaxMetricsBarIdLength = 4096;
 
@@ -182,6 +186,10 @@ void AppSettings::load()
     const int interval = m_settings.value(QLatin1String(UpdatesIntervalKey), DefaultUpdatesInterval).toInt();
     m_updatesIntervalMinutes = isValidUpdatesInterval(interval) ? interval : DefaultUpdatesInterval;
     m_updatesRemoteRefresh = m_settings.value(QLatin1String(UpdatesRemoteKey), false).toBool();
+    m_showCpuTemperature = m_settings.value(QLatin1String(ShowCpuTemperatureKey), true).toBool();
+    m_showGpuMemory = m_settings.value(QLatin1String(ShowGpuMemoryKey), true).toBool();
+    m_showGpuTemperature = m_settings.value(QLatin1String(ShowGpuTemperatureKey), true).toBool();
+    m_showFps = m_settings.value(QLatin1String(ShowFpsKey), true).toBool();
 }
 
 void AppSettings::write(const QString &key, const QVariant &value)
@@ -327,6 +335,38 @@ void AppSettings::setUpdatesRemoteRefresh(bool remote)
     emit systemMetricsSettingsChanged();
 }
 
+void AppSettings::setShowCpuTemperature(bool show)
+{
+    if (show == m_showCpuTemperature) return;
+    m_showCpuTemperature = show;
+    write(QLatin1String(ShowCpuTemperatureKey), show);
+    emit displaySettingsChanged();
+}
+
+void AppSettings::setShowGpuMemory(bool show)
+{
+    if (show == m_showGpuMemory) return;
+    m_showGpuMemory = show;
+    write(QLatin1String(ShowGpuMemoryKey), show);
+    emit displaySettingsChanged();
+}
+
+void AppSettings::setShowGpuTemperature(bool show)
+{
+    if (show == m_showGpuTemperature) return;
+    m_showGpuTemperature = show;
+    write(QLatin1String(ShowGpuTemperatureKey), show);
+    emit displaySettingsChanged();
+}
+
+void AppSettings::setShowFps(bool show)
+{
+    if (show == m_showFps) return;
+    m_showFps = show;
+    write(QLatin1String(ShowFpsKey), show);
+    emit displaySettingsChanged();
+}
+
 bool AppSettings::reload()
 {
     const QString runner = m_runnerId;
@@ -342,6 +382,10 @@ bool AppSettings::reload()
     const QString fps = m_fpsSource;
     const int interval = m_updatesIntervalMinutes;
     const bool remote = m_updatesRemoteRefresh;
+    const bool showCpuTemperature = m_showCpuTemperature;
+    const bool showGpuMemory = m_showGpuMemory;
+    const bool showGpuTemperature = m_showGpuTemperature;
+    const bool showFps = m_showFps;
     m_settings.sync(); // no pending local writes: this picks up the file on disk
     load();
     bool changed = false;
@@ -378,6 +422,11 @@ bool AppSettings::reload()
         changed = true;
         emit systemMetricsSettingsChanged();
     }
+    if (showCpuTemperature != m_showCpuTemperature || showGpuMemory != m_showGpuMemory
+        || showGpuTemperature != m_showGpuTemperature || showFps != m_showFps) {
+        changed = true;
+        emit displaySettingsChanged();
+    }
     return changed;
 }
 
@@ -387,7 +436,8 @@ void AppSettings::restoreDefaults()
     // registrations: removing a producer is a separate, deliberate action.
     for (const char *key : {RunnerKey, SpeedKey, NetworkModeKey, NetworkInterfacesKey,
                             RefreshKey, AutostartKey, MetricsBarEnabledKey, MetricsBarItemsKey,
-                            GpuDeviceKey, FpsSourceKey, UpdatesIntervalKey, UpdatesRemoteKey})
+                            GpuDeviceKey, FpsSourceKey, UpdatesIntervalKey, UpdatesRemoteKey,
+                            ShowCpuTemperatureKey, ShowGpuMemoryKey, ShowGpuTemperatureKey, ShowFpsKey})
         m_settings.remove(QLatin1String(key));
     m_settings.sync();
     m_runnerId = m_defaultRunnerId;
@@ -402,6 +452,10 @@ void AppSettings::restoreDefaults()
     m_fpsSource = QStringLiteral("mangohud");
     m_updatesIntervalMinutes = DefaultUpdatesInterval;
     m_updatesRemoteRefresh = false;
+    m_showCpuTemperature = true;
+    m_showGpuMemory = true;
+    m_showGpuTemperature = true;
+    m_showFps = true;
     emit runnerIdChanged(m_runnerId);
     emit speedModeChanged(m_speedMode);
     emit networkSettingsChanged();
@@ -409,6 +463,7 @@ void AppSettings::restoreDefaults()
     emit autostartEnabledChanged(m_autostartEnabled);
     emit metricsBarChanged();
     emit systemMetricsSettingsChanged();
+    emit displaySettingsChanged();
 }
 
 } // namespace aqtruncat

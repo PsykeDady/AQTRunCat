@@ -68,6 +68,7 @@ std::vector<std::string> systemPciIdsPaths()
 
 SystemMetricsSampler::SystemMetricsSampler(MetricsSources sources)
     : m_sources(std::move(sources))
+    , m_cpuTemperature(m_sources.sysRoot)
     , m_gpu(m_sources.sysRoot, m_sources.pciIdsPaths, m_sources.nvml)
     , m_fps(m_sources.fpsSources)
 {
@@ -84,6 +85,7 @@ SystemMetricsSnapshot SystemMetricsSampler::sample(double monotonicSeconds)
     SystemMetricsSnapshot snapshot;
     snapshot.timeSeconds = monotonicSeconds;
     snapshot.cpu = sampleCpu();
+    snapshot.cpuTemperature = m_cpuTemperature.sample(monotonicSeconds);
     snapshot.memory = sampleMemory();
     snapshot.network = sampleNetwork(monotonicSeconds);
     for (const std::string &path : m_sources.storagePaths) {
