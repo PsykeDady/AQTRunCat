@@ -44,6 +44,13 @@ target_link_libraries(tst_updatesservice PRIVATE aqtruncat_engine Qt6::Test)
 target_compile_options(tst_updatesservice PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME updatesservice COMMAND tst_updatesservice)
 
+# v2F3.3: feature-aware, read-only dependency registry and recursive declared
+# dependencies. All probes use fake paths and temporary metric directories.
+qt_add_executable(tst_dependencyadvisor tst_dependencyadvisor.cpp)
+target_link_libraries(tst_dependencyadvisor PRIVATE aqtruncat_engine Qt6::Test)
+target_compile_options(tst_dependencyadvisor PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME dependencyadvisor COMMAND tst_dependencyadvisor)
+
 # F7: the bundled runners as built and installed (real frames and metadata),
 # the application's runner list, selection, persistence and fallbacks.
 qt_add_executable(tst_bundledrunners tst_bundledrunners.cpp)

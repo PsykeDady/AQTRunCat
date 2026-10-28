@@ -127,7 +127,7 @@ int enable(const CommandLine &line, bool announce = true)
         arguments.append(QStringLiteral("--codex-home"));
         arguments.append(line.codexHome);
     }
-    const QJsonObject metric{
+    QJsonObject metric{
         {QStringLiteral("id"), QLatin1String(MetricId)},
         // Provenance for AQTRunCat: shown under Integrations, not Custom Metrics.
         {QStringLiteral("integration"), QLatin1String(MetricId)},
@@ -142,6 +142,10 @@ int enable(const CommandLine &line, bool announce = true)
              {QStringLiteral("intervalSeconds"), IntervalSeconds},
              {QStringLiteral("timeoutSeconds"), TimeoutSeconds}}},
     };
+    metric.insert(QStringLiteral("dependencies"), QJsonArray{
+        QJsonObject{{QStringLiteral("executable"), QStringLiteral("codex")},
+                    {QStringLiteral("feature"), QStringLiteral("Codex usage integration")}}
+    });
     // Icon first: the package becomes visible to AQTRunCat with metric.json.
     if (!write(packageDirectory() + u'/' + QLatin1String(IconFile), QByteArray(CodexMetricIconSvg))
         || !write(file, QJsonDocument(metric).toJson(QJsonDocument::Indented)))

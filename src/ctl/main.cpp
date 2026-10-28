@@ -4,6 +4,7 @@
 
 #include "api/apischema.h"
 #include "app/metricsbarids.h"
+#include "dependencies/dependencyadvisor.h"
 
 #include <QCoreApplication>
 #include <QDBusConnection>
@@ -61,6 +62,7 @@ const char Help[] =
     "          [--category builtin|integration|custom]\n"
     "  watch                          print metric changes as they happen (Ctrl+C)\n"
     "  integrations                   official integrations (Claude Code, Codex)\n"
+    "  --missing-deps                 audit dependencies for enabled features (offline; no backend)\n"
     "  integration enable|disable ID\n"
     "  integration live-updates ID on|off\n"
     "  settings                       print the shared settings\n"
@@ -520,6 +522,7 @@ int main(int argc, char *argv[])
     QStringList args = app.arguments().mid(1);
     bool json = false;
     bool mayStart = true;
+    bool missingDeps = false;
     QString category;
     QStringList rest;
     for (int i = 0; i < args.size(); ++i) {
@@ -534,6 +537,8 @@ int main(int argc, char *argv[])
         }
         if (arg == QLatin1String("--json"))
             json = true;
+        else if (arg == QLatin1String("--missing-deps"))
+            missingDeps = true;
         else if (arg == QLatin1String("--no-start"))
             mayStart = false;
         else if (arg == QLatin1String("--category") && i + 1 < args.size())
@@ -542,6 +547,12 @@ int main(int argc, char *argv[])
             return err(QStringLiteral("unknown option \"%1\"; see --help").arg(arg)), Usage;
         else
             rest << arg;
+    }
+    if (missingDeps) {
+        if (!rest.isEmpty() || json || !category.isEmpty())
+            return err(QStringLiteral("--missing-deps cannot be combined with a command, --json or --category")), Usage;
+        out(aqtruncat::dependencies::formatReport(aqtruncat::dependencies::currentUserOptions()));
+        return Ok;
     }
     if (rest.isEmpty()) {
         std::fputs(Help, stderr);

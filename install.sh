@@ -1247,6 +1247,13 @@ do_install() {
 
     reload_session_bus
 
+    if [[ -x $bindir/aqtruncatctl ]]; then
+        say "Checking dependencies for enabled AQTRunCat features (read-only) ..."
+        if ! as_user "$bindir/aqtruncatctl" --missing-deps; then
+            warn "the optional dependency audit could not be completed; run: $bindir/aqtruncatctl --missing-deps"
+        fi
+    fi
+
     say "AQTRunCat is installed: $installed_bin"
     if [[ $install_plasmoid == true ]]; then
         say "Plasma widget installed: $datadir/plasma/plasmoids/$PLASMOID_ID"

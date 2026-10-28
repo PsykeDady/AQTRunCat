@@ -166,7 +166,7 @@ int enable(const CommandLine &line, bool announce = true)
         arguments.append(QStringLiteral("--config-dir"));
         arguments.append(line.configDirectory);
     }
-    const QJsonObject metric{
+    QJsonObject metric{
         {QStringLiteral("id"), QLatin1String(MetricId)},
         // Provenance for AQTRunCat: shown under Integrations, not Custom Metrics.
         {QStringLiteral("integration"), QLatin1String(MetricId)},
@@ -181,6 +181,10 @@ int enable(const CommandLine &line, bool announce = true)
              {QStringLiteral("intervalSeconds"), IntervalSeconds},
              {QStringLiteral("timeoutSeconds"), TimeoutSeconds}}},
     };
+    metric.insert(QStringLiteral("dependencies"), QJsonArray{
+        QJsonObject{{QStringLiteral("executable"), QStringLiteral("claude")},
+                    {QStringLiteral("feature"), QStringLiteral("Claude Code usage integration")}}
+    });
     // Icon first: the package becomes visible to AQTRunCat with metric.json.
     if (!writeAtomically(directory + u'/' + QLatin1String(IconFile), QByteArray(ClaudeMetricIconSvg))
         || !writeAtomically(file, QJsonDocument(metric).toJson(QJsonDocument::Indented)))

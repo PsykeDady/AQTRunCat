@@ -101,6 +101,8 @@ private:
     QPushButton *m_metricsBarUp = nullptr;
     QPushButton *m_metricsBarDown = nullptr;
     QLabel *m_metricsBarCount = nullptr;
+    QPushButton *m_checkDependencies = nullptr;
+    QLabel *m_dependencyReport = nullptr;
 
     ProviderIntegration *m_claude = nullptr;
     bool m_claudeMigrated = false;

@@ -89,6 +89,8 @@ target_compile_options(aqtruncat_cli PRIVATE -Wall -Wextra -Wpedantic)
 # management. QtCore only: the headless backend (aqtruncatd) is built on it,
 # and it never needs a display, a tray or Qt Widgets/Gui.
 add_library(aqtruncat_engine STATIC
+    dependencies/dependencyadvisor.cpp
+    dependencies/dependencyadvisor.h
     custommetrics/commandmetric.cpp
     custommetrics/commandmetric.h
     custommetrics/custommetric.cpp

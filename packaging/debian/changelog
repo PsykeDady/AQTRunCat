@@ -1,3 +1,10 @@
+aqtruncat (2.3.3-1) unstable; urgency=medium
+
+  * Add a read-only Dependency Advisor for enabled optional features and
+    declarative Custom Metric dependencies.
+
+ -- AQTRunCat maintainers <maintainers@aqtruncat.invalid>  Wed, 28 Oct 2026 18:00:00 +0100
+
 aqtruncat (2.3.2-1) unstable; urgency=medium
 
   * Add native CPU temperature monitoring through Linux hwmon and identified

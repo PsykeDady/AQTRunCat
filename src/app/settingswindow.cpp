@@ -1,5 +1,7 @@
 #include "settingswindow.h"
 
+#include "dependencies/dependencyadvisor.h"
+
 #include "runnerpreviewwidget.h"
 #include "custommetricsmodel.h"
 #include "metricsbarmodel.h"
@@ -182,6 +184,22 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
                                    "Nothing is ever installed."));
     builtInForm->addRow(m_updatesRemote);
     root->addWidget(builtInBox);
+
+    auto *dependenciesBox = group(tr("Dependency Advisor"), this);
+    auto *dependenciesLayout = new QVBoxLayout(dependenciesBox);
+    m_checkDependencies = new QPushButton(tr("Check enabled features"), dependenciesBox);
+    m_checkDependencies->setObjectName(QStringLiteral("checkDependencies"));
+    dependenciesLayout->addWidget(m_checkDependencies);
+    m_dependencyReport = new QLabel(tr("Checks are read-only and do not install software."), dependenciesBox);
+    m_dependencyReport->setObjectName(QStringLiteral("dependencyReport"));
+    m_dependencyReport->setWordWrap(true);
+    m_dependencyReport->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    dependenciesLayout->addWidget(m_dependencyReport);
+    connect(m_checkDependencies, &QPushButton::clicked, this, [this] {
+        m_dependencyReport->setText(aqtruncat::dependencies::formatReport(
+            aqtruncat::dependencies::currentUserOptions()));
+    });
+    root->addWidget(dependenciesBox);
 
     QGroupBox *integrationsBox = nullptr;
     QVBoxLayout *integrations = nullptr;
