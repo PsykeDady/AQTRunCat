@@ -290,3 +290,30 @@ Run”, adattatori momentaneamente assenti). Ora il test `installer` è
   implementata per Codex: non richiesta, rinviata.
 - Lettura live: il processo `codex app-server` può scrivere nei propri log
   interni.
+
+## 13. Intervallo da terminale e aggiornamento al click (2.3.4, 2026-11-06)
+
+Richiesta dell'utente insieme all'aggiornamento automatico di Claude Code
+(`docs/integration-claude-code.md` §A.15): l'intervallo delle letture live
+si imposta da terminale.
+
+```bash
+aqtruncat-codex-metric live-updates on --refresh-minutes N   # 1–1440, default 5
+aqtruncat-codex-metric enable --live --refresh-minutes N
+```
+
+- L'intervallo è un'opzione del package (`snapshot --live
+  --refresh-minutes N`), come `--live`; `upgrade` e `live-updates off/on` lo
+  conservano. `status --json` riporta `refreshMinutes`.
+- Settings mostra l'intervallo reale nella casella (*Live updates from Codex
+  every N minutes*), nella conferma e nella nota, insieme al comando da
+  terminale per cambiarlo.
+- Click sulla metrica (`AQTRUNCAT_REFRESH=manual`,
+  `docs/custom-metrics-commands.md` §15) con i live updates attivi: lettura
+  immediata, salvo un tentativo iniziato negli ultimi 30 s. Con i live
+  updates spenti il click rilegge soltanto i file di sessione, come prima.
+- La soglia "as of" resta 10 minuti: con un intervallo più lungo i valori
+  mostrano onestamente l'ora della lettura.
+
+Test: `tst_codexusage` `liveIntervalAndClick`, `tst_codexintegration`
+(intervallo da CLI, conservato da off/on e `upgrade`, valore non valido).

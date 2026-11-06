@@ -1,7 +1,7 @@
 # Build: packaging/make-source-tarball.sh ~/rpmbuild/SOURCES
 #        rpmbuild -ba packaging/rpm/aqtruncat.spec
 Name:           aqtruncat
-Version:        2.3.3
+Version:        2.3.4
 Release:        1%{?dist}
 Summary:        A Cute Run Cat for Linux
 
@@ -69,6 +69,11 @@ export QT_QPA_PLATFORM=offscreen
 %{_docdir}/%{name}/
 
 %changelog
+* Fri Nov 06 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.3.4-1
+- Claude Code integration: optional automatic refresh through a local
+  "claude -p /usage" run; refresh intervals of both integrations can be
+  set from a terminal, and a click on a metric fetches fresh usage.
+
 * Wed Oct 28 2026 AQTRunCat maintainers <maintainers@aqtruncat.invalid> - 2.3.3-1
 - Add a feature-aware dependency audit in Settings, the CLI and installer.
 

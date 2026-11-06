@@ -230,15 +230,16 @@ private slots:
         const QJsonObject week = itemById(snapshot, QStringLiteral("seven_day"));
         QCOMPARE(text(week, "formattedValue"), QStringLiteral("7% used"));
         QVERIFY(!week.value(QStringLiteral("warning")).toBool());
-        // Live updates off: the card says why and what to do.
+        // Automatic refresh and live updates off: the card says why and what to do.
         const QJsonObject source = itemById(snapshot, QStringLiteral("source"));
         QVERIFY(source.value(QStringLiteral("warning")).toBool());
-        QVERIFY(text(source, "detail").startsWith(QStringLiteral("Live updates are off: values change only when you open /usage")));
+        QVERIFY(text(source, "detail").startsWith(
+            QStringLiteral("Automatic refresh and live updates are off: values change only when you open /usage")));
         QVERIFY(text(source, "detail").contains(QStringLiteral("Settings › Integrations")));
         // With live updates on, only the window itself warns.
         const QJsonObject live = itemById(snapshotOf(f.run("2026-10-20T11:31:00Z", true)), QStringLiteral("source"));
         QVERIFY(!live.value(QStringLiteral("warning")).toBool());
-        QVERIFY(!text(live, "detail").contains(QStringLiteral("Live updates are off")));
+        QVERIFY(!text(live, "detail").contains(QStringLiteral("are off")));
         // Everything current: no warning at all.
         const QJsonObject fresh = snapshotOf(f.run("2026-10-20T08:30:00Z"));
         for (const QJsonValue &value : fresh.value(QStringLiteral("metrics")).toArray())

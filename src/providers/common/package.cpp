@@ -65,4 +65,18 @@ bool writeFileAtomically(const QString &path, const QByteArray &contents, QStrin
     return true;
 }
 
+std::optional<int> parseRefreshMinutes(const QString &text)
+{
+    bool ok = false;
+    const int minutes = text.toInt(&ok);
+    if (!ok || minutes < MinimumRefreshMinutes || minutes > MaximumRefreshMinutes)
+        return std::nullopt;
+    return minutes;
+}
+
+bool manualRefreshRequested()
+{
+    return qEnvironmentVariable(RefreshEnvironmentVariable) == QLatin1String("manual");
+}
+
 } // namespace aqtruncat::providers

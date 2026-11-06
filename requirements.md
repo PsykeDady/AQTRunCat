@@ -7,8 +7,9 @@ nothing below the 2.0.0 baseline is implemented until its section says so.
   (M0–M9, then F1–F7) released as one version, without new runtime
   functionality.
 - **v2F1** (Custom Metrics v3), **v2F2** (Standalone Settings), and v2F3
-  checkpoints 2.3.0–2.3.2 are complete. Current release: 2.3.2; next
-  implementation checkpoint: 2.3.3 Dependency Advisor.
+  checkpoints 2.3.0–2.3.2 and 2.3.4 are complete. 2.3.3 Dependency Advisor
+  is in the code (commit 1d524bb) without its completion record yet.
+  Current release: 2.3.4.
 
 The behaviour shipped in 2.0.0 is documented in [README.md](README.md) and in
 the topic documents indexed by [docs/README.md](docs/README.md); the
@@ -18,7 +19,7 @@ normative summaries of the 1.x features are in
     2.0.0  Consolidation baseline (1.x complete)            COMPLETE
     v2F1   Custom Metrics v3 + Rickroll runner  2.1.x       COMPLETE (2.1.7)
     v2F2   Standalone Settings                   2.2.0       COMPLETE
-    v2F3   Dependency Advisor & Hardware Monitoring 2.3.x    CURRENT (2.3.2; next 2.3.3)
+    v2F3   Dependency Advisor & Hardware Monitoring 2.3.x    CURRENT (2.3.4)
 
 2.1.8 recursive Custom Metrics discovery, allowing complete repositories to
 be cloned inside the metrics directory, was completed after v2F1.
@@ -411,13 +412,14 @@ configuration separately.
 
 ## v2F3 — Dependency Advisor & Hardware Monitoring
 
-Status: IN PROGRESS. Checkpoints 2.3.0–2.3.2 are complete. Version family
-**2.3.x**; next is 2.3.3.
+Status: IN PROGRESS. Checkpoints 2.3.0–2.3.2 and 2.3.4 are complete; 2.3.3
+is in the code without its record. Version family **2.3.x**.
 
     2.3.0  Phase Initialization
     2.3.1  Arch Updates via checkupdates
     2.3.2  CPU Temperature Sensors                         COMPLETE
-    2.3.3  Dependency Advisor                              NEXT
+    2.3.3  Dependency Advisor                              IN CODE, RECORD PENDING
+    2.3.4  Automatic usage refresh (Claude Code /usage)    COMPLETE
 
 ### 2.3.0 — Phase Initialization
 
@@ -473,7 +475,11 @@ sampling, backend lifecycle, and dependencies are unchanged.
 
 ### 2.3.3 — Dependency Advisor
 
-Next implementation checkpoint; do not implement before requested.
+Status: implemented in the code by commit 1d524bb (version 2.3.3:
+`src/dependencies/dependencyadvisor.*`, `aqtruncatctl --missing-deps`,
+Settings, `install.sh`, `tst_dependencyadvisor`). Its completion record
+(verification against the requirements below, topic document, MEMORY) has
+not been written yet; until then this section is the specification.
 
 Detect required, optional, missing, available and unsupported dependencies.
 
@@ -533,6 +539,29 @@ aqtruncatctl --missing-deps
 - Do not add mandatory `pacman-contrib` or `lm_sensors` package dependencies
   as part of v2F3; both remain optional for their respective features.
 - Do not implement the Advisor until the 2.3.3 checkpoint.
+
+### 2.3.4 — Automatic usage refresh
+
+Status: COMPLETE (2.3.4, 2026-11-06). Requested by the user after verifying
+that Claude Code 2.1.316 runs `claude -p /usage --output-format json` as a
+local command (no turns, zero tokens and cost) that rewrites the usage cache
+the F2 adapter reads. Records: `docs/integration-claude-code.md` §A.15,
+`docs/integration-codex.md` §13, `docs/custom-metrics-commands.md` §15.
+
+- Claude Code integration, **opt-in** (`auto-refresh on|off`, Settings
+  checkbox with confirmation): when the newest usage report is older than N
+  minutes (default 5), the adapter runs
+  `claude -p /usage --output-format json --no-session-persistence --strict-mcp-config`
+  once and reads the cache again. Settings shows that command.
+- If a run ever reports model use (tokens, cost, turns, or another local
+  command), automatic refresh stops itself until turned off and on.
+- Refresh intervals are set from a terminal with `--refresh-minutes N`
+  (1–1440) for Claude Code (`auto-refresh on`) and Codex (`live-updates on`),
+  stored in the package arguments and kept by `upgrade`.
+- A click on a metric (manual refresh, 2.1.7) reaches every command as
+  `AQTRUNCAT_REFRESH=manual`; the Claude and Codex adapters then fetch at
+  once (at most every 30 s).
+- No API/schema change; the Plasmoid has no checkbox for it (Settings/CLI).
 
 
 ## General Principles

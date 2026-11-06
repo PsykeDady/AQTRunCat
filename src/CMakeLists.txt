@@ -298,7 +298,9 @@ add_library(aqtruncat_claude STATIC
     providers/claude/claudeusage.cpp
     providers/claude/claudeusage.h
     providers/claude/statuslinebridge.cpp
-    providers/claude/statuslinebridge.h)
+    providers/claude/statuslinebridge.h
+    providers/claude/usagerefresh.cpp
+    providers/claude/usagerefresh.h)
 target_include_directories(aqtruncat_claude PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/providers")
 target_link_libraries(aqtruncat_claude PUBLIC aqtruncat_provider_common Qt6::Core)
 target_compile_options(aqtruncat_claude PRIVATE -Wall -Wextra -Wpedantic)

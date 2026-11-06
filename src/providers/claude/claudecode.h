@@ -110,6 +110,13 @@ struct Options {
     QString procRoot = QStringLiteral("/proc");
     bool includeContext = false;
     QString cwdFilter; // context: only sessions whose cwd is this directory or below
+    // 2.3.4 automatic /usage refresh (usagerefresh.h), opt-in.
+    bool autoRefresh = false;
+    qint64 refreshSeconds = 5 * 60;
+    bool manualRefresh = false;       // this run was asked for by a click
+    QString claudeExecutable;         // empty: not found
+    bool configDirectoryOverridden = false; // pass CLAUDE_CONFIG_DIR to claude
+    QString refreshStateFile;         // empty: automatic refresh not used
     QDateTime now = QDateTime::currentDateTimeUtc();
     QTimeZone timeZone = QTimeZone::systemTimeZone();
 };

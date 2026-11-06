@@ -382,7 +382,7 @@ void CustomMetricsService::requestRun(const QString &id, RefreshResult &result)
     }
     // The scheduler's own run: the next periodic one is due an interval
     // after this one ends (finishCommand), as after any run.
-    startCommand(id);
+    startCommand(id, true);
     result.started.append(id);
 }
 
@@ -812,7 +812,7 @@ void CustomMetricsService::processCommandWake()
     scheduleCommandWake();
 }
 
-void CustomMetricsService::startCommand(const QString &id)
+void CustomMetricsService::startCommand(const QString &id, bool manual)
 {
     const auto found = m_commandJobs.find(id);
     if (found == m_commandJobs.end() || found->second->process)
@@ -841,6 +841,13 @@ void CustomMetricsService::startCommand(const QString &id)
     QProcess *process = job.process.get();
     process->setProcessChannelMode(QProcess::SeparateChannels);
     process->setWorkingDirectory(job.definition.workingDirectory);
+    // 2.3.4: a command can tell a click from the schedule, e.g. to fetch
+    // fresh data only when asked to (the provider adapters do).
+    if (manual) {
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        environment.insert(QStringLiteral("AQTRUNCAT_REFRESH"), QStringLiteral("manual"));
+        process->setProcessEnvironment(environment);
+    }
     aqtruncat::process::runInOwnGroup(*process);
     connect(process, &QProcess::readyReadStandardOutput, this, [this, id, run] { readCommandOutput(id, run); });
     connect(process, &QProcess::readyReadStandardError, this, [this, id, run] { readCommandOutput(id, run); });

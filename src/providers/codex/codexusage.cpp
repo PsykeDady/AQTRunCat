@@ -476,15 +476,24 @@ SourceResult fetchLive(const QString &codexExecutable, const QString &codexHome,
 
 namespace {
 
-// Live data when due: a successful read every LiveRefreshSeconds, a failed
-// one retried after LiveRetrySeconds; the previous data stays meanwhile.
+// Live data when due: a successful read every liveRefreshSeconds, a failed
+// one retried after LiveRetrySeconds; the previous data stays meanwhile. A
+// click (2.3.4) reads at once unless an attempt began in the last
+// ManualRefreshSpacingSeconds.
 LiveState refreshedLiveState(const Options &options)
 {
     LiveState state = readLiveState(options.liveStateFile, options.codexHome);
-    const bool due = !state.capturedAt.isValid() || state.capturedAt.secsTo(options.now) >= LiveRefreshSeconds;
-    const bool mayRetry = !state.lastAttemptAt.isValid() || state.lastAttemptAt.secsTo(options.now) >= LiveRetrySeconds
-        || state.lastAttemptAt > options.now;
-    if (!due || !mayRetry)
+    const bool attempted = state.lastAttemptAt.isValid() && state.lastAttemptAt <= options.now;
+    const qint64 sinceAttempt = attempted ? state.lastAttemptAt.secsTo(options.now) : -1;
+    bool run = false;
+    if (options.manualRefresh) {
+        run = !attempted || sinceAttempt >= ManualRefreshSpacingSeconds;
+    } else {
+        const bool due = !state.capturedAt.isValid()
+            || state.capturedAt.secsTo(options.now) >= options.liveRefreshSeconds;
+        run = due && (!attempted || sinceAttempt >= LiveRetrySeconds);
+    }
+    if (!run)
         return state;
     state.lastAttemptAt = options.now;
     writeLiveState(options.liveStateFile, options.codexHome, state); // no parallel attempt meanwhile

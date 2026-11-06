@@ -393,6 +393,23 @@ private slots:
         QCOMPARE(parsed.definition->arguments, (QStringList{QStringLiteral("snapshot"), QStringLiteral("--live")}));
         QCOMPARE(parsed.definition->executable, QFileInfo(codexAdapter()).canonicalFilePath());
 
+        // 2.3.4: the live interval from a terminal, kept by off/on and upgrade.
+        QCOMPARE(codexStatus().value(QStringLiteral("refreshMinutes")).toInt(), 5);
+        Run interval = run(codexAdapter(), {QStringLiteral("live-updates"), QStringLiteral("on"),
+                                            QStringLiteral("--refresh-minutes"), QStringLiteral("20")});
+        QCOMPARE(interval.exitCode, 0);
+        QVERIFY(interval.out.contains("every 20 minutes"));
+        QCOMPARE(parseCommandFile(metric).definition->arguments,
+                 (QStringList{QStringLiteral("snapshot"), QStringLiteral("--live"), QStringLiteral("--refresh-minutes"),
+                              QStringLiteral("20")}));
+        QCOMPARE(run(codexAdapter(), {QStringLiteral("live-updates"), QStringLiteral("off")}).exitCode, 0);
+        QCOMPARE(run(codexAdapter(), {QStringLiteral("upgrade")}).exitCode, 0);
+        QCOMPARE(parseCommandFile(metric).definition->arguments,
+                 (QStringList{QStringLiteral("snapshot"), QStringLiteral("--refresh-minutes"), QStringLiteral("20")}));
+        QCOMPARE(codexStatus().value(QStringLiteral("refreshMinutes")).toInt(), 20);
+        QCOMPARE(run(codexAdapter(), {QStringLiteral("live-updates"), QStringLiteral("on"),
+                                      QStringLiteral("--refresh-minutes"), QStringLiteral("0")}).exitCode, 2);
+
         // A user-managed package named codex is never replaced or removed.
         const QByteArray mine = "{\"id\":\"codex\",\"title\":\"Mine\",\"source\":{\"type\":\"command\",\"executable\":\"./mine\"}}";
         writeFile(metric, mine);

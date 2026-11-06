@@ -247,6 +247,16 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
         m_claudeStatus->setWordWrap(true);
         m_claudeStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
         integrations->addWidget(m_claudeStatus);
+        // 2.3.4: Claude Code runs /usage locally in print mode (no prompt,
+        // no tokens) and refreshes the cache the adapter reads.
+        m_claudeAutoRefresh = new QCheckBox(tr("Refresh automatically with /usage"), integrationsBox);
+        m_claudeAutoRefresh->setObjectName(QStringLiteral("claudeAutoRefresh"));
+        integrations->addWidget(m_claudeAutoRefresh);
+        m_claudeAutoRefreshNote = new QLabel(integrationsBox);
+        m_claudeAutoRefreshNote->setObjectName(QStringLiteral("claudeAutoRefreshNote"));
+        m_claudeAutoRefreshNote->setWordWrap(true);
+        m_claudeAutoRefreshNote->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        integrations->addWidget(m_claudeAutoRefreshNote);
         m_claudeLive = new QCheckBox(tr("Live updates through Claude Code's status line"), integrationsBox);
         m_claudeLive->setObjectName(QStringLiteral("claudeLiveUpdates"));
         integrations->addWidget(m_claudeLive);
@@ -256,6 +266,7 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
         QFont secondary = m_claudeLiveNote->font();
         secondary.setPointSizeF(secondary.pointSizeF() * 0.9);
         m_claudeLiveNote->setFont(secondary);
+        m_claudeAutoRefreshNote->setFont(secondary);
         integrations->addWidget(m_claudeLiveNote);
         m_claudeContext = new QCheckBox(tr("Also show the context window of the most recently active session"),
                                         integrationsBox);
@@ -298,7 +309,7 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
         m_codexEnabled->setObjectName(QStringLiteral("codexEnabled"));
         integrations->addWidget(m_codexEnabled);
         m_codexStatus = secondaryLabel("codexStatus");
-        m_codexLive = new QCheckBox(tr("Live updates from Codex every 5 minutes"), integrationsBox);
+        m_codexLive = new QCheckBox(tr("Live updates from Codex"), integrationsBox);
         m_codexLive->setObjectName(QStringLiteral("codexLiveUpdates"));
         integrations->addWidget(m_codexLive);
         m_codexLiveNote = secondaryLabel("codexLiveNote");
@@ -536,6 +547,25 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
             }
             m_claude->run({QStringLiteral("live-updates"), checked ? QStringLiteral("on") : QStringLiteral("off")});
         });
+        connect(m_claudeAutoRefresh, &QCheckBox::toggled, this, [this](bool checked) {
+            if (checked) {
+                const auto answer = QMessageBox::question(
+                    this, tr("Turn On Automatic Refresh"),
+                    tr("When the usage shown is older than %1 minutes, or when you click the metric, "
+                       "AQTRunCat will run\n\n%2\n\nClaude Code then runs /usage on this computer and "
+                       "fetches your usage with its own login, as when you open /usage yourself. No "
+                       "prompt is sent and no usage is consumed; should a Claude Code version ever send "
+                       "it to the model, automatic refresh stops by itself.\n\n"
+                       "Turn on automatic refresh?")
+                        .arg(m_claude->status().value(QStringLiteral("refreshMinutes")).toInt(5))
+                        .arg(m_claude->status().value(QStringLiteral("autoRefreshCommand")).toString()));
+                if (answer != QMessageBox::Yes) {
+                    syncClaude();
+                    return;
+                }
+            }
+            m_claude->run({QStringLiteral("auto-refresh"), checked ? QStringLiteral("on") : QStringLiteral("off")});
+        });
         connect(m_claudeContext, &QCheckBox::toggled, this, [this] { m_claude->run(claudeEnableArguments()); });
         connect(m_claudeCwd, &QLineEdit::editingFinished, this, [this] {
             const QString current = m_claude->status().value(QStringLiteral("cwd")).toString();
@@ -572,11 +602,12 @@ SettingsWindow::SettingsWindow(aqtruncat::AppSettings *settings, QList<RunnerOpt
             if (checked) {
                 const auto answer = QMessageBox::question(
                     this, tr("Turn On Live Updates"),
-                    tr("Every 5 minutes AQTRunCat will start \"codex app-server\" and ask it for your current "
+                    tr("Every %1 minutes AQTRunCat will start \"codex app-server\" and ask it for your current "
                        "usage limits. Codex contacts OpenAI with its own login to answer; no prompt is sent, "
                        "no usage is consumed and nothing in your Codex configuration is changed.\n\n"
                        "Without live updates AQTRunCat shows the limits Codex recorded in its session files "
-                       "the last time you used it.\n\nTurn on live updates?"));
+                       "the last time you used it.\n\nTurn on live updates?")
+                        .arg(m_codex->status().value(QStringLiteral("refreshMinutes")).toInt(5)));
                 if (answer != QMessageBox::Yes) {
                     syncCodex();
                     return;
@@ -619,6 +650,8 @@ void SettingsWindow::syncCodex()
     const bool idle = m_codex->installed() && m_codex->statusKnown() && !m_codex->busy();
     m_codexEnabled->setEnabled(idle && !status.value(QStringLiteral("userPackage")).toBool());
     m_codexLive->setEnabled(idle && enabled);
+    const int minutes = status.value(QStringLiteral("refreshMinutes")).toInt(5);
+    m_codexLive->setText(tr("Live updates from Codex every %1 minutes").arg(minutes));
     QString note;
     if (live) {
         const QDateTime last = QDateTime::fromString(status.value(QStringLiteral("lastLiveReport")).toString(), Qt::ISODate);
@@ -630,8 +663,10 @@ void SettingsWindow::syncCodex()
             note += u' ' + tr("The codex executable was not found in PATH.");
     } else {
         note = tr("Off: values are those Codex recorded the last time you used it. Turning this on asks Codex "
-                  "(codex app-server) every 5 minutes; Codex contacts OpenAI with its own login.");
+                  "(codex app-server) every %1 minutes; Codex contacts OpenAI with its own login.").arg(minutes);
     }
+    note += u' ' + tr("Interval, from a terminal: %1 live-updates on --refresh-minutes N")
+                       .arg(QStringLiteral("aqtruncat-codex-metric"));
     m_codexLiveNote->setText(note);
     updateIntegrationAvailability();
 }
@@ -639,6 +674,14 @@ void SettingsWindow::syncCodex()
 QStringList SettingsWindow::claudeEnableArguments() const
 {
     QStringList arguments{QStringLiteral("enable")};
+    // Options set elsewhere (the automatic refresh, its interval from a
+    // terminal) are kept: enable rewrites the whole package.
+    const QJsonObject &status = m_claude->status();
+    if (status.value(QStringLiteral("autoRefresh")).toBool())
+        arguments << QStringLiteral("--auto-refresh");
+    if (status.value(QStringLiteral("refreshMinutesSet")).toBool())
+        arguments << QStringLiteral("--refresh-minutes")
+                  << QString::number(status.value(QStringLiteral("refreshMinutes")).toInt());
     if (m_claudeContext->isChecked()) {
         arguments << QStringLiteral("--context");
         const QString cwd = m_claudeCwd->text().trimmed();
@@ -668,8 +711,10 @@ void SettingsWindow::syncClaude()
     {
         const QSignalBlocker blockEnabled(m_claudeEnabled);
         const QSignalBlocker blockLive(m_claudeLive);
+        const QSignalBlocker blockAutoRefresh(m_claudeAutoRefresh);
         const QSignalBlocker blockContext(m_claudeContext);
         m_claudeEnabled->setChecked(enabled);
+        m_claudeAutoRefresh->setChecked(status.value(QStringLiteral("autoRefresh")).toBool());
         m_claudeLive->setChecked(live == QLatin1String("on"));
         m_claudeContext->setChecked(context);
         if (!m_claudeCwd->hasFocus())
@@ -684,6 +729,8 @@ void SettingsWindow::syncClaude()
     }
     m_claudeEnabled->setEnabled(idle && !userPackage);
     m_claudeLive->setEnabled(idle && enabled && status.value(QStringLiteral("settingsError")).toString().isEmpty());
+    m_claudeAutoRefresh->setEnabled(idle && enabled);
+    syncClaudeAutoRefreshNote();
     m_claudeContext->setEnabled(idle && enabled);
     m_claudeCwd->setEnabled(idle && enabled && context);
     m_claudeBrowse->setEnabled(idle && enabled && context);
@@ -708,6 +755,33 @@ void SettingsWindow::syncClaude()
         note += u' ' + tr("Cannot use it: %1").arg(error);
     m_claudeLiveNote->setText(note);
     updateIntegrationAvailability();
+}
+
+void SettingsWindow::syncClaudeAutoRefreshNote()
+{
+    const QJsonObject &status = m_claude->status();
+    const int minutes = status.value(QStringLiteral("refreshMinutes")).toInt(5);
+    const QString command = status.value(QStringLiteral("autoRefreshCommand")).toString();
+    QString note;
+    if (status.value(QStringLiteral("autoRefresh")).toBool()) {
+        note = tr("On: when the usage is older than %1 minutes, or when you click the metric, AQTRunCat runs "
+                  "\"%2\".").arg(minutes).arg(command);
+        const QDateTime last = QDateTime::fromString(status.value(QStringLiteral("lastAutoRefresh")).toString(), Qt::ISODate);
+        note += u' ' + (last.isValid() ? tr("Last refresh: %1.").arg(QLocale().toString(last.toLocalTime(), QLocale::ShortFormat))
+                                       : tr("No refresh yet."));
+        if (const QString stopped = status.value(QStringLiteral("autoRefreshStopped")).toString(); !stopped.isEmpty())
+            note += u' ' + tr("Stopped: %1. Turn it off and on again to retry.").arg(stopped);
+        else if (const QString error = status.value(QStringLiteral("autoRefreshError")).toString(); !error.isEmpty())
+            note += u' ' + tr("The last attempt failed: %1").arg(error);
+        if (status.value(QStringLiteral("claudeExecutable")).toString().isEmpty())
+            note += u' ' + tr("The claude executable was not found in PATH.");
+    } else {
+        note = tr("Off: turning this on runs \"%1\" when the usage is older than %2 minutes. Claude Code runs "
+                  "/usage locally: no prompt, no tokens.").arg(command).arg(minutes);
+    }
+    note += u' ' + tr("Interval, from a terminal: %1 auto-refresh on --refresh-minutes N")
+                       .arg(QStringLiteral("aqtruncat-claude-metric"));
+    m_claudeAutoRefreshNote->setText(note);
 }
 
 QString SettingsWindow::integrationAvailability(const ProviderIntegration *integration, const QString &adapter,

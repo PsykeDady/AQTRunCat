@@ -33,8 +33,12 @@ inline constexpr int MaximumRolloutFiles = 8;              // newest files searc
 inline constexpr qint64 InitialTailBytes = 256 * 1024;
 inline constexpr qint64 MaximumTailBytes = 8 * 1024 * 1024; // per file
 inline constexpr int MaximumScannedFiles = 20000;
+// Default interval of live reads; 2.3.4: set with --refresh-minutes N.
 inline constexpr qint64 LiveRefreshSeconds = 5 * 60;
 inline constexpr qint64 LiveRetrySeconds = 60;
+// 2.3.4: a click on the metric forces a live read unless the last attempt
+// began this recently.
+inline constexpr qint64 ManualRefreshSpacingSeconds = 30;
 inline constexpr int LiveTimeoutMs = 20000;
 // Live data is refreshed every 5 minutes: "as of" only after 10.
 inline constexpr qint64 FreshForSeconds = 10 * 60;
@@ -112,6 +116,8 @@ struct Options {
     bool codexHomeOverridden = false;
     QString codexExecutable;  // empty: not found
     bool live = false;
+    qint64 liveRefreshSeconds = LiveRefreshSeconds;
+    bool manualRefresh = false; // 2.3.4: this run was asked for by a click
     QString liveStateFile;    // empty: live data not used
     QDateTime now = QDateTime::currentDateTimeUtc();
     QTimeZone timeZone = QTimeZone::systemTimeZone();

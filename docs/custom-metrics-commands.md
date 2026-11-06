@@ -1078,3 +1078,28 @@ configurazione attiva resta invariata.
 I test `custommetricsservice`, `metricgroups` e `custommetricsreload` coprono
 rispettivamente raccolte annidate e watcher, distinzione tra contenitore e
 gruppo, e directory organizzative illeggibili.
+
+## 15. `AQTRUNCAT_REFRESH`: distinguere un click dallo scheduler (2.3.4)
+
+Stato: **completata** il 2026-11-06, versione **2.3.4**.
+
+Un'esecuzione avviata da un aggiornamento manuale (§13: clic sull'icona
+nella Dashboard o nel widget, "Refresh Now" o clic centrale nella Metrics
+Bar, `aqtruncatctl custom refresh`, D-Bus `RefreshCustomMetric`) riceve
+nell'ambiente
+
+```text
+AQTRUNCAT_REFRESH=manual
+```
+
+Le esecuzioni periodiche non hanno la variabile (l'ambiente è quello del
+backend, invariato). Un comando può così, per esempio, chiedere dati
+freschi alla sorgente solo quando l'utente lo chiede. Lo usano gli
+adattatori ufficiali: Claude Code esegue `claude -p /usage`
+(`docs/integration-claude-code.md` §A.15), Codex una lettura live
+(`docs/integration-codex.md` §13).
+
+Implementazione: `CustomMetricsService::startCommand(id, manual)`;
+`requestRun` passa `manual = true`. Nessun cambio di schema JSON né di API
+D-Bus (schema invariato). Test: `custommetricsrefresh`
+`manualRunsSeeTheRefreshVariable`.

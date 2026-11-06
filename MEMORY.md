@@ -1,11 +1,16 @@
-# MEMORY.md — AQTRunCat maintainer notes (2.3.2)
+# MEMORY.md — AQTRunCat maintainer notes (2.3.4)
 
 > Audience: an AI agent or developer maintaining AQTRunCat without access to
 > earlier conversations. Precedence when sources disagree: **actual
 > code/tests > this file (frozen decisions §5) > docs/ > commit messages**.
 >
-> **State (2026-10-28): AQTRunCat 2.3.2** (v2F3.2 CPU temperature sensors),
-> branch `feature/v2/f3.1` — the user
+> **State (2026-11-06): AQTRunCat 2.3.4** (automatic Claude Code `/usage`
+> refresh, §13b), worked on `main` (only local branch on 2026-11-06). Commit
+> 1d524bb "chiusura 2.3.2" already carried the 2.3.3 **Dependency Advisor**
+> code (`src/dependencies/`, `aqtruncatctl --missing-deps`) and the 2.3.3
+> bump without updating requirements/MEMORY/docs: its record is still to be
+> written (requirements.md 2.3.3 "IN CODE, RECORD PENDING"). Earlier state
+> (2026-10-28): 2.3.2 on branch `feature/v2/f3.1` — the user
 > commits (v2F1: 2.1.1 = 385ceb1, 2.1.2 = 0a72597, 2.1.3 = 613bdbe, 2.1.4 =
 > f3440d6, 2.1.5 = f00da7e, 2.1.6 = ddbe06d + 07ccd3f). **v2F1 — Custom
 > Metrics v3 is complete.** 2.0.0 (commit 61f3a8e) was the consolidation release
@@ -15,9 +20,8 @@
 > `docs/feature-reference.md`, topic documents indexed by `docs/README.md`).
 > `requirements.md` is the **v2 roadmap**: v2F1 complete through 2.1.7,
 > recursive discovery shipped in 2.1.8; v2F2 Standalone Settings (2.2.0)
-> COMPLETE; v2F3 checkpoints 2.3.0–2.3.2 complete. Next implementation
-> checkpoint: 2.3.3 Dependency Advisor. 2.3.0 was initialization only, with
-> no functionality.
+> COMPLETE; v2F3 checkpoints 2.3.0–2.3.2 and 2.3.4 complete, 2.3.3 in code
+> with record pending. 2.3.0 was initialization only, with no functionality.
 >
 > The user owns every Git write (branches, commits, merges, tags); read-only
 > Git only. Reports to the user in Italian; code, comments and
@@ -42,9 +46,13 @@
 >   harness: use fresh scratch directories. Bash `printf %.3f` follows the
 >   Italian locale (comma): use `LC_ALL=C` in generated fixtures.
 > - The shell sandbox cannot reach the user's AT-SPI bus.
+> - The repo's `build/` is stale (its CMakeCache was generated under the
+>   old `AQTCatRun` path and refuses to reconfigure): build in a fresh
+>   directory, never "fix" it without asking.
+> - Never run the real `claude` (or `codex`) in tests: fake scripts first
+>   in PATH; the user's account and ~/.claude.json are real data.
 >
-> Last verified (2.3.2, 2026-10-28): see §9 (clean build, full ctest,
-> installer/packaging checks).
+> Last verified (2.3.4, 2026-11-06): see §9.
 
 ---
 
@@ -109,7 +117,7 @@
 ## 1. Project identity
 
 - Name **AQTRunCat**, tagline **"A Cute Run Cat for Linux"**, executable
-  **`aqtruncat`**, version **2.3.2** (CMake `PROJECT_VERSION`). History:
+  **`aqtruncat`**, version **2.3.4** (CMake `PROJECT_VERSION`). History:
   1.0.0 = M0–M9; F<n> raised the minor and its sub-features the patch (1.4.2
   = F4.2, 1.5.6 = F5.1–F5.6, 1.6.3 = F6.1–F6.3, 1.7.4 = F7.1–F7.4); 2.0.0 =
   consolidation of 1.7.4. v2 rule (requirements.md "Versioning"): v2F<n>
@@ -180,7 +188,8 @@ F7 COMPLETE   Built-in runners Walking Goose (walkinggoose), Party Parrot (party
 2.3.0 DONE    v2F3 phase initialization; version/docs/roadmap only, no new functionality
 2.3.1 DONE    v2F3.1 Arch updates via checkupdates
 2.3.2 DONE    v2F3.2 native CPU temperature metric (`cpu.temperature`); follow-up display prefs use API schema 9
-NEXT          2.3.3 Dependency Advisor
+2.3.3 CODE    Dependency Advisor (commit 1d524bb); completion record/docs not written yet
+2.3.4 DONE    automatic Claude Code /usage refresh (opt-in), --refresh-minutes for Claude/Codex, AQTRUNCAT_REFRESH=manual on clicks
 ```
 
 v2 roadmap summary (requirements.md is authoritative; revised 2026-10-28):
@@ -198,9 +207,10 @@ v2 roadmap summary (requirements.md is authoritative; revised 2026-10-28):
   Backend activation/lifetime are unchanged. Autostart label names the Qt
   Tray Plugin; key/value and XDG behavior are unchanged.
 - **v2F3 Dependency Advisor & Hardware Monitoring**: 2.3.0 initialization,
-  2.3.1 `checkupdates`, and 2.3.2 CPU temperature are complete. Next is
-  2.3.3 Dependency Advisor; see `requirements.md` and do not implement it
-  before requested.
+  2.3.1 `checkupdates`, 2.3.2 CPU temperature and 2.3.4 automatic usage
+  refresh are complete; 2.3.3 Dependency Advisor is in the code (1d524bb)
+  but its record (requirements check, topic doc, MEMORY) is pending — ask
+  the user before writing it.
 
 - Build: `cmake -S . -B build && cmake --build build && ctest --test-dir build`.
   Clean build: **0 warnings** (`-Wall -Wextra -Wpedantic` on all targets).
@@ -712,6 +722,9 @@ Key components:
 | Custom failure/retry | last-known-good retained; 100 ms debounce, 3×200 ms retry, shared degraded-only 5 s recovery | atomic saves do not flash errors; no healthy-state polling |
 | Custom Metrics reload (2.1.6) | explicit only (Settings, widget, `aqtruncatctl custom reload`, D-Bus `ReloadCustomMetrics`); the M6 watcher stays, no periodic rescan; candidate built aside; an existing-but-unreadable discovery/package/group/child directory refuses the whole reload (also for watcher reloads), a missing discovery directory is empty; per-file errors keep the M6/2.1.5 policy (source stays, Error, listed in `errors`); a missing icon or a value outside its range is a warning (`warnings`), never an error; presentation-only (title/symbol/showBar/id/integration) and schedule-only (interval/timeout) changes never restart a job; execution changes replace it (old process group stopped, value dropped); callbacks checked by run id; `MetricsChanged` before the reply | user prompt 2.1.6: safe reconciliation, never silently erase active metrics, no unnecessary restarts |
 | Manual refresh (2.1.7) | an icon click (Dashboard/widget: the metric's, the group's, a child's own; Metrics Bar: middle click or "Refresh Now", left click unchanged; `aqtruncatctl custom refresh`; D-Bus `RefreshCustomMetric`) samples a command now through `startCommand`; a group = its enabled executable descendants, each its own job; disabled/snapshot/built-in never run; a running metric or one that ended < 1 s ago is coalesced (no queue, never two processes); the next periodic run is one interval after the manual one; reload/removal guarantees of 2.1.6 apply | user prompt 2.1.7: reuse the pipeline, no overlapping executions, smallest scheduler change |
+| Manual refresh environment (2.3.4) | a run started by `requestRun` (click, "Refresh Now", ctl, D-Bus) gets `AQTRUNCAT_REFRESH=manual`; periodic runs inherit the backend environment unchanged | lets a command fetch fresh data only when asked; no schema/API change |
+| Claude automatic /usage refresh (2.3.4) | opt-in package option `--auto-refresh [--refresh-minutes N]` (default 5, 1–1440); runs `claude -p /usage --output-format json --no-session-persistence --strict-mcp-config` (stdin /dev/null, own process group, 20 s timeout) when the newest report (cache or status line) is ≥ N min old and the last attempt ≥ N min ago (60 s after a failure), or on a click (≥ 30 s spacing); values only from the cache, re-read after success; envelope with tokens/cost/turns > 0 or another `local_command` → **stopped** until off/on; state `$XDG_RUNTIME_DIR/aqtruncat/claude-usage-refresh.json` 0600; package timeout 30 s; `--bare` unusable (API key only) | user verified 2026-11-06 on Claude Code 2.1.316 that print-mode /usage is local (0 tokens); user decisions: opt-in, Settings shows the command, interval from terminal, click forces |
+| Codex live interval (2.3.4) | `--refresh-minutes N` package option (default 5), kept by off/on/upgrade; click with live on → read at once (≥ 30 s spacing); "as of" threshold stays 10 min | user request with the Claude change |
 | Custom input limits | 1 MiB JSON, 256 entries, 4096 chars per known string | local malformed/accidentally huge files cannot exhaust the tray app |
 | ZIP | libarchive, ZIP only (seekable, central directory) | user choice; no Qt private QZipReader, no custom parser, no shelling out, no KArchive |
 | Archive security | §7 rules + limits | untrusted input |
@@ -938,6 +951,14 @@ sample on purpose (hot-plug) — caching not needed.
 ---
 
 ## 9. Tests and validation
+
+2.3.4 (2026-11-06, automatic /usage refresh): fresh Ninja Release build in
+the session scratchpad (the repo's `build/` is stale), 0 warnings; CTest
+**61/61** passed (83.7 s, `-j4`), including the new `claudeusagerefresh`,
+installer and `packaging-versions` 2.3.4; `git diff --check` clean; no shell
+script changed. All tests use fake `claude`/`codex` scripts. Not run: the
+real `claude -p /usage` from the adapter, the Settings checkbox in the real
+session (left to the user).
 
 2.3.2 (2026-10-28, native CPU temperature): fresh Release Ninja configure in
 `/tmp/aqtruncat-232-validation`; full build completed after fixing a test
@@ -1723,6 +1744,39 @@ time" refers to the state when the feature was finished.
 
 ## 13b. v2 history (2.1.0 onwards)
 
+### 2.3.4 — Automatic Claude Code usage refresh (2026-11-06)
+
+- Origin: the user asked how usage was computed, challenged the F2 claim
+  that `claude -p "/usage"` uses tokens (it was never verified), and ran
+  `claude -p "/usage" --output-format json` themselves: `local_command:
+  "usage"`, 0 turns/tokens/cost, 809 ms; `fetchedAtMs` in ~/.claude.json
+  moved at the same instant (checked read-only).
+- New `src/providers/claude/usagerefresh.{h,cpp}`: `findClaudeExecutable`,
+  `usageCommandArguments/Text`, `RefreshState` read/write, `refreshDue`,
+  `judgeUsageCommandOutput`, `runUsageCommand`. `claudecode.cpp collect()`
+  runs it before choosing quotas (Options: autoRefresh, refreshSeconds,
+  manualRefresh, claudeExecutable, configDirectoryOverridden,
+  refreshStateFile); messages: no "values only change when you open /usage"
+  warning while on; "Automatic refresh failed/stopped: …" warnings.
+- Claude adapter CLI: `auto-refresh on|off [--refresh-minutes N]`,
+  `--auto-refresh`/`--refresh-minutes` on snapshot/enable, `packageLine()`
+  (used by upgrade/auto-refresh), status JSON `autoRefresh`,
+  `refreshMinutes`, `refreshMinutesSet`, `autoRefreshCommand`,
+  `claudeExecutable`, `lastAutoRefresh`, `autoRefreshError`,
+  `autoRefreshStopped`. TimeoutSeconds 5 → 30.
+- Codex: `Options::liveRefreshSeconds/manualRefresh`, `--refresh-minutes`
+  on snapshot/enable/live-updates, status `refreshMinutes`.
+- Common: `providers::parseRefreshMinutes`, `manualRefreshRequested`.
+- Core: `CustomMetricsService::startCommand(id, manual)`.
+- Settings: `claudeAutoRefresh` checkbox + `claudeAutoRefreshNote` (command,
+  last refresh, errors, terminal hint); `claudeEnableArguments()` keeps
+  auto-refresh and an explicit interval; Codex checkbox text shows N.
+- Not done: Plasmoid checkbox (Settings/CLI only); live run against the
+  user's real account (left to the user).
+- Tests: new `claudeusagerefresh` (13); extended claudeusage,
+  claudecodeintegration (CLI, F1 click, Settings), codexusage,
+  codexintegration, custommetricsrefresh.
+
 ### v2F1 maintenance — Recursive Custom Metric discovery (2.1.8, 2026-10-27)
 
 - `CustomMetricsService` recursively scans directories without `metric.json`.
@@ -2009,6 +2063,7 @@ src/custommetrics/             shared Snapshot/Source model, bounded M6 parser, 
 src/cli/                       commandline (grammar/help/exit codes), runnercommands, metricscommand
 src/app/                       runtime/UI: AppSettings, MetricSampler, CustomMetricsService, CPU controller, Dashboard, standalone/tray Settings, D-Bus activation, autostart
 src/providers/claude/          F2 Claude Code adapter (aqtruncat_claude lib: claudecode context/collect, claudeusage quotas, statuslinebridge settings.json edit; aqtruncat-claude-metric exe + icon); not linked by the core
+src/providers/claude/usagerefresh.*  2.3.4 automatic `claude -p /usage` refresh (when, run, judge, state)
 src/providers/common/          shared provider code (aqtruncat_provider_common: quota judgement/item format, package helpers)
 src/providers/codex/           F3 Codex adapter (aqtruncat_codex lib: codexusage local/live/state/collect; aqtruncat-codex-metric exe + icon); not linked by the core
 docs/integration-codex.md        F3 investigation/sources, semantics, freshness, accounts, architecture, Settings, tests, Plasma validation

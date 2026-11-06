@@ -56,7 +56,9 @@ private:
     void syncCommandJobs(const QList<aqtruncat::custommetrics::CommandDefinition> &definitions);
     void scheduleCommandWake();
     void processCommandWake();
-    void startCommand(const QString &id);
+    // manual (2.3.4): a click asked for this run; the command then sees
+    // AQTRUNCAT_REFRESH=manual in its environment.
+    void startCommand(const QString &id, bool manual = false);
     // v2F1.7: starts a manual run of a command source unless it is running
     // or ran less than ManualRefreshSpacing ago (then it is coalesced).
     void requestRun(const QString &id, aqtruncat::custommetrics::RefreshResult &result);

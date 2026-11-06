@@ -58,6 +58,7 @@ private:
     void storeMetricsBarItems();
     void moveMetricsBarItem(int delta);
     void syncClaude();
+    void syncClaudeAutoRefreshNote(); // 2.3.4
     void updateIntegrationAvailability(); // both integrations' status lines
     void syncCodex();
     QString integrationAvailability(const ProviderIntegration *integration, const QString &adapter,
@@ -108,6 +109,8 @@ private:
     bool m_claudeMigrated = false;
     QCheckBox *m_claudeEnabled = nullptr;
     QLabel *m_claudeStatus = nullptr;
+    QCheckBox *m_claudeAutoRefresh = nullptr; // 2.3.4
+    QLabel *m_claudeAutoRefreshNote = nullptr;
     QCheckBox *m_claudeLive = nullptr;
     QLabel *m_claudeLiveNote = nullptr;
     QCheckBox *m_claudeContext = nullptr;

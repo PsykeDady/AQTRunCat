@@ -426,6 +426,14 @@ Where the data comes from:
   when you open `/usage` again, so an older value says *as of HH:MM*, a value
   from before its window's reset is not shown at all, and a weekly value is
   dropped after a day.
+- **Automatic refresh** (optional, asks for confirmation): when the usage
+  shown is older than 5 minutes (configurable from a terminal), or when you
+  click the metric, AQTRunCat runs
+  `claude -p /usage --output-format json --no-session-persistence --strict-mcp-config`.
+  Claude Code runs `/usage` locally — no prompt, no tokens — and refreshes
+  the saved usage, exactly as if you had opened `/usage`. Should a Claude
+  Code version ever send it to the model instead, automatic refresh stops
+  by itself and says so.
 - **Live updates** (optional, a second checkbox): Claude Code reports usage
   after every response, but only to a *status line* command. Turning this on
   sets `"statusLine"` in `~/.claude/settings.json` – after asking you, and
@@ -438,7 +446,9 @@ Where the data comes from:
 
 The card appears in the Dashboard's **Integrations** section, separate from
 your own Custom Metrics (empty sections are not shown). Nothing is sent
-anywhere, no prompts or tokens are used and no credentials are read; unavailable data is shown as such, never as 0%. Optionally the card can
+anywhere by AQTRunCat (with automatic refresh, Claude Code itself fetches
+your usage, as `/usage` does), no prompts or tokens are used and no
+credentials are read; unavailable data is shown as such, never as 0%. Optionally the card can
 also show the context window of the most recently active Claude Code session
 (a different thing: how full that conversation's context is). The quotas are
 not added to the Metrics Bar by themselves; pick *Claude Code — Current
@@ -449,6 +459,7 @@ state:
 
 ```bash
 aqtruncat-claude-metric enable [--context [--cwd DIR]]
+aqtruncat-claude-metric auto-refresh on|off [--refresh-minutes N]
 aqtruncat-claude-metric live-updates on|off
 aqtruncat-claude-metric status
 aqtruncat-claude-metric disable      # also turns live updates off
@@ -472,6 +483,7 @@ time in your time zone (e.g. `12% used`, *88% left · Resets at 14:00*).
   Codex process, but they only change while Codex is working. Older values
   say *as of HH:MM*; after a window's reset they are not shown at all.
 - **Live updates** (optional, asks for confirmation): every 5 minutes
+  (configurable from a terminal; a click on the metric asks at once)
   AQTRunCat starts `codex app-server` and asks it for your current limits
   (`account/rateLimits/read`). Codex contacts OpenAI with its own login; no
   prompt is sent, no usage is consumed and nothing in your Codex
@@ -484,7 +496,7 @@ Claude Code's `5h` / `7d`). The same switches on the command line:
 
 ```bash
 aqtruncat-codex-metric enable [--live]
-aqtruncat-codex-metric live-updates on|off
+aqtruncat-codex-metric live-updates on|off [--refresh-minutes N]
 aqtruncat-codex-metric status
 aqtruncat-codex-metric disable
 aqtruncat-codex-metric upgrade      # done by install.sh after an update

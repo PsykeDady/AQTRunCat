@@ -10,7 +10,8 @@ Il documento ha due parti:
 - **Parte A — Revisione del 2026-10-20 (comportamento attuale)**: integrazione
   in Settings, quote d'uso del piano (finestra di 5 ore e settimana) come
   valori principali, aggiornamenti live opzionali, chiusura dell'istanza in
-  esecuzione da parte di `install.sh`.
+  esecuzione da parte di `install.sh`. Da 2.3.4 (§A.15) anche
+  l'**aggiornamento automatico** opzionale tramite `claude -p /usage`.
 - **Parte B — Prima implementazione (2026-10-16)**: indagine e metrica della
   finestra di contesto, oggi **metrica secondaria opzionale** (`--context`).
   È lasciata com'era, con i risultati osservati allora; dove il
@@ -21,8 +22,9 @@ Claude Code (stato locale, sola lettura)
     │  ~/.claude.json  cachedUsageUtilization  (cache di /usage)
     │  $XDG_RUNTIME_DIR/aqtruncat/claude-rate-limits.json  (solo con live updates)
     │  ~/.claude/sessions, ~/.claude/projects  (solo con --context)
+    │  (2.3.4, opzionale) `claude -p /usage …` riscrive la cache quando è vecchia
     ▼
-aqtruncat-claude-metric snapshot      ← adattatore (QtCore, nessuna rete)
+aqtruncat-claude-metric snapshot      ← adattatore (QtCore; la rete la usa solo Claude Code)
     │  stdout: snapshot JSON M6 · exit 0 / 69 / 1
     ▼
 CustomMetricsService (F1)             ← stesso scheduler, timeout, process group
@@ -67,6 +69,14 @@ valori numerici d'uso; `~/.claude/.credentials.json` **non** è stato letto.
 | scraping del terminale | — | — | — | fragile | **scartata** (esiste un'interfaccia strutturata) |
 | `stats-cache.json`, `history.jsonl`, trascrizioni | no (token e statistiche, non quote) | — | no | — | **scartate**: le quote non si derivano dai token |
 | OpenTelemetry | metriche di consumo, non le quote del piano | push | sì | configurazione e collector dell'utente | **scartata** |
+
+> Nota (2026-11-06, 2.3.4): la riga `claude -p "/usage"` era un'ipotesi
+> mai verificata. Provato dall'utente su Claude Code 2.1.316:
+> `claude -p "/usage" --output-format json` esegue `/usage` come comando
+> locale (`"local_command": "usage"`, `num_turns` 0, tutti i contatori di
+> token 0, `total_cost_usd` 0, 809 ms) e riscrive `cachedUsageUtilization`
+> (`fetchedAtMs` aggiornato nello stesso istante, valori uguali al testo
+> stampato). Da 2.3.4 è usato come aggiornamento automatico opzionale: §A.15.
 
 Verifica di corrispondenza: alle 10:28 l'utente ha aperto `/usage`
 (“Current session 3% used, Resets 13:30”; “Current week (all models) 7%
@@ -402,6 +412,100 @@ freschezza/reset e il formato delle voci quota sono stati spostati in
 L'output di Claude Code è invariato: tutti i test F2 passano senza
 modifiche.
 
+## A.15 Aggiornamento automatico con `/usage` (2.3.4, 2026-11-06)
+
+Richiesta dell'utente: la cache di `/usage` restava ferma finché non si
+apriva `/usage`; il test della nota in §A.2 ha mostrato che in modalità
+print `/usage` gira in locale senza token. Decisioni dell'utente:
+**opt-in**; Settings mostra il comando eseguito; l'intervallo si imposta da
+terminale (anche per Codex, `docs/integration-codex.md` §13); il click
+sulla metrica forza l'aggiornamento (variabile `AQTRUNCAT_REFRESH`,
+`docs/custom-metrics-commands.md` §15).
+
+Comando eseguito (`usagerefresh.h`, `usageCommandText()`):
+
+```text
+claude -p /usage --output-format json --no-session-persistence --strict-mcp-config
+```
+
+- `--no-session-persistence`: nessun file di sessione su disco.
+- `--strict-mcp-config` senza `--mcp-config`: nessun server MCP avviato.
+- `--bare` è stato scartato: accetta solo `ANTHROPIC_API_KEY`, non il login
+  dell'abbonamento.
+- stdin è `/dev/null` (in modalità print `claude` altrimenti aspetta la fine
+  dell'input); proprio gruppo di processi; timeout 20 s, poi `SIGTERM` e
+  `SIGKILL` al gruppo; `CLAUDE_CONFIG_DIR` passato solo se la cartella è
+  stata scelta esplicitamente. Eseguibile: `PATH`, poi `~/.local/bin` e
+  `~/.claude/local`.
+
+Quando parte (dentro `snapshot`, prima di leggere i valori):
+
+| Caso | Regola |
+|---|---|
+| periodico | il report più recente (cache o status line, entrambe le finestre) ha almeno N minuti, **e** l'ultimo tentativo risale ad almeno N minuti (60 s dopo un errore) |
+| click (`AQTRUNCAT_REFRESH=manual`) | sempre, salvo un tentativo iniziato negli ultimi 30 s |
+| fermato | mai (vedi sotto), finché non lo si spegne e riaccende |
+
+N = `--refresh-minutes` (default 5, 1–1440). Con gli aggiornamenti live
+attivi e una risposta recente di Claude il report è fresco e `/usage` non
+parte. Dopo un'esecuzione riuscita la cache viene riletta; i valori vengono
+**solo** dalla cache, del comando si legge soltanto l'involucro JSON.
+
+Controllo di sicurezza: se l'involucro ha token, costo o `num_turns`
+maggiori di zero, oppure un `local_command` diverso da `usage`,
+l'aggiornamento automatico si ferma da solo (`stopped` nello stato) e la
+card mostra il motivo con un avviso. Al massimo si perde un prompt.
+
+Stato: `$XDG_RUNTIME_DIR/aqtruncat/claude-usage-refresh.json` (0600, solo
+orari e motivi brevi, legato alla cartella di Claude Code): `lastAttemptMs`
+scritto **prima** di eseguire (due snapshot paralleli non lanciano due
+`claude`), `lastSuccessMs`, `error`, `stopped`.
+
+Configurazione: opzioni del package (`snapshot --auto-refresh
+[--refresh-minutes N]`), come `--context`; `upgrade` le conserva; `off`
+conserva l'intervallo per la volta successiva; `on` azzera stato, errore ed
+eventuale arresto. Il timeout del package passa da 5 a 30 s per lasciare
+spazio a `claude`.
+
+```bash
+aqtruncat-claude-metric auto-refresh on [--refresh-minutes N]
+aqtruncat-claude-metric auto-refresh off
+aqtruncat-claude-metric status [--json]   # autoRefresh, refreshMinutes, refreshMinutesSet,
+                                          # autoRefreshCommand, claudeExecutable,
+                                          # lastAutoRefresh, autoRefreshError, autoRefreshStopped
+```
+
+Settings › Integrations: casella *Refresh automatically with /usage* (con
+conferma che mostra il comando) e una nota con il comando, l'ultimo
+aggiornamento, eventuali errori e il comando da terminale per cambiare
+l'intervallo. Gli altri cambi da GUI (contesto, cartella) conservano
+l'aggiornamento automatico e l'intervallo.
+
+Messaggi nella card: con l'aggiornamento automatico acceso l'avviso
+"valori fermi finché non apri /usage" non compare; un errore compare come
+*Automatic refresh failed: …*, un arresto come *Automatic refresh stopped:
+…* (entrambi con avviso). Senza alcun dato e con un errore: exit 1 con il
+motivo invece di 69.
+
+Limiti:
+
+- il Plasmoid non ha la casella (si usa Settings o la CLI); il click
+  sull'icona nel Plasmoid aggiorna comunque, perché passa dal backend;
+- dipende da un comportamento non documentato di Claude Code (comandi
+  locali in modalità print); il controllo di sicurezza limita il danno se
+  cambia;
+- ogni esecuzione avvia un processo Node (circa 1 s di CPU);
+- l'esecuzione è una richiesta di rete fatta da Claude Code con il login
+  dell'utente, come quando si apre `/usage`.
+
+Test: `tst_claudeusagerefresh` (13 casi: quando parte, rilettura, click e
+spaziatura, errore e nuovo tentativo, arresto per uso del modello, giudizio
+dell'involucro, eseguibile mancante, `CLAUDE_CONFIG_DIR`, timeout con figli,
+stato privato, regole di scadenza), `tst_claudecodeintegration`
+(`autoRefreshFromTheCommandLine`, `aClickRunsUsageThroughF1`, casella di
+Settings), `tst_claudeusage` (testo dell'avviso). Mai il vero `claude`:
+sempre uno script finto.
+
 ---
 
 # Parte B — Prima implementazione (2026-10-16)
@@ -433,6 +537,9 @@ ispezionati solo nomi di campo e tipi).
 | `~/.claude/.credentials.json` + endpoint di utilizzo | limiti account via rete | account | — | no | credenziali + rete: **scartata** | — | — |
 | CLI `claude` | nessun comando di stato in sola lettura; `claude -p` avvia una richiesta | — | — | sì | consuma token: **scartata** | — | — |
 | OpenTelemetry | metriche di utilizzo | sessione/account | push | sì | richiede configurazione e collector dell'utente: **scartata** | sì | sì |
+
+> Nota (2026-11-06): la riga "CLI `claude`" non è più vera per `/usage`:
+> `claude -p /usage` gira in locale senza token (§A.2, nota; §A.15).
 
 Verifiche puntuali:
 

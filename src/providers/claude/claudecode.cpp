@@ -1,5 +1,6 @@
 #include "claudecode.h"
 #include "claudeusage.h"
+#include "usagerefresh.h"
 
 #include <QDir>
 #include <QFile>
@@ -416,9 +417,44 @@ Outcome collect(const Options &options)
         return outcome;
     }
 
-    const QuotaSourceResult cache = readUsageCache(options.globalConfigFile);
+    QuotaSourceResult cache = readUsageCache(options.globalConfigFile);
     const QuotaSourceResult bridge = options.bridgeStateFile.isEmpty()
         ? QuotaSourceResult() : readBridgeState(options.bridgeStateFile, options.configDirectory);
+
+    // 2.3.4: when the newest report is old (or a click asks for it), let
+    // Claude Code run /usage once, which rewrites the cache, and read it again.
+    const bool autoRefresh = options.autoRefresh && !options.refreshStateFile.isEmpty();
+    RefreshState refresh;
+    if (autoRefresh) {
+        refresh = readRefreshState(options.refreshStateFile, options.configDirectory);
+        std::optional<QDateTime> newest;
+        for (const QuotaSourceResult *source : {static_cast<const QuotaSourceResult *>(&cache), &bridge}) {
+            for (const auto *reading : {&source->fiveHour, &source->sevenDay}) {
+                if (*reading && (!newest || (*reading)->observedAt > *newest))
+                    newest = (*reading)->observedAt;
+            }
+        }
+        const RefreshTrigger trigger = options.manualRefresh ? RefreshTrigger::Manual : RefreshTrigger::Schedule;
+        if (refreshDue(refresh, newest, trigger, options.refreshSeconds, options.now)) {
+            refresh.lastAttemptAt = options.now;
+            // Recorded first: a parallel snapshot does not start a second run.
+            writeRefreshState(options.refreshStateFile, options.configDirectory, refresh);
+            const UsageCommandResult run = runUsageCommand(options.claudeExecutable, options.configDirectory,
+                                                           options.configDirectoryOverridden);
+            if (run.ok) {
+                refresh.lastSuccessAt = options.now;
+                refresh.error.clear();
+                cache = readUsageCache(options.globalConfigFile);
+            } else if (run.modelUsed) {
+                refresh.stopped = run.error;
+                refresh.error.clear();
+            } else {
+                refresh.error = run.error;
+            }
+            writeRefreshState(options.refreshStateFile, options.configDirectory, refresh);
+        }
+    }
+
     const QuotaChoice fiveHour = chooseQuota(QuotaWindow::FiveHour, cache, bridge, options.now);
     const QuotaChoice sevenDay = chooseQuota(QuotaWindow::SevenDay, cache, bridge, options.now);
     const QString sourceError = !cache.error.isEmpty() ? cache.error : bridge.error;
@@ -429,16 +465,25 @@ Outcome collect(const Options &options)
             outcome.diagnostic = sourceError;
             return outcome;
         }
+        if (autoRefresh && (!refresh.error.isEmpty() || !refresh.stopped.isEmpty())) {
+            outcome.exitCode = 1;
+            outcome.diagnostic = !refresh.stopped.isEmpty()
+                ? QStringLiteral("Automatic refresh stopped: %1").arg(refresh.stopped)
+                : QStringLiteral("Automatic refresh failed: %1").arg(refresh.error);
+            return outcome;
+        }
         outcome.exitCode = 69;
-        outcome.diagnostic = QStringLiteral("No Claude Code usage report yet: open /usage in Claude Code once, "
-                                            "or turn on live updates in AQTRunCat Settings.");
+        outcome.diagnostic = autoRefresh
+            ? QStringLiteral("No Claude Code usage report yet.")
+            : QStringLiteral("No Claude Code usage report yet: open /usage in Claude Code once, "
+                             "or turn on automatic refresh or live updates in AQTRunCat Settings.");
         if (!cache.note.isEmpty())
             outcome.diagnostic += QStringLiteral(" (%1)").arg(cache.note);
         return outcome;
     }
 
     QString missingHint = cache.note.isEmpty()
-        ? QStringLiteral("Open /usage in Claude Code, or turn on live updates in AQTRunCat Settings")
+        ? QStringLiteral("Open /usage in Claude Code, or turn on automatic refresh or live updates in AQTRunCat Settings")
         : cache.note;
     QJsonArray metrics;
     metrics.append(quotaItem(QStringLiteral("five_hour"), QStringLiteral("Current session (5h)"), QStringLiteral("5h"),
@@ -458,10 +503,18 @@ Outcome collect(const Options &options)
     // Without live updates an out-of-date window is expected: say why and
     // what changes it, rather than leaving only "Out of date".
     const bool allCurrent = fiveHour.presence == QuotaPresence::Current && sevenDay.presence == QuotaPresence::Current;
-    if (!options.liveUpdatesOn && !allCurrent) {
+    if (!options.liveUpdatesOn && !autoRefresh && !allCurrent) {
         sourceItem.insert(QStringLiteral("warning"), true);
-        sourceDetail << QStringLiteral("Live updates are off: values change only when you open /usage in Claude Code. "
-                                       "Turn them on in AQTRunCat Settings › Integrations.");
+        sourceDetail << QStringLiteral("Automatic refresh and live updates are off: values change only when you open "
+                                       "/usage in Claude Code. Turn one on in AQTRunCat Settings › Integrations.");
+    }
+    if (autoRefresh && !refresh.stopped.isEmpty()) {
+        sourceItem.insert(QStringLiteral("warning"), true);
+        sourceDetail << QStringLiteral("Automatic refresh stopped: %1. Turn it off and on again in AQTRunCat "
+                                       "Settings › Integrations to retry.").arg(refresh.stopped);
+    } else if (autoRefresh && !refresh.error.isEmpty()) {
+        sourceItem.insert(QStringLiteral("warning"), true);
+        sourceDetail << QStringLiteral("Automatic refresh failed: %1").arg(refresh.error);
     }
     if (!sourceError.isEmpty())
         sourceDetail << sourceError;

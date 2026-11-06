@@ -147,6 +147,33 @@ class TestCustomMetricsRefresh : public QObject
     Q_OBJECT
 
 private slots:
+    // 2.3.4: a command can tell a click from the schedule: only a manual run
+    // gets AQTRUNCAT_REFRESH=manual in its environment.
+    void manualRunsSeeTheRefreshVariable()
+    {
+        Fixture f;
+        qunsetenv("AQTRUNCAT_REFRESH");
+        writeJson(f.path(QStringLiteral("env.json")), QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("env")},
+            {QStringLiteral("title"), QStringLiteral("Env")},
+            {QStringLiteral("source"), QJsonObject{
+                 {QStringLiteral("type"), QStringLiteral("command")},
+                 {QStringLiteral("executable"), QStringLiteral("/bin/sh")},
+                 {QStringLiteral("arguments"), QJsonArray{QStringLiteral("-c"),
+                                                          QStringLiteral("echo \"${AQTRUNCAT_REFRESH:-schedule}\"")}},
+                 {QStringLiteral("intervalSeconds"), 3600}}}});
+        CustomMetricsService service(&f.settings, f.discovery);
+        service.start();
+        QTRY_VERIFY_WITH_TIMEOUT(settled(service, QStringLiteral("env")), 5000);
+        QCOMPARE(valueOf(service, QStringLiteral("env")), QStringLiteral("schedule"));
+        pastSpacing();
+        QCOMPARE(service.refreshNow(idOf(service, QStringLiteral("env"))).started.size(), qsizetype(1));
+        QTRY_COMPARE_WITH_TIMEOUT(valueOf(service, QStringLiteral("env")), QStringLiteral("manual"), 5000);
+        // The service's own environment is not changed.
+        QVERIFY(!qEnvironmentVariableIsSet("AQTRUNCAT_REFRESH"));
+        service.stop();
+    }
+
     // Only the selected metric runs again, at once; its periodic schedule
     // continues from this run (no extra run right after it).
     void standaloneMetric()

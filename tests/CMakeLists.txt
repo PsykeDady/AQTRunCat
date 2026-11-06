@@ -186,7 +186,7 @@ target_link_libraries(tst_codexusage PRIVATE aqtruncat_codex Qt6::Test)
 target_compile_options(tst_codexusage PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME codexusage COMMAND tst_codexusage)
 
-foreach(name claudeusage claudestatusline)
+foreach(name claudeusage claudestatusline claudeusagerefresh)
     qt_add_executable(tst_${name} tst_${name}.cpp)
     target_link_libraries(tst_${name} PRIVATE aqtruncat_claude Qt6::Test)
     target_compile_options(tst_${name} PRIVATE -Wall -Wextra -Wpedantic)

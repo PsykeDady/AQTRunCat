@@ -9,6 +9,7 @@
 #include "claudeicon.h"
 #include "claudeusage.h"
 #include "statuslinebridge.h"
+#include "usagerefresh.h"
 #include "common/package.h"
 
 #include <QCoreApplication>
@@ -32,9 +33,11 @@ const char MetricId[] = "claude-code";
 const char IconFile[] = "claude-code.svg";
 // Quotas change with every Claude response (live updates) or every /usage
 // (cache); 10 s keeps the card current without polling. One run reads two
-// small files (plus, with --context, a few more and one file tail).
+// small files (plus, with --context, a few more and one file tail). With
+// automatic refresh a run may also wait for `claude -p /usage` (about one
+// second, at most RefreshTimeoutMs): the timeout leaves room for it.
 constexpr int IntervalSeconds = 10;
-constexpr int TimeoutSeconds = 5;
+constexpr int TimeoutSeconds = 30;
 
 void printOut(const QString &text) { std::fputs(qPrintable(text), stdout); }
 void printErr(const QString &text) { std::fputs(qPrintable(text + u'\n'), stderr); }
@@ -43,11 +46,12 @@ void usage(FILE *stream)
 {
     const QString text = QStringLiteral(
         "Usage:\n"
-        "  %1 snapshot [--context [--cwd DIR]] [--config-dir DIR]\n"
-        "  %1 enable [--context [--cwd DIR]] [--config-dir DIR] [--force]\n"
+        "  %1 snapshot [--context [--cwd DIR]] [--auto-refresh [--refresh-minutes N]] [--config-dir DIR]\n"
+        "  %1 enable [--context [--cwd DIR]] [--auto-refresh [--refresh-minutes N]] [--config-dir DIR] [--force]\n"
         "  %1 disable\n"
         "  %1 upgrade\n"
         "  %1 status [--json] [--config-dir DIR]\n"
+        "  %1 auto-refresh on|off [--refresh-minutes N]\n"
         "  %1 live-updates on|off [--config-dir DIR]\n"
         "  %1 -h | --help | -v | --version\n"
         "\n"
@@ -65,7 +69,15 @@ void usage(FILE *stream)
         "  disable       turn live updates off (if on) and remove the package.\n"
         "  upgrade       rewrite an enabled integration for this version, keeping its\n"
         "                options (run by install.sh); does nothing when it is off.\n"
-        "  status        show whether the integration and live updates are on.\n"
+        "  status        show whether the integration, automatic refresh and live\n"
+        "                updates are on.\n"
+        "  auto-refresh  on: when the newest usage report is older than N minutes\n"
+        "                (default %3), run \"%4\"\n"
+        "                once; Claude Code runs /usage locally (no prompt, no tokens)\n"
+        "                and refreshes its usage cache. A click on the metric in\n"
+        "                AQTRunCat runs it at once. It stops by itself if a Claude Code\n"
+        "                version ever sends /usage to the model. off (default): no run.\n"
+        "                \"on --refresh-minutes N\" also changes the interval (1-1440).\n"
         "  live-updates  on: Claude Code reports usage to AQTRunCat after every\n"
         "                response. This sets \"statusLine\" in Claude Code's\n"
         "                settings.json; an existing status line keeps running and is\n"
@@ -77,9 +89,12 @@ void usage(FILE *stream)
         "  --cwd DIR         with --context: only sessions started in DIR or below\n"
         "  --config-dir DIR  Claude Code data directory (default $CLAUDE_CONFIG_DIR\n"
         "                    or ~/.claude)\n"
+        "  --auto-refresh    the same as auto-refresh on, for snapshot/enable\n"
+        "  --refresh-minutes N  automatic refresh interval in minutes (default %3)\n"
         "  --force           let enable replace a claude-code package it did not write\n"
         "  --json            machine-readable status (used by AQTRunCat Settings)\n")
-        .arg(QLatin1String(ExecutableName)).arg(IntervalSeconds);
+        .arg(QLatin1String(ExecutableName)).arg(IntervalSeconds).arg(aqtruncat::claude::DefaultRefreshMinutes)
+        .arg(aqtruncat::claude::usageCommandText());
     std::fputs(qPrintable(text), stream);
 }
 
@@ -133,9 +148,30 @@ struct CommandLine {
     QString cwdFilter;
     QString configDirectory; // as given; empty: default
     bool context = false;
+    bool autoRefresh = false;
+    int refreshMinutes = 0; // 0: not given (DefaultRefreshMinutes)
     bool force = false;
     bool json = false;
 };
+
+int refreshMinutesOf(const CommandLine &line)
+{
+    return line.refreshMinutes > 0 ? line.refreshMinutes : aqtruncat::claude::DefaultRefreshMinutes;
+}
+
+// The options an enabled package was written with (its snapshot arguments).
+CommandLine packageLine(const QJsonObject &metric)
+{
+    const QJsonArray arguments = aqtruncat::providers::packageArguments(metric);
+    CommandLine line;
+    line.context = arguments.contains(QStringLiteral("--context"));
+    line.cwdFilter = aqtruncat::providers::packageOption(arguments, QStringLiteral("--cwd"));
+    line.configDirectory = aqtruncat::providers::packageOption(arguments, QStringLiteral("--config-dir"));
+    line.autoRefresh = arguments.contains(QStringLiteral("--auto-refresh"));
+    line.refreshMinutes = aqtruncat::providers::parseRefreshMinutes(
+        aqtruncat::providers::packageOption(arguments, QStringLiteral("--refresh-minutes"))).value_or(0);
+    return line;
+}
 
 QString configDirectoryOf(const CommandLine &line)
 {
@@ -161,6 +197,14 @@ int enable(const CommandLine &line, bool announce = true)
     if (!line.cwdFilter.isEmpty()) {
         arguments.append(QStringLiteral("--cwd"));
         arguments.append(line.cwdFilter);
+    }
+    if (line.autoRefresh)
+        arguments.append(QStringLiteral("--auto-refresh"));
+    // The interval is kept also while automatic refresh is off, so that
+    // turning it on again uses the one chosen before.
+    if (line.refreshMinutes > 0) {
+        arguments.append(QStringLiteral("--refresh-minutes"));
+        arguments.append(QString::number(line.refreshMinutes));
     }
     if (!line.configDirectory.isEmpty()) {
         arguments.append(QStringLiteral("--config-dir"));
@@ -275,12 +319,7 @@ int upgrade()
         printOut(QStringLiteral("Claude Code integration: nothing to upgrade.\n"));
         return 0;
     }
-    const QJsonArray arguments = metric.value(QStringLiteral("source")).toObject()
-                                     .value(QStringLiteral("arguments")).toArray();
-    CommandLine line;
-    line.context = arguments.contains(QStringLiteral("--context"));
-    line.cwdFilter = packageOption(arguments, QStringLiteral("--cwd"));
-    line.configDirectory = packageOption(arguments, QStringLiteral("--config-dir"));
+    const CommandLine line = packageLine(metric);
     if (enable(line, false) != 0)
         return 1;
     const QString configDirectory = effectiveConfigDirectory(line);
@@ -288,6 +327,42 @@ int upgrade()
         && liveUpdates(configDirectory, true) != 0)
         return 1;
     printOut(QStringLiteral("Claude Code integration upgraded: %1\n").arg(packageDirectory()));
+    return 0;
+}
+
+// 2.3.4: rewrites the enabled package with automatic refresh on or off (and,
+// when given, a new interval), keeping every other option. Turning it on
+// clears a previous stop or error, so that it is tried again at once.
+int autoRefresh(const CommandLine &request)
+{
+    const QJsonObject metric = readMetric(metricFile());
+    if (!QFileInfo::exists(metricFile()) || !managedPackage(metric)) {
+        printErr(QStringLiteral("%1: the Claude Code integration is not enabled; enable it first")
+                     .arg(QLatin1String(ExecutableName)));
+        return 1;
+    }
+    CommandLine line = packageLine(metric);
+    line.autoRefresh = request.subcommand == QLatin1String("on");
+    if (request.refreshMinutes > 0)
+        line.refreshMinutes = request.refreshMinutes;
+    if (line.autoRefresh) {
+        const QString configDirectory = effectiveConfigDirectory(line);
+        aqtruncat::claude::writeRefreshState(aqtruncat::claude::refreshStateFile(), configDirectory, {});
+    }
+    if (enable(line, false) != 0)
+        return 1;
+    if (!line.autoRefresh) {
+        printOut(QStringLiteral("Automatic refresh is off: values update when /usage is opened in Claude Code "
+                                "(or with live updates).\n"));
+    } else {
+        const QString claude = aqtruncat::claude::findClaudeExecutable();
+        printOut(QStringLiteral("Automatic refresh is on: when the usage is older than %1 minutes AQTRunCat runs\n"
+                                "  %2\n%3")
+                     .arg(refreshMinutesOf(line))
+                     .arg(aqtruncat::claude::usageCommandText(),
+                          claude.isEmpty() ? QStringLiteral("Warning: the claude executable was not found in PATH.\n")
+                                           : QString()));
+    }
     return 0;
 }
 
@@ -318,6 +393,15 @@ int status(const CommandLine &line)
     case aqtruncat::claude::BridgeState::On: liveState = QStringLiteral("on"); break;
     case aqtruncat::claude::BridgeState::Replaced: liveState = QStringLiteral("replaced"); break;
     }
+    const CommandLine options = packageLine(metric);
+    const bool autoRefreshOn = managed && options.autoRefresh;
+    const int refreshMinutes = refreshMinutesOf(options);
+    const QString claude = aqtruncat::claude::findClaudeExecutable();
+    const aqtruncat::claude::RefreshState refresh =
+        aqtruncat::claude::readRefreshState(aqtruncat::claude::refreshStateFile(), configDirectory);
+    auto isoOrNull = [](const QDateTime &time) {
+        return time.isValid() ? QJsonValue(time.toString(Qt::ISODate)) : QJsonValue();
+    };
 
     if (line.json) {
         const QJsonObject object{
@@ -340,6 +424,15 @@ int status(const CommandLine &line)
             {QStringLiteral("chainedStatusLine"), bridge.chained},
             {QStringLiteral("settingsError"), bridge.error},
             {QStringLiteral("lastLiveReport"), lastLive.isValid() ? QJsonValue(lastLive.toString(Qt::ISODate)) : QJsonValue()},
+            // 2.3.4 automatic /usage refresh.
+            {QStringLiteral("autoRefresh"), autoRefreshOn},
+            {QStringLiteral("refreshMinutes"), refreshMinutes},
+            {QStringLiteral("refreshMinutesSet"), managed && options.refreshMinutes > 0},
+            {QStringLiteral("autoRefreshCommand"), aqtruncat::claude::usageCommandText()},
+            {QStringLiteral("claudeExecutable"), claude},
+            {QStringLiteral("lastAutoRefresh"), isoOrNull(refresh.lastSuccessAt)},
+            {QStringLiteral("autoRefreshError"), refresh.error},
+            {QStringLiteral("autoRefreshStopped"), refresh.stopped},
         };
         printOut(QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact)) + u'\n');
         return 0;
@@ -369,6 +462,20 @@ int status(const CommandLine &line)
         liveText += QStringLiteral(" (another status line is configured; it would keep running)");
     if (!bridge.error.isEmpty())
         liveText += QStringLiteral(" — %1").arg(bridge.error);
+    QString refreshText = autoRefreshOn
+        ? QStringLiteral("on, when older than %1 minutes (%2)").arg(refreshMinutes).arg(aqtruncat::claude::usageCommandText())
+        : QStringLiteral("off");
+    if (autoRefreshOn && !refresh.stopped.isEmpty())
+        refreshText += QStringLiteral(" — stopped: %1").arg(refresh.stopped);
+    else if (autoRefreshOn && !refresh.error.isEmpty())
+        refreshText += QStringLiteral(" — last attempt failed: %1").arg(refresh.error);
+    if (autoRefreshOn && claude.isEmpty())
+        refreshText += QStringLiteral(" — the claude executable was not found");
+    lines << QStringLiteral("Auto refresh:  %1").arg(refreshText);
+    if (autoRefreshOn)
+        lines << QStringLiteral("Last refresh:  %1").arg(refresh.lastSuccessAt.isValid()
+                                                             ? refresh.lastSuccessAt.toLocalTime().toString(Qt::ISODate)
+                                                             : QStringLiteral("none"));
     lines << QStringLiteral("Live updates:  %1").arg(liveText);
     lines << QStringLiteral("Last live report: %1").arg(lastLive.isValid() ? lastLive.toLocalTime().toString(Qt::ISODate)
                                                                              : QStringLiteral("none"));
@@ -448,10 +555,11 @@ int main(int argc, char *argv[])
     };
     const QString &command = line.command;
     const bool snapshotOrEnable = command == QLatin1String("snapshot") || command == QLatin1String("enable");
+    const bool autoRefreshCommand = command == QLatin1String("auto-refresh");
     int first = 1;
-    if (command == QLatin1String("live-updates")) {
+    if (command == QLatin1String("live-updates") || autoRefreshCommand) {
         if (args.size() < 2 || (args.at(1) != QLatin1String("on") && args.at(1) != QLatin1String("off"))) {
-            printErr(QStringLiteral("%1: live-updates needs \"on\" or \"off\"; see --help").arg(QLatin1String(ExecutableName)));
+            printErr(QStringLiteral("%1: %2 needs \"on\" or \"off\"; see --help").arg(QLatin1String(ExecutableName), command));
             return UsageError;
         }
         line.subcommand = args.at(1);
@@ -459,11 +567,24 @@ int main(int argc, char *argv[])
     }
     for (int i = first; i < args.size(); ++i) {
         const QString &option = args.at(i);
-        const bool takesDirectory = option == QLatin1String("--config-dir")
+        const bool takesDirectory = (option == QLatin1String("--config-dir") && !autoRefreshCommand)
             || (option == QLatin1String("--cwd") && snapshotOrEnable);
         if (takesDirectory && i + 1 < args.size()) {
             const QString value = QDir::cleanPath(QFileInfo(args.at(++i)).absoluteFilePath());
             (option == QLatin1String("--cwd") ? line.cwdFilter : line.configDirectory) = value;
+        } else if (option == QLatin1String("--refresh-minutes") && (snapshotOrEnable || autoRefreshCommand)
+                   && i + 1 < args.size()) {
+            const auto minutes = aqtruncat::providers::parseRefreshMinutes(args.at(++i));
+            if (!minutes) {
+                printErr(QStringLiteral("%1: --refresh-minutes needs a whole number of minutes from %2 to %3")
+                             .arg(QLatin1String(ExecutableName))
+                             .arg(aqtruncat::providers::MinimumRefreshMinutes)
+                             .arg(aqtruncat::providers::MaximumRefreshMinutes));
+                return UsageError;
+            }
+            line.refreshMinutes = *minutes;
+        } else if (option == QLatin1String("--auto-refresh") && snapshotOrEnable) {
+            line.autoRefresh = true;
         } else if (option == QLatin1String("--context") && snapshotOrEnable) {
             line.context = true;
         } else if (option == QLatin1String("--force") && command == QLatin1String("enable")) {
@@ -489,6 +610,14 @@ int main(int argc, char *argv[])
             == aqtruncat::claude::BridgeState::On;
         options.includeContext = line.context;
         options.cwdFilter = line.cwdFilter;
+        options.autoRefresh = line.autoRefresh;
+        options.refreshSeconds = qint64(refreshMinutesOf(line)) * 60;
+        options.manualRefresh = aqtruncat::providers::manualRefreshRequested();
+        options.configDirectoryOverridden = !line.configDirectory.isEmpty() || qEnvironmentVariableIsSet("CLAUDE_CONFIG_DIR");
+        if (line.autoRefresh) {
+            options.claudeExecutable = aqtruncat::claude::findClaudeExecutable();
+            options.refreshStateFile = aqtruncat::claude::refreshStateFile();
+        }
         const aqtruncat::claude::Outcome outcome = aqtruncat::claude::collect(options);
         std::fwrite(outcome.standardOutput.constData(), 1, size_t(outcome.standardOutput.size()), stdout);
         if (!outcome.diagnostic.isEmpty())
@@ -503,6 +632,8 @@ int main(int argc, char *argv[])
         return status(line);
     if (command == QLatin1String("live-updates"))
         return liveUpdates(effectiveConfigDirectory(line), line.subcommand == QLatin1String("on"));
+    if (autoRefreshCommand)
+        return autoRefresh(line);
     if (command == QLatin1String("disable"))
         return disable(effectiveConfigDirectory(line));
     printErr(QStringLiteral("%1: unknown command \"%2\"; see --help").arg(QLatin1String(ExecutableName), command));

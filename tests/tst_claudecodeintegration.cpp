@@ -364,6 +364,112 @@ private slots:
         QCOMPARE(runAdapter({QStringLiteral("disable")}, dataHome).exitCode, 0); // already disabled
     }
 
+    // 2.3.4: automatic /usage refresh is an option of the package, set from
+    // a terminal (also its interval) and kept by upgrade.
+    void autoRefreshFromTheCommandLine()
+    {
+        QTemporaryDir temporary;
+        const QString dataHome = temporary.filePath(QStringLiteral("data home"));
+        const QString metric = dataHome + QStringLiteral("/AQTRunCat/metrics/claude-code/metric.json");
+        auto status = [&] {
+            return QJsonDocument::fromJson(runAdapter({QStringLiteral("status"), QStringLiteral("--json")}, dataHome)
+                                               .standardOutput).object();
+        };
+        auto arguments = [&] { return parseCommandFile(metric).definition->arguments; };
+
+        AdapterRun run = runAdapter({QStringLiteral("auto-refresh"), QStringLiteral("on")}, dataHome);
+        QCOMPARE(run.exitCode, 1); // not enabled yet
+        QVERIFY(run.standardError.contains("enable it first"));
+        QCOMPARE(runAdapter({QStringLiteral("enable")}, dataHome).exitCode, 0);
+        QCOMPARE(parseCommandFile(metric).definition->timeoutSeconds, 30);
+        QJsonObject s = status();
+        QVERIFY(!s.value(QStringLiteral("autoRefresh")).toBool());
+        QCOMPARE(s.value(QStringLiteral("refreshMinutes")).toInt(), 5);
+        QVERIFY(!s.value(QStringLiteral("refreshMinutesSet")).toBool());
+        QCOMPARE(s.value(QStringLiteral("autoRefreshCommand")).toString(),
+                 QStringLiteral("claude -p /usage --output-format json --no-session-persistence --strict-mcp-config"));
+
+        run = runAdapter({QStringLiteral("auto-refresh"), QStringLiteral("on"), QStringLiteral("--refresh-minutes"),
+                          QStringLiteral("15")}, dataHome);
+        QCOMPARE(run.exitCode, 0);
+        QVERIFY2(run.standardOutput.contains("older than 15 minutes"), run.standardOutput);
+        QCOMPARE(arguments(), QStringList({QStringLiteral("snapshot"), QStringLiteral("--auto-refresh"),
+                                           QStringLiteral("--refresh-minutes"), QStringLiteral("15")}));
+        s = status();
+        QVERIFY(s.value(QStringLiteral("autoRefresh")).toBool());
+        QCOMPARE(s.value(QStringLiteral("refreshMinutes")).toInt(), 15);
+        QVERIFY(s.value(QStringLiteral("refreshMinutesSet")).toBool());
+        QVERIFY(runAdapter({QStringLiteral("status")}, dataHome).standardOutput
+                    .contains("Auto refresh:  on, when older than 15 minutes (claude -p /usage"));
+
+        // Kept by upgrade; off keeps the interval for next time.
+        QCOMPARE(runAdapter({QStringLiteral("upgrade")}, dataHome).exitCode, 0);
+        QCOMPARE(arguments(), QStringList({QStringLiteral("snapshot"), QStringLiteral("--auto-refresh"),
+                                           QStringLiteral("--refresh-minutes"), QStringLiteral("15")}));
+        QCOMPARE(runAdapter({QStringLiteral("auto-refresh"), QStringLiteral("off")}, dataHome).exitCode, 0);
+        QCOMPARE(arguments(), QStringList({QStringLiteral("snapshot"), QStringLiteral("--refresh-minutes"),
+                                           QStringLiteral("15")}));
+        QCOMPARE(runAdapter({QStringLiteral("auto-refresh"), QStringLiteral("on")}, dataHome).exitCode, 0);
+        QCOMPARE(status().value(QStringLiteral("refreshMinutes")).toInt(), 15);
+
+        for (const char *bad : {"0", "1441", "5.5", "abc"}) {
+            run = runAdapter({QStringLiteral("auto-refresh"), QStringLiteral("on"), QStringLiteral("--refresh-minutes"),
+                              QString::fromLatin1(bad)}, dataHome);
+            QCOMPARE(run.exitCode, 2);
+            QVERIFY(run.standardError.contains("from 1 to 1440"));
+        }
+        QCOMPARE(runAdapter({QStringLiteral("auto-refresh")}, dataHome).exitCode, 2);
+        QCOMPARE(runAdapter({QStringLiteral("disable")}, dataHome).exitCode, 0);
+    }
+
+    // 2.3.4: a click in AQTRunCat (manual refresh through F1) reaches the
+    // adapter as AQTRUNCAT_REFRESH=manual and makes it run /usage although
+    // the data is fresh; the periodic run does not.
+    void aClickRunsUsageThroughF1()
+    {
+        QTemporaryDir temporary;
+        const QString root = temporary.filePath(QStringLiteral("root"));
+        const QString config = fakeClaude(root, 3, 7); // fetched just now: fresh
+        const QString bin = root + QStringLiteral("/bin");
+        const QString log = root + QStringLiteral("/claude.log");
+        writeFile(bin + QStringLiteral("/claude"),
+                  QStringLiteral("#!/bin/sh\necho run >> '%1'\n"
+                                 "echo '{\"type\":\"result\",\"is_error\":false,\"num_turns\":0,\"total_cost_usd\":0,"
+                                 "\"usage\":{\"input_tokens\":0,\"output_tokens\":0},\"local_command\":\"usage\"}'\n")
+                      .arg(log).toUtf8());
+        QFile::setPermissions(bin + QStringLiteral("/claude"),
+                              QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        const QByteArray path = qgetenv("PATH");
+        qputenv("PATH", bin.toUtf8() + ':' + path);
+
+        const QString discovery = root + QStringLiteral("/discovery");
+        writeFile(discovery + QStringLiteral("/claude-code/metric.json"), QJsonDocument(QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("claude-code")},
+            {QStringLiteral("integration"), QStringLiteral("claude-code")},
+            {QStringLiteral("title"), QStringLiteral("Claude Code")},
+            {QStringLiteral("source"), QJsonObject{
+                 {QStringLiteral("type"), QStringLiteral("command")},
+                 {QStringLiteral("executable"), adapterPath()},
+                 {QStringLiteral("arguments"), QJsonArray{QStringLiteral("snapshot"), QStringLiteral("--auto-refresh"),
+                                                          QStringLiteral("--config-dir"), config}},
+                 {QStringLiteral("output"), QStringLiteral("snapshot")},
+                 {QStringLiteral("intervalSeconds"), 3600},
+                 {QStringLiteral("timeoutSeconds"), 30}}}}).toJson());
+        aqtruncat::AppSettings settings(QStringLiteral("cat"), root + QStringLiteral("/settings.ini"));
+        {
+            CustomMetricsService service(&settings, discovery);
+            service.start();
+            QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Available, 15000);
+            QCOMPARE(readAll(log).count("run"), qsizetype(0)); // periodic run, fresh data
+            QTest::qWait(1100); // past the F1 manual-refresh spacing
+            const auto result = service.refreshNow(onlySource(service).id);
+            QCOMPARE(result.started.size(), qsizetype(1));
+            QTRY_COMPARE_WITH_TIMEOUT(readAll(log).count("run"), qsizetype(1), 15000);
+            QTRY_COMPARE_WITH_TIMEOUT(onlySource(service).state, State::Available, 15000);
+        }
+        qputenv("PATH", path);
+    }
+
     void liveUpdatesThroughTheRealStatusLine()
     {
         QTemporaryDir temporary;
@@ -477,6 +583,43 @@ private slots:
                                          == QLatin1String("on"), 15000);
             QVERIFY(QJsonDocument::fromJson(readAll(config + QStringLiteral("/settings.json"))).object()
                         .value(QStringLiteral("statusLine")).isObject());
+
+            // 2.3.4 GUI automatic refresh, after confirmation; the note names
+            // the command. (A fake claude first in PATH: the real one is never run.)
+            const QString bin = temporary.filePath(QStringLiteral("bin"));
+            writeFile(bin + QStringLiteral("/claude"), "#!/bin/sh\nexit 1\n");
+            QFile::setPermissions(bin + QStringLiteral("/claude"),
+                                  QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+            const QByteArray path = qgetenv("PATH");
+            qputenv("PATH", bin.toUtf8() + ':' + path);
+            auto *autoRefresh = window.findChild<QCheckBox *>(QStringLiteral("claudeAutoRefresh"));
+            auto *autoRefreshNote = window.findChild<QLabel *>(QStringLiteral("claudeAutoRefreshNote"));
+            QVERIFY(autoRefresh && autoRefreshNote);
+            QTRY_VERIFY(autoRefresh->isEnabled());
+            QVERIFY(!autoRefresh->isChecked());
+            QVERIFY(autoRefreshNote->text().contains(QStringLiteral("claude -p /usage --output-format json")));
+            QVERIFY(autoRefreshNote->text().contains(QStringLiteral("aqtruncat-claude-metric auto-refresh on --refresh-minutes N")));
+            acceptNextQuestion();
+            autoRefresh->click();
+            QTRY_VERIFY_WITH_TIMEOUT(integration.status().value(QStringLiteral("autoRefresh")).toBool(), 15000);
+            QTRY_VERIFY(autoRefresh->isChecked());
+            // Another option changed in the GUI keeps automatic refresh and
+            // an interval chosen from a terminal.
+            QCOMPARE(runAdapter({QStringLiteral("auto-refresh"), QStringLiteral("on"), QStringLiteral("--refresh-minutes"),
+                                 QStringLiteral("12")}).exitCode, 0);
+            QTRY_VERIFY_WITH_TIMEOUT(autoRefreshNote->text().contains(QStringLiteral("older than 12 minutes")), 15000);
+            QTRY_VERIFY(context->isEnabled());
+            context->click();
+            QTRY_VERIFY_WITH_TIMEOUT(!integration.status().value(QStringLiteral("context")).toBool(), 15000);
+            QVERIFY(integration.status().value(QStringLiteral("autoRefresh")).toBool());
+            QCOMPARE(integration.status().value(QStringLiteral("refreshMinutes")).toInt(), 12);
+            QCOMPARE(runAdapter({QStringLiteral("auto-refresh"), QStringLiteral("off")}).exitCode, 0);
+            QTRY_VERIFY_WITH_TIMEOUT(!autoRefresh->isChecked(), 15000);
+            qputenv("PATH", path);
+            // Back to the state the persistence check below expects.
+            QTRY_VERIFY(context->isEnabled());
+            context->click();
+            QTRY_VERIFY_WITH_TIMEOUT(integration.status().value(QStringLiteral("context")).toBool(), 15000);
         }
 
         // Persistence: a new window (as after a restart) shows the same state.

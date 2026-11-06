@@ -39,12 +39,12 @@ void usage(FILE *stream)
 {
     const QString text = QStringLiteral(
         "Usage:\n"
-        "  %1 snapshot [--live] [--codex-home DIR]\n"
-        "  %1 enable [--live] [--codex-home DIR] [--force]\n"
+        "  %1 snapshot [--live] [--refresh-minutes N] [--codex-home DIR]\n"
+        "  %1 enable [--live] [--refresh-minutes N] [--codex-home DIR] [--force]\n"
         "  %1 disable\n"
         "  %1 upgrade\n"
         "  %1 status [--json]\n"
-        "  %1 live-updates on|off\n"
+        "  %1 live-updates on|off [--refresh-minutes N]\n"
         "  %1 -h | --help | -v | --version\n"
         "\n"
         "AQTRunCat Codex integration: your Codex usage limits (the windows Codex's\n"
@@ -61,13 +61,16 @@ void usage(FILE *stream)
         "  upgrade       rewrite an enabled integration for this version, keeping its\n"
         "                options (run by install.sh); does nothing when it is off.\n"
         "  status        show whether the integration and live updates are on.\n"
-        "  live-updates  on: every %3 minutes AQTRunCat asks Codex (codex app-server,\n"
-        "                account/rateLimits/read) for the current limits; Codex contacts\n"
-        "                OpenAI with its own login, no tokens are used and nothing is\n"
-        "                changed in Codex. off (default): only the limits Codex recorded\n"
-        "                in its local session files while you used it.\n"
+        "  live-updates  on: every N minutes (default %3) AQTRunCat asks Codex (codex\n"
+        "                app-server, account/rateLimits/read) for the current limits;\n"
+        "                Codex contacts OpenAI with its own login, no tokens are used and\n"
+        "                nothing is changed in Codex. A click on the metric in AQTRunCat\n"
+        "                asks at once. off (default): only the limits Codex recorded in\n"
+        "                its local session files while you used it.\n"
+        "                \"on --refresh-minutes N\" also changes the interval (1-1440).\n"
         "\n"
         "  --live            the same as live-updates on, for snapshot/enable\n"
+        "  --refresh-minutes N  live update interval in minutes (default %3)\n"
         "  --codex-home DIR  Codex data directory (default $CODEX_HOME or ~/.codex)\n"
         "  --force           let enable replace a codex package it did not write\n"
         "  --json            machine-readable status (used by AQTRunCat Settings)\n")
@@ -98,9 +101,15 @@ struct CommandLine {
     QString subcommand;
     QString codexHome; // as given; empty: default
     bool live = false;
+    int refreshMinutes = 0; // 0: not given (LiveRefreshSeconds)
     bool force = false;
     bool json = false;
 };
+
+int refreshMinutesOf(const CommandLine &line)
+{
+    return line.refreshMinutes > 0 ? line.refreshMinutes : int(aqtruncat::codex::LiveRefreshSeconds / 60);
+}
 
 bool write(const QString &path, const QByteArray &contents)
 {
@@ -123,6 +132,12 @@ int enable(const CommandLine &line, bool announce = true)
     QJsonArray arguments{QStringLiteral("snapshot")};
     if (line.live)
         arguments.append(QStringLiteral("--live"));
+    // Kept also while live updates are off, so that turning them on again
+    // uses the interval chosen before.
+    if (line.refreshMinutes > 0) {
+        arguments.append(QStringLiteral("--refresh-minutes"));
+        arguments.append(QString::number(line.refreshMinutes));
+    }
     if (!line.codexHome.isEmpty()) {
         arguments.append(QStringLiteral("--codex-home"));
         arguments.append(line.codexHome);
@@ -165,6 +180,8 @@ CommandLine packageOptions(const QJsonObject &metric)
     CommandLine line;
     line.live = arguments.contains(QStringLiteral("--live"));
     line.codexHome = aqtruncat::providers::packageOption(arguments, QStringLiteral("--codex-home"));
+    line.refreshMinutes = aqtruncat::providers::parseRefreshMinutes(
+        aqtruncat::providers::packageOption(arguments, QStringLiteral("--refresh-minutes"))).value_or(0);
     return line;
 }
 
@@ -202,7 +219,7 @@ int upgrade()
     return 0;
 }
 
-int liveUpdates(bool on)
+int liveUpdates(bool on, int refreshMinutes)
 {
     const QJsonObject metric = aqtruncat::providers::readJsonObject(metricFile());
     if (!QFileInfo::exists(metricFile()) || !managedPackage(metric)) {
@@ -211,10 +228,12 @@ int liveUpdates(bool on)
     }
     CommandLine line = packageOptions(metric);
     line.live = on;
+    if (refreshMinutes > 0)
+        line.refreshMinutes = refreshMinutes;
     if (enable(line, false) != 0)
         return 1;
     printOut(on ? QStringLiteral("Live updates are on: AQTRunCat asks Codex for the current limits every %1 minutes.\n")
-                      .arg(aqtruncat::codex::LiveRefreshSeconds / 60)
+                      .arg(refreshMinutesOf(line))
                 : QStringLiteral("Live updates are off: only the limits recorded in Codex's session files are shown.\n"));
     return 0;
 }
@@ -239,6 +258,7 @@ int status(const CommandLine &line)
     const bool exists = QFileInfo::exists(file);
     const bool managed = exists && managedPackage(metric);
     const bool live = managed && packageOptions(metric).live;
+    const int refreshMinutes = refreshMinutesOf(packageOptions(metric));
     const QString codexHome = effectiveCodexHome(line);
     const QString codex = findCodex();
     const aqtruncat::codex::LiveState state = aqtruncat::codex::readLiveState(aqtruncat::codex::liveStateFile(), codexHome);
@@ -255,6 +275,7 @@ int status(const CommandLine &line)
             {QStringLiteral("codexHome"), codexHome},
             {QStringLiteral("codexExecutable"), codex},
             {QStringLiteral("liveUpdates"), live ? QStringLiteral("on") : QStringLiteral("off")},
+            {QStringLiteral("refreshMinutes"), refreshMinutes},
             {QStringLiteral("lastLiveReport"), state.capturedAt.isValid() ? QJsonValue(state.capturedAt.toString(Qt::ISODate)) : QJsonValue()},
             {QStringLiteral("liveError"), state.error},
         };
@@ -271,7 +292,8 @@ int status(const CommandLine &line)
     lines << QStringLiteral("Codex:         %1 (data %2%3)")
                  .arg(QFileInfo(codexHome).isDir() || !codex.isEmpty() ? QStringLiteral("found") : QStringLiteral("not found"),
                       codexHome, codex.isEmpty() ? QStringLiteral(", no codex executable") : QStringLiteral(", ") + codex);
-    lines << QStringLiteral("Live updates:  %1").arg(live ? QStringLiteral("on") : QStringLiteral("off"));
+    lines << QStringLiteral("Live updates:  %1").arg(live ? QStringLiteral("on, every %1 minutes").arg(refreshMinutes)
+                                                          : QStringLiteral("off"));
     lines << QStringLiteral("Last live report: %1%2")
                  .arg(state.capturedAt.isValid() ? state.capturedAt.toLocalTime().toString(Qt::ISODate) : QStringLiteral("none"),
                       state.error.isEmpty() ? QString() : QStringLiteral(" (last attempt failed: %1)").arg(state.error));
@@ -317,6 +339,17 @@ int main(int argc, char *argv[])
             line.codexHome = QDir::cleanPath(QFileInfo(args.at(++i)).absoluteFilePath());
         } else if (option == QLatin1String("--live") && snapshotOrEnable) {
             line.live = true;
+        } else if (option == QLatin1String("--refresh-minutes")
+                   && (snapshotOrEnable || command == QLatin1String("live-updates")) && i + 1 < args.size()) {
+            const auto minutes = aqtruncat::providers::parseRefreshMinutes(args.at(++i));
+            if (!minutes) {
+                printErr(QStringLiteral("%1: --refresh-minutes needs a whole number of minutes from %2 to %3")
+                             .arg(QLatin1String(ExecutableName))
+                             .arg(aqtruncat::providers::MinimumRefreshMinutes)
+                             .arg(aqtruncat::providers::MaximumRefreshMinutes));
+                return UsageError;
+            }
+            line.refreshMinutes = *minutes;
         } else if (option == QLatin1String("--force") && command == QLatin1String("enable")) {
             line.force = true;
         } else if (option == QLatin1String("--json") && command == QLatin1String("status")) {
@@ -334,6 +367,8 @@ int main(int argc, char *argv[])
         options.codexHome = line.codexHome.isEmpty() ? aqtruncat::codex::defaultCodexHome() : line.codexHome;
         options.codexExecutable = findCodex();
         options.live = line.live;
+        options.liveRefreshSeconds = qint64(refreshMinutesOf(line)) * 60;
+        options.manualRefresh = aqtruncat::providers::manualRefreshRequested();
         options.liveStateFile = aqtruncat::codex::liveStateFile();
         const aqtruncat::codex::Outcome outcome = aqtruncat::codex::collect(options);
         std::fwrite(outcome.standardOutput.constData(), 1, size_t(outcome.standardOutput.size()), stdout);
@@ -350,7 +385,7 @@ int main(int argc, char *argv[])
     if (command == QLatin1String("status"))
         return status(line);
     if (command == QLatin1String("live-updates"))
-        return liveUpdates(line.subcommand == QLatin1String("on"));
+        return liveUpdates(line.subcommand == QLatin1String("on"), line.refreshMinutes);
     printErr(QStringLiteral("%1: unknown command \"%2\"; see --help").arg(QLatin1String(ExecutableName), command));
     return UsageError;
 }

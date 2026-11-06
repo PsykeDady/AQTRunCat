@@ -506,6 +506,38 @@ private slots:
         QCOMPARE(f.codexLog().count("args: app-server"), 3);
     }
 
+    // 2.3.4: the live interval comes from --refresh-minutes; a click
+    // (AQTRUNCAT_REFRESH=manual) reads at once, at most every 30 s.
+    void liveIntervalAndClick()
+    {
+        Fixture f;
+        const QString codex = f.fakeCodex(QJsonObject{{QStringLiteral("id"), 2},
+                                                      {QStringLiteral("result"), liveResult(4, 9, "2026-10-20T12:00:00Z", "2026-10-25T18:00:00Z")}});
+        auto run = [&](const char *now, bool manual) {
+            Options options;
+            options.codexHome = f.home;
+            options.codexHomeOverridden = true;
+            options.codexExecutable = codex;
+            options.live = true;
+            options.liveRefreshSeconds = 10 * 60;
+            options.manualRefresh = manual;
+            options.liveStateFile = f.state;
+            options.now = utc(now);
+            options.timeZone = QTimeZone(QByteArrayLiteral("Europe/Rome"));
+            return snapshotOf(collect(options));
+        };
+        run("2026-10-20T08:00:00Z", false);
+        QCOMPARE(f.codexLog().count("args: app-server"), 1);
+        run("2026-10-20T08:06:00Z", false); // due with the default 5 minutes, not with 10
+        QCOMPARE(f.codexLog().count("args: app-server"), 1);
+        run("2026-10-20T08:10:00Z", false);
+        QCOMPARE(f.codexLog().count("args: app-server"), 2);
+        run("2026-10-20T08:10:20Z", true);
+        QCOMPARE(f.codexLog().count("args: app-server"), 2);
+        run("2026-10-20T08:10:31Z", true);
+        QCOMPARE(f.codexLog().count("args: app-server"), 3);
+    }
+
     void liveErrorsWithoutAnyDataAndTimeouts()
     {
         Fixture f;

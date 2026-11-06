@@ -1,3 +1,11 @@
+aqtruncat (2.3.4-1) unstable; urgency=medium
+
+  * Claude Code integration: optional automatic refresh through a local
+    "claude -p /usage" run; refresh intervals of both integrations can be
+    set from a terminal, and a click on a metric fetches fresh usage.
+
+ -- AQTRunCat maintainers <maintainers@aqtruncat.invalid>  Fri, 06 Nov 2026 12:00:00 +0100
+
 aqtruncat (2.3.3-1) unstable; urgency=medium
 
   * Add a read-only Dependency Advisor for enabled optional features and
